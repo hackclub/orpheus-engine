@@ -1,9 +1,6 @@
-from dagster import Definitions, load_assets_from_modules
+import dagster as dg
+import orpheus_engine.defs
 
-from orpheus_engine import assets  # noqa: TID252
-
-all_assets = load_assets_from_modules([assets])
-
-defs = Definitions(
-    assets=all_assets,
+defs = dg.Definitions.merge(
+    dg.components.load_defs(orpheus_engine.defs)
 )
