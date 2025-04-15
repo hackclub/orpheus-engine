@@ -3,3 +3,7 @@ __pycache__
 .tmp*
 .cache/
 .env
+*.egg-info
+
+# DLT state
+.dlt/

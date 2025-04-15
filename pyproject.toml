@@ -7,6 +7,14 @@ requires-python = ">=3.9,<3.13"
 dependencies = [
     "dagster",
     "dagster-cloud",
+    "dagster-postgres",
+    "psycopg2-binary",
+    "python-dotenv",
+    "dagster-embedded-elt",
+    "polars",
+    "requests",
+    "dagster-dlt",
+    "dlt[postgres]",
 ]
 
 [project.optional-dependencies]
