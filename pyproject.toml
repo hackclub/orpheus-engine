@@ -15,6 +15,7 @@ dependencies = [
     "requests",
     "dagster-dlt",
     "dlt[postgres]",
+    "googlemaps",
 ]
 
 [project.optional-dependencies]

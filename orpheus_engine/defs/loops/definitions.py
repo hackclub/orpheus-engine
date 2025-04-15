@@ -5,9 +5,17 @@ import io
 import json
 import urllib.parse
 import os
-from dagster import asset, EnvVar, DagsterLogManager
+import hashlib
+from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure
+from typing import List, Dict, Any, Optional
 
 import dagster as dg
+
+# Import the Geocoder resource and the custom error
+from orpheus_engine.defs.geocoder.resources import GeocoderResource, GeocodingError
+
+# Import the Loops resource and error
+from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError 
 
 LOOPS_BASE_URL = "https://app.loops.so/api/trpc"
 
@@ -246,9 +254,289 @@ def loops_contacts_export(context) -> pl.DataFrame:
         log.error(f"An unexpected error occurred during CSV download or parsing: {e}")
         raise RuntimeError(f"An unexpected error occurred during CSV download or parsing: {e}") from e
 
+
+def _extract_geocode_details(geocode_result_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extracts relevant details from a single Google Maps geocode result."""
+    try:
+        latitude = geocode_result_item["geometry"]["location"]["lat"]
+        longitude = geocode_result_item["geometry"]["location"]["lng"]
+
+        country_name = None
+        country_code = None
+        for component in geocode_result_item.get("address_components", []):
+            if "country" in component.get("types", []):
+                country_name = component.get("long_name")
+                country_code = component.get("short_name")
+                break # Found country component
+
+        if latitude is not None and longitude is not None:
+            return {
+                "calculatedGeocodedLatitude": latitude,
+                "calculatedGeocodedLongitude": longitude,
+                "calculatedGeocodedCountryName": country_name,
+                "calculatedGeocodedCountryCode": country_code,
+            }
+    except (KeyError, IndexError, TypeError):
+        # Handle cases where the expected structure is missing
+        pass
+    return None
+
+
+@asset(
+    group_name="loops",
+    description="Geocodes contacts from the Loops export if their address has changed or hasn't been geocoded.",
+    required_resource_keys={"geocoder_client"},
+    compute_kind="google_maps",
+)
+def geocoding_results(context: AssetExecutionContext, loops_contacts_export: pl.DataFrame) -> Output[pl.DataFrame]:
+    """
+    Iterates through contacts, checks if address requires geocoding based on hash comparison,
+    attempts geocoding, and returns a DataFrame of newly geocoded contact details.
+    """
+    log = context.log
+    geocoder: GeocoderResource = context.resources.geocoder_client
+    input_df = loops_contacts_export
+
+    # Ensure required columns exist
+    required_input_cols = ['email', 'addressLine1', 'addressCity']
+    # Optional cols used in address string and hash check
+    optional_input_cols = ['addressLine2', 'addressState', 'addressZip', 'addressCountry', 'calculatedGeocodedHash']
+    missing_required = [col for col in required_input_cols if col not in input_df.columns]
+    if missing_required:
+        raise Failure(f"Input DataFrame is missing required columns: {missing_required}")
+
+    # Add calculatedGeocodedHash if it's missing, filling with None
+    if 'calculatedGeocodedHash' not in input_df.columns:
+        log.info("Input DataFrame missing 'calculatedGeocodedHash'. Column will be added.")
+        # Use pl.lit(None).cast(pl.Utf8) for correct type hint if needed later
+        input_df = input_df.with_columns(pl.lit(None).alias("calculatedGeocodedHash"))
+
+    newly_geocoded_records = []
+    processed_count = 0
+    geocoded_count = 0 # Counter for successful geocodes
+    error_count = 0
+    geocode_limit = 5 # Testing limit
+
+    log.info(f"Starting geocoding process for {input_df.height} contacts (limit: {geocode_limit}).")
+
+    for row in input_df.iter_rows(named=True):
+        # --- TESTING: Break loop if limit is reached --- 
+        if geocoded_count >= geocode_limit:
+             log.info(f"Reached geocoding limit of {geocode_limit}. Stopping process.")
+             break
+        # --- END TESTING --- 
+
+        processed_count += 1
+        email = row.get("email")
+        address_line1 = row.get("addressLine1")
+        address_city = row.get("addressCity")
+
+        # Basic check for required fields - these are essential for the JS format
+        if not email or not address_line1 or not address_city:
+            continue
+
+        # --- Replicate JS address string construction EXACTLY --- 
+        address_line2 = row.get("addressLine2") or ""
+        address_state = row.get("addressState") or ""
+        # Use addressZipCode to match JS precisely
+        address_zipcode = row.get("addressZipCode") or "" 
+        address_country = row.get("addressCountry") or ""
+        
+        # Build line 3 *without* stripping here
+        line3 = f"{address_city}, {address_state} {address_zipcode}"
+
+        # Combine all parts with newlines
+        address_string = f"{address_line1}\n{address_line2}\n{line3}\n{address_country}"
+        
+        # Apply strip() *only once* at the end, matching JS .trim()
+        address_string = address_string.strip()
+        # --- End JS address string construction replication ---
+
+        # Check if the string is empty *after* construction and stripping
+        if not address_string:
+            continue
+
+        # Hashing (remains the same, as it matches JS crypto)
+        address_hash = hashlib.sha256(address_string.encode('utf-8')).hexdigest()
+        existing_hash = row.get("calculatedGeocodedHash")
+
+        if address_hash != existing_hash:
+            log.info(f"Address hash changed for {email}. Attempting geocode. Hash: {address_hash[:7]}... String: '{address_string.replace('\n', ' ')}'") # Log truncated hash and string
+            try:
+                geocode_api_result: List[Dict[str, Any]] = geocoder.geocode(address_string)
+
+                if not geocode_api_result:
+                    log.warning(f"Geocoding returned no results for address: '{address_string.replace('\n', ' ')}' (Email: {email})")
+                    continue
+
+                extracted_details = _extract_geocode_details(geocode_api_result[0])
+
+                if extracted_details:
+                    # Increment successful geocode counter BEFORE appending
+                    geocoded_count += 1 
+                    output_record = {
+                        "email": email,
+                        **extracted_details,
+                        "calculatedGeocodedHash": address_hash
+                    }
+                    newly_geocoded_records.append(output_record)
+                    log.info(f"Successfully geocoded address for {email} ({geocoded_count}/{geocode_limit})") # Log progress towards limit
+                else:
+                     log.warning(f"Could not extract required details from geocode result for {email}. Result: {geocode_api_result[0]}")
+                     error_count += 1
+
+            except GeocodingError as e:
+                log.error(f"Geocoding failed for address '{address_string.replace('\n', ' ')}' (Email: {email}): {e}")
+                error_count += 1
+
+    log.info(f"Geocoding process completed. Processed: {processed_count}, Newly Geocoded: {geocoded_count}, Errors: {error_count}")
+
+    output_schema = {
+        "email": pl.Utf8,
+        "calculatedGeocodedLatitude": pl.Float64,
+        "calculatedGeocodedLongitude": pl.Float64,
+        "calculatedGeocodedCountryName": pl.Utf8,
+        "calculatedGeocodedCountryCode": pl.Utf8,
+        "calculatedGeocodedHash": pl.Utf8,
+    }
+
+    if newly_geocoded_records:
+        output_df = pl.DataFrame(newly_geocoded_records, schema=output_schema)
+    else:
+        output_df = pl.DataFrame({k: [] for k in output_schema.keys()}, schema=output_schema)
+
+    return Output(
+        output_df,
+        metadata={
+            "num_contacts_processed": processed_count,
+            "num_contacts_newly_geocoded": geocoded_count,
+            "num_geocoding_errors": error_count,
+            "num_output_rows": output_df.height,
+            "testing_limit_applied": geocode_limit if processed_count > geocoded_count else None # Indicate if limit was likely hit
+        }
+    )
+
+
+@asset(
+    group_name="loops", 
+    description="Placeholder asset to combine updates. Currently passes through geocoding results."
+)
+def combined_updates(
+    context: AssetExecutionContext,
+    geocoding_results: pl.DataFrame, 
+    # gender_categorization_results: pl.DataFrame # Add later
+) -> pl.DataFrame:
+    """
+    Acts as a consolidation point for various contact update sources.
+    
+    Currently, with only geocoding_results as input, it simply passes the 
+    DataFrame through. The primary key is conceptually 'email'.
+
+    Future logic will perform an outer join on 'email' when other update 
+    sources (like gender_categorization_results) are added.
+    """
+    log = context.log
+    log.info(f"Passing through {geocoding_results.height} geocoding update records.")
+
+    # --- Placeholder for future join logic ---
+    # When gender_categorization_results is available:
+    # 1. Load/receive gender_categorization_results DataFrame (with 'email').
+    # 2. Perform outer join with geocoding_results on 'email'.
+    #    combined = geocoding_results.join(
+    #        gender_categorization_results, # Assuming it has 'email' and update cols
+    #        on="email",
+    #        how="outer"
+    #    )
+    # 3. Return the combined DataFrame.
+    # ----------------------------------------
+
+    # For now, just return the input DataFrame directly
+    combined = geocoding_results
+
+    log.info(f"Passing through combined updates DataFrame with shape: {combined.shape}")
+    context.add_output_metadata({
+        "num_update_records": combined.height,
+        "columns": combined.columns,
+        "preview": combined.head(5).to_dicts() # Preview first 5 rows of the input
+    })
+
+    return combined
+
+
+@asset(
+    group_name="loops",
+    description="Updates contacts in Loops.so with the latest combined data.",
+    required_resource_keys={"loops_client"}, 
+    compute_kind="loops_api"
+)
+def loops_contacts_update_confirmation(
+    context: AssetExecutionContext, 
+    combined_updates: pl.DataFrame
+) -> Output[None]:
+    """
+    Iterates through the combined update records and calls the Loops API 
+    to update each contact with any non-null fields provided (excluding email).
+    Handles API errors on a per-contact basis.
+    """
+    log = context.log
+    loops_client: LoopsResource = context.resources.loops_client
+    num_records = combined_updates.height
+
+    if num_records == 0:
+        log.info("No update records found in combined_updates. Nothing to send to Loops.")
+        return Output(None, metadata={"updates_attempted": 0, "updates_successful": 0, "updates_failed": 0})
+
+    log.info(f"Starting update process for {num_records} contacts in Loops...")
+    
+    updated_count = 0
+    failed_count = 0
+
+    for row_dict in combined_updates.iter_rows(named=True):
+        email = row_dict.get("email")
+        if not email:
+            log.warning(f"Skipping row due to missing email: {row_dict}")
+            failed_count += 1
+            continue
+
+        # Prepare payload dynamically from all non-null row values, excluding email
+        payload_updates = { 
+            k: v for k, v in row_dict.items() if k != "email" and v is not None
+        }
+            
+        # Only attempt update if there are actual fields to update
+        if not payload_updates:
+             log.debug(f"Skipping update for {email} as no new non-null fields were found.")
+             continue
+
+        try:
+            log.debug(f"Attempting to update contact {email} with payload: {payload_updates}")
+            response = loops_client.update_contact(email=email, **payload_updates)
+            log.info(f"Successfully updated contact {email}. Response ID: {response.get('id')}")
+            updated_count += 1
+        except LoopsApiError as e:
+            log.error(f"Failed to update contact {email}: {e}")
+            failed_count += 1
+        except Exception as e:
+            log.error(f"An unexpected error occurred while processing update for {email}: {e}", exc_info=True)
+            failed_count += 1
+
+    log.info(f"Loops contact update process finished. Successful: {updated_count}, Failed: {failed_count}")
+
+    return Output(
+        None,
+        metadata={
+            "updates_attempted": updated_count + failed_count,
+            "updates_successful": updated_count,
+            "updates_failed": failed_count
+        }
+    )
+
+
 defs = dg.Definitions(
-    assets=[loops_contacts_export],
+    assets=[loops_contacts_export, geocoding_results, combined_updates, loops_contacts_update_confirmation],
     resources={
-        "loops_session_token": EnvVar("LOOPS_SESSION_TOKEN")
+        "loops_session_token": EnvVar("LOOPS_SESSION_TOKEN"),
+        "geocoder_client": GeocoderResource(),
+        "loops_client": LoopsResource(),
     }
 )
