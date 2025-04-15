@@ -70,7 +70,6 @@ def loops_audience_in_warehouse(
                 "dlt_pipeline_name": MetadataValue.text(pipeline_name),
                 "dlt_dataset_name": MetadataValue.text(dataset_name),
                 "dlt_table_name": MetadataValue.text(table_name),
-                "dlt_load_id": MetadataValue.text(load_id_str), # <-- Use extracted load_id
                 "write_disposition": MetadataValue.text("replace"),
                 "first_run": MetadataValue.bool(load_info.first_run)
             }
@@ -80,6 +79,3 @@ def loops_audience_in_warehouse(
         context.log.error(f"DLT pipeline '{pipeline_name}' failed: {e}")
         # Re-raise the exception to mark the Dagster asset run as failed
         raise
-
-# --- Removed old code ---
-# The previous @dlt.source and @dlt_assets definitions have been removed.
