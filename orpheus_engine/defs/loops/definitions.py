@@ -45,7 +45,7 @@ COMMON_HEADERS = {
     description="Exports all contacts from Loops, polls until completion, downloads the CSV, and returns it as a Polars DataFrame. Uses local cache unless DAGSTER_ENV=production.",
     required_resource_keys={"loops_session_token"},
 )
-def loops_contacts_export(context) -> pl.DataFrame:
+def loops_raw_audience(context) -> pl.DataFrame:
     """
     Fetches the Loops contacts export as a Polars DataFrame using the Loops API.
 
@@ -65,7 +65,7 @@ def loops_contacts_export(context) -> pl.DataFrame:
 
     # --- Cache Check (Upfront) ---
     should_cache = os.getenv("DAGSTER_ENV") != "production"
-    cache_file_path = os.path.join(os.path.dirname(__file__), "..", "..", ".cache", "loops", "loops_contacts_export.csv")
+    cache_file_path = os.path.join(os.path.dirname(__file__), "..", "..", ".cache", "loops", "loops_raw_audience.csv")
     api_filename = None # Keep track of the filename provided by the API later
 
     if should_cache:
@@ -288,14 +288,14 @@ def _extract_geocode_details(geocode_result_item: Dict[str, Any]) -> Optional[Di
     required_resource_keys={"geocoder_client"},
     compute_kind="google_maps",
 )
-def geocoding_results(context: AssetExecutionContext, loops_contacts_export: pl.DataFrame) -> Output[pl.DataFrame]:
+def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: pl.DataFrame) -> Output[pl.DataFrame]:
     """
     Iterates through contacts, checks if address requires geocoding based on hash comparison,
     attempts geocoding, and returns a DataFrame of newly geocoded contact details.
     """
     log = context.log
     geocoder: GeocoderResource = context.resources.geocoder_client
-    input_df = loops_contacts_export
+    input_df = loops_raw_audience
 
     # Ensure required columns exist
     required_input_cols = ['email', 'addressLine1', 'addressCity']
@@ -421,28 +421,28 @@ def geocoding_results(context: AssetExecutionContext, loops_contacts_export: pl.
     group_name="loops", 
     description="Placeholder asset to combine updates. Currently passes through geocoding results."
 )
-def combined_updates(
+def loops_audience_prepared_for_update(
     context: AssetExecutionContext,
-    geocoding_results: pl.DataFrame, 
+    loops_geocoded_audience: pl.DataFrame, 
     # gender_categorization_results: pl.DataFrame # Add later
 ) -> pl.DataFrame:
     """
     Acts as a consolidation point for various contact update sources.
     
-    Currently, with only geocoding_results as input, it simply passes the 
+    Currently, with only loops_geocoded_audience as input, it simply passes the 
     DataFrame through. The primary key is conceptually 'email'.
 
     Future logic will perform an outer join on 'email' when other update 
     sources (like gender_categorization_results) are added.
     """
     log = context.log
-    log.info(f"Passing through {geocoding_results.height} geocoding update records.")
+    log.info(f"Passing through {loops_geocoded_audience.height} geocoding update records.")
 
     # --- Placeholder for future join logic ---
     # When gender_categorization_results is available:
     # 1. Load/receive gender_categorization_results DataFrame (with 'email').
-    # 2. Perform outer join with geocoding_results on 'email'.
-    #    combined = geocoding_results.join(
+    # 2. Perform outer join with loops_geocoded_audience on 'email'.
+    #    combined = loops_geocoded_audience.join(
     #        gender_categorization_results, # Assuming it has 'email' and update cols
     #        on="email",
     #        how="outer"
@@ -451,7 +451,7 @@ def combined_updates(
     # ----------------------------------------
 
     # For now, just return the input DataFrame directly
-    combined = geocoding_results
+    combined = loops_geocoded_audience
 
     log.info(f"Passing through combined updates DataFrame with shape: {combined.shape}")
     context.add_output_metadata({
@@ -469,9 +469,9 @@ def combined_updates(
     required_resource_keys={"loops_client"}, 
     compute_kind="loops_api"
 )
-def loops_contacts_update_confirmation(
+def loops_audience_update_status(
     context: AssetExecutionContext, 
-    combined_updates: pl.DataFrame
+    loops_audience_prepared_for_update: pl.DataFrame
 ) -> Output[None]:
     """
     Iterates through the combined update records and calls the Loops API 
@@ -480,10 +480,10 @@ def loops_contacts_update_confirmation(
     """
     log = context.log
     loops_client: LoopsResource = context.resources.loops_client
-    num_records = combined_updates.height
+    num_records = loops_audience_prepared_for_update.height
 
     if num_records == 0:
-        log.info("No update records found in combined_updates. Nothing to send to Loops.")
+        log.info("No update records found in loops_audience_prepared_for_update. Nothing to send to Loops.")
         return Output(None, metadata={"updates_attempted": 0, "updates_successful": 0, "updates_failed": 0})
 
     log.info(f"Starting update process for {num_records} contacts in Loops...")
@@ -491,7 +491,7 @@ def loops_contacts_update_confirmation(
     updated_count = 0
     failed_count = 0
 
-    for row_dict in combined_updates.iter_rows(named=True):
+    for row_dict in loops_audience_prepared_for_update.iter_rows(named=True):
         email = row_dict.get("email")
         if not email:
             log.warning(f"Skipping row due to missing email: {row_dict}")
@@ -533,7 +533,7 @@ def loops_contacts_update_confirmation(
 
 
 defs = dg.Definitions(
-    assets=[loops_contacts_export, geocoding_results, combined_updates, loops_contacts_update_confirmation],
+    assets=[loops_raw_audience, loops_geocoded_audience, loops_audience_prepared_for_update, loops_audience_update_status],
     resources={
         "loops_session_token": EnvVar("LOOPS_SESSION_TOKEN"),
         "geocoder_client": GeocoderResource(),
