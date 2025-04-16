@@ -315,16 +315,19 @@ def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: 
     processed_count = 0
     geocoded_count = 0 # Counter for successful geocodes
     error_count = 0
-    geocode_limit = 5 # Testing limit
+    geocode_limit = -1 # Testing limit: -1 means no limit
 
-    log.info(f"Starting geocoding process for {input_df.height} contacts (limit: {geocode_limit}).")
+    if geocode_limit == -1:
+        log.info(f"Starting geocoding process for {input_df.height} contacts (no limit).")
+    else:
+        log.info(f"Starting geocoding process for {input_df.height} contacts (limit: {geocode_limit}).")
 
     for row in input_df.iter_rows(named=True):
-        # --- TESTING: Break loop if limit is reached --- 
-        if geocoded_count >= geocode_limit:
+        # --- Apply limit only if it's not -1 ---
+        if geocode_limit != -1 and geocoded_count >= geocode_limit:
              log.info(f"Reached geocoding limit of {geocode_limit}. Stopping process.")
              break
-        # --- END TESTING --- 
+        # --- END Limit Check ---
 
         processed_count += 1
         email = row.get("email")
