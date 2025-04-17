@@ -7,3 +7,6 @@ __pycache__
 
 # DLT state
 .dlt/
+
+# Generated Airtable IDs (do not commit)
+/orpheus_engine/defs/airtable/generated_ids.py
