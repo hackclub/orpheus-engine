@@ -8,11 +8,14 @@ import os
 import hashlib
 from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure
 from typing import List, Dict, Any, Optional
+from enum import Enum
+from pydantic import BaseModel
 
 import dagster as dg
 
-# Import the Geocoder resource and the custom error
 from orpheus_engine.defs.geocoder.resources import GeocoderResource, GeocodingError
+from orpheus_engine.defs.ai.resources import AIResource
+from orpheus_engine.defs.genderize.resources import GenderizeResource
 
 # Import the Loops resource and error
 from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError 
@@ -419,6 +422,40 @@ def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: 
         }
     )
 
+@asset(
+    group_name="loops",
+    description="Categorizes gender of contacts that have not been categorized yet.",
+    required_resource_keys={"ai_client", "genderize_client"}
+)
+def loops_gender_categorized_audience(context: AssetExecutionContext, loops_raw_audience: pl.DataFrame) -> Output[pl.DataFrame]:
+    """
+    Categorizes gender of contacts that have not been categorized yet.
+    """
+    log = context.log
+    ai_client: AIResource = context.resources.ai_client
+    genderize_client: GenderizeResource = context.resources.genderize_client
+    input_df = loops_raw_audience
+
+    class GenderOption(str, Enum):
+        MALE = "male"
+        FEMALE = "female"
+        NON_BINARY = "non-binary"
+    
+    class GenderCategorization(BaseModel):
+        gender: GenderOption
+    
+    name = "Zach"
+    
+    resp = ai_client.generate_structured_response(
+        prompt=f"Categorize given name to a gender: {name}",
+        response_schema=GenderCategorization
+    )
+
+    log.info(f"AI gender categorization response: {resp}")
+
+    gender = genderize_client.get_gender(name)
+    log.info(f"genderize gender categorization response: {gender}")
+
 
 @asset(
     group_name="loops", 
@@ -536,10 +573,12 @@ def loops_audience_update_status(
 
 
 defs = dg.Definitions(
-    assets=[loops_raw_audience, loops_geocoded_audience, loops_audience_prepared_for_update, loops_audience_update_status],
+    assets=[loops_raw_audience, loops_geocoded_audience, loops_gender_categorized_audience, loops_audience_prepared_for_update, loops_audience_update_status],
     resources={
         "loops_session_token": EnvVar("LOOPS_SESSION_TOKEN"),
         "geocoder_client": GeocoderResource(),
+        "ai_client": AIResource(),
+        "genderize_client": GenderizeResource(),
         "loops_client": LoopsResource(),
     }
 )

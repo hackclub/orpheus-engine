@@ -16,6 +16,7 @@ dependencies = [
     "dagster-dlt",
     "dlt[postgres]",
     "googlemaps",
+    "litellm>=1.66.1",
 ]
 
 [project.optional-dependencies]
