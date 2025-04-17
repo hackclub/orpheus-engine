@@ -422,85 +422,386 @@ def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: 
         }
     )
 
+# --- Helper Functions ---
+
+def _calculate_hash(text: str) -> str:
+    """Calculates the SHA256 hash of a string."""
+    # Ensure None or empty strings hash consistently
+    text_to_hash = text or "" 
+    return hashlib.sha256(text_to_hash.encode('utf-8')).hexdigest()
+
+# Define Genderize mappings - These match the GenderizeResult enum values from the resource
+GENDERIZE_MALE = "male"
+GENDERIZE_FEMALE = "female"
+GENDERIZE_NEUTRAL = "gender-neutral"
+GENDERIZE_ERROR = "error" # Represents API error or null response
+
+def _categorize_gender_of_name(
+    name: str, 
+    genderize_client: GenderizeResource, 
+    log: DagsterLogManager
+) -> str:
+    """
+    Calls the GenderizeResource to get the gender category for a name.
+    The resource itself handles probability checks and error mapping.
+    Returns one of: 'male', 'female', 'gender-neutral', 'error'.
+    """
+    if not name:
+        log.warning("Attempted to categorize gender for empty name.")
+        return GENDERIZE_ERROR 
+    
+    try:
+        # The get_gender method returns a GenderizeResult enum member directly
+        # The enum members have string values matching our constants.
+        result_enum = genderize_client.get_gender(name) # No country code as requested
+        return result_enum.value # Return the string value ('male', 'error', etc.)
+            
+    except GenderizeApiError as e:
+        # Catch specific errors raised by the resource
+        log.error(f"Genderize API call failed for name '{name}': {e}")
+        return GENDERIZE_ERROR
+    except Exception as e: 
+        # Catch any other unexpected errors during the call
+        log.error(f"Unexpected error during gender categorization for name '{name}': {e}", exc_info=True)
+        return GENDERIZE_ERROR
+
+# Define AI response model
+class GenderOptionAI(str, Enum):
+    MALE = "male"
+    FEMALE = "female"
+    NONBINARY = "nonbinary"
+
+class BestKnownGenderResponse(BaseModel):
+    gender: Optional[GenderOptionAI] = None # Make optional to handle null case
+    unableToCategorizeGenderWithGivenInformation: bool
+
+def _determine_best_known_gender(
+    first_name_gender: Optional[str], 
+    gender_self_reported: Optional[str], 
+    ai_client: AIResource, 
+    log: DagsterLogManager
+) -> Optional[str]:
+    """
+    Calls AI to determine the best known gender based on inputs, following JS logic.
+    """
+    # Prepare inputs for prompt, matching JS logic where "error" or "gender-neutral" become empty
+    prompt_first_name_gender = first_name_gender if first_name_gender in [GENDERIZE_MALE, GENDERIZE_FEMALE] else ""
+    prompt_gender_self_reported = gender_self_reported or "" # Use empty string if None/empty
+
+    # Only proceed if there's some information
+    if not prompt_first_name_gender and not prompt_gender_self_reported:
+        log.debug("Skipping best known gender determination: no valid inputs.")
+        return None # Cannot determine without any input
+
+    options = [o.value for o in GenderOptionAI]
+    prompt = f"""
+Categorize the user's gender into one of the following options: {', '.join(options)}
+
+User provided information (empty quotes indicate that the user didn't provide that information):
+
+Self-reported gender: "{prompt_gender_self_reported}"
+Gender of user's first name: "{prompt_first_name_gender}"
+
+Instructions:
+
+1. If the user self-reported their gender, use this. Self-reported gender always takes precedent over gender of first name.
+2. If the user didn't self-report their gender, use the gender of their first name.
+3. If unable to determine based on the rules and information, indicate inability to categorize.
+"""
+
+    try:
+        response = ai_client.generate_structured_response(
+            prompt=prompt,
+            response_schema=BestKnownGenderResponse
+        )
+        
+        if response.unableToCategorizeGenderWithGivenInformation or response.gender is None:
+            log.info(f"AI indicated inability to categorize gender. Inputs: Self='{prompt_gender_self_reported}', First Name='{prompt_first_name_gender}'")
+            return None
+        
+        # Return the string value of the enum
+        return response.gender.value 
+        
+    except Exception as e:
+        log.error(f"AI call failed for best known gender determination: {e}", exc_info=True)
+        log.error(f"Inputs were: Self='{prompt_gender_self_reported}', First Name='{prompt_first_name_gender}'")
+        return None # Return None on AI error
+
+
 @asset(
     group_name="loops",
-    description="Categorizes gender of contacts that have not been categorized yet.",
+    description="Categorizes gender of contacts using Genderize for name and AI for best-known, based on hash checks.",
     required_resource_keys={"ai_client", "genderize_client"}
 )
 def loops_gender_categorized_audience(context: AssetExecutionContext, loops_raw_audience: pl.DataFrame) -> Output[pl.DataFrame]:
     """
-    Categorizes gender of contacts that have not been categorized yet.
+    Identifies contacts needing gender updates based on hash comparisons for full name 
+    and best-known gender inputs. Calls Genderize API for name gender and an AI model 
+    to determine the best-known gender, prioritizing self-reported data.
+
+    Returns a DataFrame with `email` and the calculated fields for contacts 
+    that had at least one field updated.
     """
     log = context.log
     ai_client: AIResource = context.resources.ai_client
     genderize_client: GenderizeResource = context.resources.genderize_client
-    input_df = loops_raw_audience
+    input_df = loops_raw_audience.clone() # Clone to avoid modifying the input
 
-    class GenderOption(str, Enum):
-        MALE = "male"
-        FEMALE = "female"
-        NON_BINARY = "non-binary"
+    # --- Column Definitions ---
+    # Input columns needed (optional are checked/added)
+    email_col = "email"
+    first_name_col = "firstName"
+    last_name_col = "lastName"
+    gender_self_reported_col = "genderSelfReported"
+    # Hash columns to check against (will be added if missing)
+    fn_gender_hash_col = "calculatedFullNameGenderHash"
+    best_known_hash_col = "calculatedGenderBestKnownHash"
+    # Columns potentially read for best known gender calculation
+    existing_fn_gender_col = "calculatedFirstNameGender" # Read if present
+    existing_best_known_col = "calculatedGenderBestKnown" # Read if present (less likely needed)
+
+    # Output columns to be generated/updated
+    output_fn_gender_col = "calculatedFirstNameGender"
+    output_fn_gender_hash_col = "calculatedFullNameGenderHash"
+    output_best_known_col = "calculatedGenderBestKnown"
+    output_best_known_hash_col = "calculatedGenderBestKnownHash"
+
+    output_schema = {
+        email_col: pl.Utf8,
+        output_fn_gender_col: pl.Utf8,         # Note: Genderize returns str
+        output_fn_gender_hash_col: pl.Utf8,
+        output_best_known_col: pl.Utf8,        # Note: AI returns str enum value or None
+        output_best_known_hash_col: pl.Utf8,
+    }
+
+    # --- Ensure Necessary Columns Exist ---
+    required_input_cols = [email_col]
+    optional_input_cols = [
+        first_name_col, last_name_col, gender_self_reported_col,
+        fn_gender_hash_col, best_known_hash_col,
+        existing_fn_gender_col, # Needed for best known calc if name not recalc'd
+        # existing_best_known_col # Not strictly needed for calculation logic
+    ]
     
-    class GenderCategorization(BaseModel):
-        gender: GenderOption
+    missing_required = [col for col in required_input_cols if col not in input_df.columns]
+    if missing_required:
+        raise Failure(f"Input DataFrame is missing required columns: {missing_required}")
+
+    # Add optional columns if they don't exist, filling with None
+    for col in optional_input_cols:
+        if col not in input_df.columns:
+            log.info(f"Input DataFrame missing optional column '{col}'. Column will be added with null values.")
+            # Use appropriate null type (Utf8 for strings/hashes)
+            input_df = input_df.with_columns(pl.lit(None).cast(pl.Utf8).alias(col))
+            
+    # --- Pre-computation & Filtering ---
+    log.info("Preprocessing data: calculating full names and hashes...")
+
+    # Combine first and last names safely handling nulls
+    df_processed = input_df.with_columns(
+        pl.concat_str(
+            pl.col(first_name_col).fill_null(""),
+            pl.col(last_name_col).fill_null(""),
+            separator=" "
+        ).str.strip_chars().alias("fullName") # Strip whitespace like JS .trim()
+    ).with_columns(
+        # Calculate current full name hash
+        pl.col("fullName").map_elements(_calculate_hash).alias("currentFullNameHash")
+    ).with_columns(
+        # Determine if full name gender needs update (hash mismatch or empty name)
+        needs_fn_gender_update = (pl.col("currentFullNameHash") != pl.col(fn_gender_hash_col)) | pl.col(fn_gender_hash_col).is_null()
+    ).with_columns(
+        # Step 1: Create the intermediate string needed for the best known hash
+        best_known_input_str_expr = pl.concat_str(
+            pl.col(existing_fn_gender_col).fill_null(""),
+            pl.col(gender_self_reported_col).fill_null(""),
+            separator=""
+        )
+    ).with_columns(
+        # Step 2: Use the intermediate string to calculate the hash
+        currentBestKnownHash = pl.when(pl.col("best_known_input_str_expr") != "")
+                               .then(pl.col("best_known_input_str_expr").map_elements(_calculate_hash))
+                               .otherwise(None) # Avoid hashing empty string if both inputs are null/empty
+    ).with_columns(
+        # Step 3: Now use the hash and other columns to calculate estimates
+        # Determine if best known gender *might* need update based on existing data hash comparison
+        needs_best_known_update_estimate = (pl.col("currentBestKnownHash") != pl.col(best_known_hash_col)) | pl.col(best_known_hash_col).is_null(),
+        # Determine if we *can* calculate best known gender (pre-check)
+        can_calculate_best_known_estimate = pl.col(gender_self_reported_col).is_not_null() | 
+                                            (pl.col(existing_fn_gender_col).is_not_null() & 
+                                             (pl.col(existing_fn_gender_col) != GENDERIZE_ERROR))
+    ).drop("best_known_input_str_expr") # Drop intermediate column
     
-    name = "Zach"
+    # --- Identify Rows Needing Updates (Counts based on pre-calculation) ---
+    # Count rows needing first name gender update BEFORE iteration
+    rows_needing_fn_gender_update = df_processed.filter(pl.col("needs_fn_gender_update") & (pl.col("fullName") != "")).height
+    log.info(f"Identified {rows_needing_fn_gender_update} contacts potentially needing First Name Gender update based on hash.")
+
+    # Count rows potentially needing best known gender update BEFORE iteration
+    rows_needing_best_known_update = df_processed.filter(
+        pl.col("needs_best_known_update_estimate") & pl.col("can_calculate_best_known_estimate")
+    ).height
+    log.info(f"Identified {rows_needing_best_known_update} contacts potentially needing Best Known Gender update (estimate based on current data)." )
+
+    # We need to iterate because of the conditional logic and API calls
+    update_records = []
+    fn_gender_updated_count = 0
+    best_known_updated_count = 0
+    processed_count = 0
     
-    resp = ai_client.generate_structured_response(
-        prompt=f"Categorize given name to a gender: {name}",
-        response_schema=GenderCategorization
+    log.info(f"Starting gender processing for {df_processed.height} contacts...")
+
+    for row in df_processed.iter_rows(named=True):
+        processed_count += 1
+        email = row.get(email_col)
+        if not email: 
+            log.warning("Skipping row due to missing email.")
+            continue
+            
+        row_updates: Dict[str, Any] = {email_col: email}
+        needs_update = False # Flag to track if any update occurred for this row
+        
+        # --- 1. First Name Gender ---
+        current_fn_gender = row.get(existing_fn_gender_col) # Get potentially existing value
+        new_fn_gender = current_fn_gender # Default to existing value
+        new_fn_gender_hash = row.get(fn_gender_hash_col) # Default to existing hash
+        
+        if row.get("needs_fn_gender_update") and row.get("fullName"):
+            full_name = row.get("fullName")
+            current_name_hash = row.get("currentFullNameHash")
+            log.debug(f"Processing FN Gender for {email}: Name='{full_name}'")
+            calculated_gender = _categorize_gender_of_name(full_name, genderize_client, log)
+            
+            # Store the calculated gender and the *new* hash if calculation was successful
+            # We store the hash regardless of the result of categorization (error/neutral etc)
+            new_fn_gender = calculated_gender 
+            new_fn_gender_hash = current_name_hash # Use the hash of the name we processed
+            row_updates[output_fn_gender_col] = new_fn_gender
+            row_updates[output_fn_gender_hash_col] = new_fn_gender_hash
+            needs_update = True
+            fn_gender_updated_count += 1 # Count attempts/updates based on hash diff
+            log.info(f"    FN Gender update for {email}: '{full_name}' -> '{new_fn_gender}' (Hash: {new_fn_gender_hash[:7]}...)")
+        else:
+             # If no update needed, ensure existing values are in row_updates for potential use later
+             row_updates[output_fn_gender_col] = new_fn_gender # Could be None if column was added
+             row_updates[output_fn_gender_hash_col] = new_fn_gender_hash # Could be None
+            
+        # --- 2. Best Known Gender ---
+        gender_self_reported = row.get(gender_self_reported_col)
+        # Use the *potentially updated* first name gender from this iteration
+        fn_gender_for_calc = new_fn_gender 
+        
+        # Calculate the hash based on current/newly calculated values
+        # Handle None by replacing with empty string for hashing, matching JS sha256(`${row.calculatedFirstNameGender}${row.genderSelfReported}`)
+        best_known_input_str = f"{fn_gender_for_calc or ''}{gender_self_reported or ''}"
+        current_best_known_hash = _calculate_hash(best_known_input_str)
+        existing_best_known_hash = row.get(best_known_hash_col)
+
+        needs_best_known_update = (current_best_known_hash != existing_best_known_hash) or existing_best_known_hash is None
+        
+        # Only update if hash differs AND there is input info (either self-reported or a valid first name gender)
+        can_calculate_best_known = gender_self_reported or (fn_gender_for_calc and fn_gender_for_calc != GENDERIZE_ERROR)
+
+        if needs_best_known_update and can_calculate_best_known:
+            log.debug(f"Processing Best Known Gender for {email}: FN='{fn_gender_for_calc}', Self='{gender_self_reported}'")
+            calculated_best_known = _determine_best_known_gender(
+                fn_gender_for_calc,
+                gender_self_reported,
+                ai_client,
+                log
+            )
+            # Store the calculated best known gender and the *new* hash
+            new_best_known_gender = calculated_best_known # Could be None if AI fails/cannot determine
+            new_best_known_hash = current_best_known_hash
+            row_updates[output_best_known_col] = new_best_known_gender
+            row_updates[output_best_known_hash_col] = new_best_known_hash
+            needs_update = True
+            best_known_updated_count += 1 # Count attempts/updates based on hash diff
+            log.info(f"    Best Known Gender update for {email}: -> '{new_best_known_gender}' (Hash: {new_best_known_hash[:7]}...)")
+        else:
+            # Ensure existing best known hash is added if no update needed
+            # (Best known gender value itself isn't strictly needed in output if unchanged)
+            if output_best_known_hash_col not in row_updates:
+                 row_updates[output_best_known_hash_col] = existing_best_known_hash # Could be None
+            # Ensure best known gender field exists even if not updated this round
+            if output_best_known_col not in row_updates:
+                 row_updates[output_best_known_col] = row.get(existing_best_known_col) # Get existing value if available
+
+
+        # --- Collect Row if Updated ---
+        if needs_update:
+            # Ensure all output columns are present, even if value is None
+            for col in output_schema:
+                if col not in row_updates:
+                    row_updates[col] = None # Default missing updates to None
+            update_records.append(row_updates)
+
+        if processed_count % 100 == 0:
+            log.info(f"Processed {processed_count}/{df_processed.height} contacts...")
+
+    log.info(f"Gender processing finished. Processed: {processed_count}. FN Gender Updates Triggered: {fn_gender_updated_count}. Best Known Updates Triggered: {best_known_updated_count}. Total records with updates: {len(update_records)}")
+
+    # --- Create Output DataFrame ---
+    if update_records:
+        output_df = pl.DataFrame(update_records, schema=output_schema)
+        # Cast columns explicitly to handle potential Nones -> correct Dtype
+        output_df = output_df.with_columns([
+            pl.col(c).cast(output_schema[c]) for c in output_schema
+        ])
+    else:
+        # Create empty DataFrame with correct schema
+        output_df = pl.DataFrame({k: [] for k in output_schema.keys()}, schema=output_schema)
+
+    return Output(
+        output_df,
+        metadata={
+            "num_contacts_processed": processed_count,
+            "num_fn_gender_updates_triggered": fn_gender_updated_count,
+            "num_best_known_updates_triggered": best_known_updated_count,
+            "num_output_rows": output_df.height,
+            "output_columns": list(output_schema.keys()),
+        }
     )
-
-    log.info(f"AI gender categorization response: {resp}")
-
-    gender = genderize_client.get_gender(name)
-    log.info(f"genderize gender categorization response: {gender}")
 
 
 @asset(
     group_name="loops", 
-    description="Placeholder asset to combine updates. Currently passes through geocoding results."
+    description="Combines geocoding and gender updates into a single DataFrame."
 )
 def loops_audience_prepared_for_update(
     context: AssetExecutionContext,
     loops_geocoded_audience: pl.DataFrame, 
-    # gender_categorization_results: pl.DataFrame # Add later
+    loops_gender_categorized_audience: pl.DataFrame # Added gender results input
 ) -> pl.DataFrame:
     """
-    Acts as a consolidation point for various contact update sources.
-    
-    Currently, with only loops_geocoded_audience as input, it simply passes the 
-    DataFrame through. The primary key is conceptually 'email'.
+    Performs an outer join between geocoding updates and gender categorization 
+    updates based on the 'email' column.
 
-    Future logic will perform an outer join on 'email' when other update 
-    sources (like gender_categorization_results) are added.
+    This creates a single DataFrame containing all potential updates for each contact.
     """
     log = context.log
-    log.info(f"Passing through {loops_geocoded_audience.height} geocoding update records.")
+    log.info(f"Received geocoding updates for {loops_geocoded_audience.height} contacts.")
+    log.info(f"Received gender updates for {loops_gender_categorized_audience.height} contacts.")
 
-    # --- Placeholder for future join logic ---
-    # When gender_categorization_results is available:
-    # 1. Load/receive gender_categorization_results DataFrame (with 'email').
-    # 2. Perform outer join with loops_geocoded_audience on 'email'.
-    #    combined = loops_geocoded_audience.join(
-    #        gender_categorization_results, # Assuming it has 'email' and update cols
-    #        on="email",
-    #        how="outer"
-    #    )
-    # 3. Return the combined DataFrame.
-    # ----------------------------------------
-
-    # For now, just return the input DataFrame directly
-    combined = loops_geocoded_audience
-
-    log.info(f"Passing through combined updates DataFrame with shape: {combined.shape}")
+    # Perform outer join on email
+    # If one df is empty, join still works and effectively returns the other df (with potential nulls for missing cols)
+    combined_df = loops_geocoded_audience.join(
+        loops_gender_categorized_audience,
+        on="email",
+        how="outer"
+    ).with_columns(
+        # Combine email and email_right into a single non-null email column
+        pl.coalesce(pl.col("email"), pl.col("email_right")).alias("email")
+    ).drop("email_right") # Now drop the redundant email_right column
+    
+    log.info(f"Combined updates DataFrame shape after coalescing email: {combined_df.shape}")
     context.add_output_metadata({
-        "num_update_records": combined.height,
-        "columns": combined.columns,
-        "preview": combined.head(5).to_dicts() # Preview first 5 rows of the input
+        "num_combined_records": combined_df.height,
+        "columns": combined_df.columns,
+        "preview": combined_df.head(5).to_dicts() 
     })
 
-    return combined
+    return combined_df
 
 
 @asset(
@@ -573,7 +874,13 @@ def loops_audience_update_status(
 
 
 defs = dg.Definitions(
-    assets=[loops_raw_audience, loops_geocoded_audience, loops_gender_categorized_audience, loops_audience_prepared_for_update, loops_audience_update_status],
+    assets=[
+        loops_raw_audience, 
+        loops_geocoded_audience, 
+        loops_gender_categorized_audience, 
+        loops_audience_prepared_for_update, # This now depends on the two above
+        loops_audience_update_status
+    ],
     resources={
         "loops_session_token": EnvVar("LOOPS_SESSION_TOKEN"),
         "geocoder_client": GeocoderResource(),
