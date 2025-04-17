@@ -17,6 +17,7 @@ dependencies = [
     "dlt[postgres]",
     "googlemaps",
     "litellm>=1.66.1",
+    "pyairtable"
 ]
 
 [project.optional-dependencies]
