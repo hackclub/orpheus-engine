@@ -37,14 +37,15 @@ log = logging.getLogger(__name__)
 # --- Helper Functions ---
 
 def sanitize_name(name: str) -> str:
-    """Converts a potentially non-pythonic name to a valid UPPER_SNAKE_CASE identifier."""
+    """Converts a potentially non-pythonic name to a valid snake_case identifier."""
     # Replace non-alphanumeric characters with underscores
     s = re.sub(r'\W|^(?=\d)', '_', name)
     # Convert camelCase/PascalCase to snake_case (simplified)
-    s = re.sub('([A-Z]+)', r'_\1', s).strip('_')
+    s = re.sub('([A-Z]+)', r'_\1', s).lower().strip('_')
     # Handle multiple underscores
     s = re.sub(r'_+', '_', s)
-    return s.upper()
+    # Remove the final .upper() to keep it snake_case
+    return s
 
 # --- Main Generation Logic ---
 
