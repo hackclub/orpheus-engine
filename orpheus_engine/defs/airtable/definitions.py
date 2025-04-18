@@ -50,9 +50,11 @@ airtable_config = AirtableServiceConfig(
                 "program_mapping_rules": AirtableTableConfig(
                     table_id="tbl02flnwdqn8NcgG"
                 ),
+                "programs": AirtableTableConfig(
+                    table_id="tblo0e0B4UQ4edi31"
+                ),
             }
         )
-        # Add other bases here if needed
     }
 )
 
