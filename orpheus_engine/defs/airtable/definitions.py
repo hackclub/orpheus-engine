@@ -79,7 +79,7 @@ def _create_airtable_asset(base_key: str, table_key: str):
     @asset(
         name=table_key,
         key_prefix=["airtable", base_key],
-        group_name="airtable",
+        group_name=f"airtable_{sanitized_base_key}",
         description=f"Fetches all records from the Airtable table '{table_key}' in base '{base_key}'.",
         compute_kind="airtable",
     )
