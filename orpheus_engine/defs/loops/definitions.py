@@ -6,7 +6,7 @@ import json
 import urllib.parse
 import os
 import hashlib
-from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure
+from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure, MetadataValue
 from typing import List, Dict, Any, Optional
 from enum import Enum
 from pydantic import BaseModel
@@ -806,6 +806,53 @@ def loops_audience_prepared_for_update(
 
 @asset(
     group_name="loops",
+    description=(
+        "Take the raw Loops export and apply every non-null field "
+        "from loops_audience_prepared_for_update to produce an updated audience DF."
+    ),
+)
+def loops_processed_audience(
+    context: AssetExecutionContext,
+    loops_raw_audience: pl.DataFrame,
+    loops_audience_prepared_for_update: pl.DataFrame,
+) -> pl.DataFrame:
+    # Log sizes
+    context.log.info(f"Raw audience rows: {loops_raw_audience.height}")
+    context.log.info(
+        f"Updates to apply: {loops_audience_prepared_for_update.height}"
+    )
+
+    # 1) Left-join raw + updates on email, suffixing update cols with "upd"
+    df = loops_raw_audience.join(
+        loops_audience_prepared_for_update,
+        on="email",
+        how="left",
+        suffix="upd",
+    )
+
+    # 2) For every update-column, coalesce(update, original) → original name
+    update_cols = [
+        c for c in loops_audience_prepared_for_update.columns if c != "email"
+    ]
+    for col in update_cols:
+        upd = f"{col}_upd"
+        if upd in df.columns:
+            df = df.with_columns(
+                pl.coalesce(pl.col(upd), pl.col(col)).alias(col)
+            ).drop(upd)
+
+    # 3) Metadata preview
+    preview = df.head(5).to_dicts()
+    context.add_output_metadata({
+        "num_final_rows": df.height,
+        "preview(5 rows)": MetadataValue.json(preview),
+    })
+
+    return df
+
+
+@asset(
+    group_name="loops",
     description="Updates contacts in Loops.so with the latest combined data.",
     required_resource_keys={"loops_client"}, 
     compute_kind="loops_api"
@@ -878,7 +925,8 @@ defs = dg.Definitions(
         loops_raw_audience, 
         loops_geocoded_audience, 
         loops_gender_categorized_audience, 
-        loops_audience_prepared_for_update, # This now depends on the two above
+        loops_audience_prepared_for_update,
+        loops_processed_audience,             # ← your new asset
         loops_audience_update_status
     ],
     resources={

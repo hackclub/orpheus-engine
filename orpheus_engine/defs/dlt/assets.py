@@ -26,10 +26,10 @@ def warehouse_coolify_destination() -> postgres:
 )
 def loops_audience(
     context: AssetExecutionContext,
-    loops_raw_audience: pl.DataFrame # <-- Depend directly on the Polars DF asset
+    loops_processed_audience: pl.DataFrame # <-- Changed dependency
 ):
     """
-    Loads Loops contacts data from the upstream asset 'loops_raw_audience'
+    Loads Loops contacts data from the upstream asset 'loops_processed_audience'
     into the data warehouse (Postgres) using dlt.
     """
     pipeline_name = "loops_to_warehouse"
@@ -50,7 +50,7 @@ def loops_audience(
 
     # Run the pipeline, passing the data received from the upstream asset.
     # Convert Polars DataFrame to an iterator of dicts for DLT
-    data_iterator = loops_raw_audience.iter_rows(named=True)
+    data_iterator = loops_processed_audience.iter_rows(named=True)
     try:
         load_info = pipeline.run(
             data=data_iterator, # <-- Use the iterator from the DataFrame
