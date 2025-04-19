@@ -6,7 +6,7 @@ services:
     build:
       # Context should be the project root relative to this docker-compose file
       context: ../..
-      dockerfile: Dockerfile_user_code
+      dockerfile: ./deploy/docker/Dockerfile_user_code # Path relative to project root
     container_name: orpheus_engine_user_code
     image: orpheus_engine_user_code_image # Specify an image name
     restart: always
@@ -43,7 +43,7 @@ services:
   orpheus_engine_webserver:
     build:
       context: ../..
-      dockerfile: Dockerfile_dagster
+      dockerfile: ./deploy/docker/Dockerfile_dagster # Path relative to project root
     container_name: orpheus_engine_webserver
     restart: always
     entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
@@ -80,7 +80,7 @@ services:
   orpheus_engine_daemon:
     build:
       context: ../..
-      dockerfile: Dockerfile_dagster
+      dockerfile: ./deploy/docker/Dockerfile_dagster # Path relative to project root
     container_name: orpheus_engine_daemon
     restart: on-failure
     entrypoint: ["dagster-daemon", "run"]
