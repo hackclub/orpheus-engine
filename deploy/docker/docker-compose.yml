@@ -1,29 +1,6 @@
 version: "3.7"
 
 services:
-  # --- PostgreSQL Database ---
-  # Optional: You might use Coolify's managed Postgres instead.
-  # If so, remove this service and ensure connection details in dagster.yaml
-  # point to the managed instance via environment variables.
-  orpheus_engine_postgres:
-    image: postgres:13 # Use a specific version
-    container_name: orpheus_engine_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${DAGSTER_POSTGRES_USER:-dagster}
-      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:-dagster}
-      POSTGRES_DB: ${DAGSTER_POSTGRES_DB:-dagster}
-    networks:
-      - orpheus_engine_network
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      # Use the configured user/db for the healthcheck
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dagster} -d $${POSTGRES_DB:-dagster}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # --- User Code gRPC Server ---
   orpheus_engine_user_code:
     build:
@@ -38,7 +15,7 @@ services:
       - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
       - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
       - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
-      - POSTGRES_HOST=orpheus_engine_postgres # Service name of the DB
+      - POSTGRES_HOST=${POSTGRES_HOST} # Use environment variable directly
       - POSTGRES_PORT=5432
       # Make AWS credentials available for S3 IO Manager
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -57,9 +34,10 @@ services:
       - DAGSTER_ENV=${DAGSTER_ENV:-development} # Control caching in loops assets
     networks:
       - orpheus_engine_network
-    depends_on:
-      orpheus_engine_postgres:
-        condition: service_healthy # Wait for DB to be ready
+    # Remove depends_on since DB is external
+    # depends_on:
+    #   orpheus_engine_postgres:
+    #     condition: service_healthy
 
   # --- Dagster Webserver ---
   orpheus_engine_webserver:
@@ -79,7 +57,7 @@ services:
       - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
       - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
       - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
-      - POSTGRES_HOST=orpheus_engine_postgres
+      - POSTGRES_HOST=${POSTGRES_HOST} # Use environment variable directly
       - POSTGRES_PORT=5432
       # AWS credentials (optional, but needed if using S3 compute logs or instance needs AWS access)
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -90,9 +68,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - orpheus_engine_network
+    # Remove depends_on since DB is external
+    # depends_on:
+    #   orpheus_engine_postgres:
+    #     condition: service_healthy
     depends_on:
-      orpheus_engine_postgres:
-        condition: service_healthy
       orpheus_engine_user_code:
         condition: service_started # User code needs to start, not necessarily be healthy
 
@@ -109,7 +89,7 @@ services:
       - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
       - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
       - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
-      - POSTGRES_HOST=orpheus_engine_postgres
+      - POSTGRES_HOST=${POSTGRES_HOST} # Use environment variable directly
       - POSTGRES_PORT=5432
       # AWS credentials (needed by daemon to pass to run launcher for S3 IO)
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -129,9 +109,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - orpheus_engine_network
+    # Remove depends_on since DB is external
+    # depends_on:
+    #   orpheus_engine_postgres:
+    #     condition: service_healthy
     depends_on:
-      orpheus_engine_postgres:
-        condition: service_healthy
       orpheus_engine_user_code:
         condition: service_started
 
@@ -139,6 +121,3 @@ networks:
   orpheus_engine_network:
     driver: bridge
     name: orpheus_engine_network
-
-volumes:
-  postgres_data: # Define the named volume for Postgres data persistence

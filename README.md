@@ -127,6 +127,13 @@ docker-compose down
 2.  In Coolify, create a new Application sourced from your Git repository.
 3.  Select "Docker Compose" as the build pack.
 4.  Point Coolify to the `deploy/docker/docker-compose.yml` file.
-5.  **Database:** Choose whether to use Coolify's managed Postgres (remove the `orpheus_engine_postgres` service from `docker-compose.yml` if so) or the one defined in the compose file.
-6.  **Environment Variables:** Configure *all* the necessary environment variables (as listed in the `.env` section above) within the Coolify application's settings. Use Coolify secrets for sensitive values. **Crucially, set `DAGSTER_ENV=production` for deployed environments.**
+5.  **Database:**
+    *   **Option A (Recommended for Coolify): Use Coolify Managed Postgres.**
+        *   Ensure the `orpheus_engine_postgres` service and `postgres_data` volume are removed from your `deploy/docker/docker-compose.yml` (as done in the latest commits).
+        *   Add a PostgreSQL service resource within your Coolify project.
+    *   **Option B: Use Compose Managed Postgres.**
+        *   Keep the `orpheus_engine_postgres` service and `postgres_data` volume definitions in `docker-compose.yml`.
+6.  **Environment Variables:** Configure *all* the necessary environment variables (as listed in the `.env` section above) within the Coolify application's "Environment Variables" settings. Use Coolify secrets for sensitive values.
+    *   **If using Coolify Managed Postgres (Option A):** You *must* set `POSTGRES_HOST`, `DAGSTER_POSTGRES_USER`, `DAGSTER_POSTGRES_PASSWORD`, `DAGSTER_POSTGRES_DB`, and `POSTGRES_PORT` in Coolify to match the connection details provided by the Coolify managed database service.
+    *   **Crucially, set `DAGSTER_ENV=production` for deployed environments.**
 7.  Deploy the application via Coolify.
