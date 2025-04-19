@@ -1,12 +1,10 @@
-version: "3.7"
-
 services:
   # --- User Code gRPC Server ---
   orpheus_engine_user_code:
     build:
-      # Context should be the project root relative to this docker-compose file
-      context: ../..
-      dockerfile: ./deploy/docker/Dockerfile_user_code # Path relative to project root
+      # Context is now the project root
+      context: .
+      dockerfile: deploy/docker/Dockerfile_user_code
     container_name: orpheus_engine_user_code
     image: orpheus_engine_user_code_image # Specify an image name
     restart: always
@@ -42,11 +40,11 @@ services:
   # --- Dagster Webserver ---
   orpheus_engine_webserver:
     build:
-      context: ../..
-      dockerfile: ./deploy/docker/Dockerfile_dagster # Path relative to project root
+      context: .
+      dockerfile: deploy/docker/Dockerfile_dagster
     container_name: orpheus_engine_webserver
     restart: always
-    entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "deploy/docker/workspace.yaml"]
     expose:
       - "3000"
     ports:
@@ -79,11 +77,11 @@ services:
   # --- Dagster Daemon ---
   orpheus_engine_daemon:
     build:
-      context: ../..
-      dockerfile: ./deploy/docker/Dockerfile_dagster # Path relative to project root
+      context: .
+      dockerfile: deploy/docker/Dockerfile_dagster
     container_name: orpheus_engine_daemon
     restart: on-failure
-    entrypoint: ["dagster-daemon", "run"]
+    entrypoint: ["dagster-daemon", "run", "-w", "deploy/docker/workspace.yaml"]
     environment:
       # Instance connection details
       - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}

@@ -99,37 +99,34 @@ This project includes a Docker Compose setup for deploying Dagster with PostgreS
 
 **Running Locally:**
 
-1.  Navigate to the deployment directory:
+1.  Ensure `docker-compose.yml` is in the project root directory (`orpheus-engine/`).
+2.  Ensure your `.env` file is populated in the project root.
+3.  From the project root directory, build the Docker images:
     ```bash
-    cd deploy/docker
+    docker compose --env-file .env build
     ```
-2.  Build the Docker images:
+4.  Start the services in detached mode:
     ```bash
-    docker-compose build
+    docker compose --env-file .env up -d
     ```
-3.  Start the services in detached mode:
-    ```bash
-    docker-compose up -d
-    ```
-4.  Access the Dagster UI in your browser:
+5.  Access the Dagster UI in your browser:
     `http://localhost:3000` (or the port set by `DAGSTER_PORT` in your `.env` file).
 
 **Stopping Services:**
 
 ```bash
-cd deploy/docker
-docker-compose down
+docker compose --env-file .env down
 ```
 
 **Coolify Deployment:**
 
-1.  Push your code (including the `deploy/docker` directory) to your Git repository.
+1.  Push your code (ensure `docker-compose.yml` is in the root) to your Git repository.
 2.  In Coolify, create a new Application sourced from your Git repository.
 3.  Select "Docker Compose" as the build pack.
-4.  Point Coolify to the `deploy/docker/docker-compose.yml` file.
+4.  Set the "Docker Compose Location" to `docker-compose.yml` (just the filename, as it's in the root).
 5.  **Database:**
     *   **Option A (Recommended for Coolify): Use Coolify Managed Postgres.**
-        *   Ensure the `orpheus_engine_postgres` service and `postgres_data` volume are removed from your `deploy/docker/docker-compose.yml` (as done in the latest commits).
+        *   Ensure the `orpheus_engine_postgres` service and `postgres_data` volume are removed from your `docker-compose.yml` (as done in the latest commits).
         *   Add a PostgreSQL service resource within your Coolify project.
     *   **Option B: Use Compose Managed Postgres.**
         *   Keep the `orpheus_engine_postgres` service and `postgres_data` volume definitions in `docker-compose.yml`.
