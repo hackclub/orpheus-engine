@@ -45,3 +45,88 @@ Once your Dagster Daemon is running, you can start turning on schedules and sens
 The easiest way to deploy your Dagster project is to use Dagster+.
 
 Check out the [Dagster+ documentation](https://docs.dagster.io/dagster-plus/) to learn more.
+
+## Docker Compose Deployment (Postgres + S3)
+
+This project includes a Docker Compose setup for deploying Dagster with PostgreSQL for metadata storage and AWS S3 for IO management. This is suitable for local testing and deployment platforms like Coolify.
+
+**Prerequisites:**
+
+*   Docker and Docker Compose installed.
+*   AWS Credentials (Access Key ID, Secret Access Key, Region) configured where your environment can access them.
+*   An S3 bucket created for Dagster's IO Manager.
+*   PostgreSQL connection details (User, Password, DB Name, Host, Port).
+    *   If deploying via Coolify, you can use Coolify's managed PostgreSQL service instead of the one defined in `docker-compose.yml`.
+
+**Configuration (Local Environment):**
+
+1.  **Create `.env` file:** In the project root directory (`orpheus-engine/`), create a file named `.env`. **Do not commit this file to Git.**
+2.  **Populate `.env`:** Add the following environment variables to the `.env` file, replacing the placeholder values with your actual credentials and settings:
+
+    ```env
+    # --- Dagster & Postgres --- 
+    # Use 'orpheus_engine_postgres' as host if using the compose service
+    # If using external/Coolify Postgres, use its connection details
+    DAGSTER_POSTGRES_USER=dagster
+    DAGSTER_POSTGRES_PASSWORD=dagster
+    DAGSTER_POSTGRES_DB=dagster
+    POSTGRES_HOST=orpheus_engine_postgres
+    POSTGRES_PORT=5432
+    
+    # Optional: Port mapping for Dagster Webserver on your host machine
+    DAGSTER_PORT=3000
+
+    # --- AWS --- 
+    AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
+    AWS_REGION=your-aws-region # e.g., us-east-1
+    DAGSTER_S3_BUCKET=your-dagster-io-manager-bucket-name # Bucket for IO Manager
+
+    # --- Application Secrets --- 
+    LOOPS_API_KEY=YOUR_LOOPS_API_KEY
+    LOOPS_SESSION_TOKEN=YOUR_LOOPS_SESSION_TOKEN # If used
+    GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+    GENDERIZE_API_KEY=YOUR_GENDERIZE_API_KEY # Optional
+    AIRTABLE_PERSONAL_ACCESS_TOKEN=YOUR_AIRTABLE_TOKEN
+    OPENAI_API_KEY=YOUR_OPENAI_KEY # Or other LiteLLM keys
+    WAREHOUSE_COOLIFY_URL=YOUR_DLT_POSTGRES_URL # e.g., postgresql://user:pass@host:port/db
+
+    # --- Dagster Environment --- 
+    # Set to 'development' for local testing (enables caches, etc.) 
+    # Set to 'production' for deployed environments
+    DAGSTER_ENV=development 
+    ```
+
+**Running Locally:**
+
+1.  Navigate to the deployment directory:
+    ```bash
+    cd deploy/docker
+    ```
+2.  Build the Docker images:
+    ```bash
+    docker-compose build
+    ```
+3.  Start the services in detached mode:
+    ```bash
+    docker-compose up -d
+    ```
+4.  Access the Dagster UI in your browser:
+    `http://localhost:3000` (or the port set by `DAGSTER_PORT` in your `.env` file).
+
+**Stopping Services:**
+
+```bash
+cd deploy/docker
+docker-compose down
+```
+
+**Coolify Deployment:**
+
+1.  Push your code (including the `deploy/docker` directory) to your Git repository.
+2.  In Coolify, create a new Application sourced from your Git repository.
+3.  Select "Docker Compose" as the build pack.
+4.  Point Coolify to the `deploy/docker/docker-compose.yml` file.
+5.  **Database:** Choose whether to use Coolify's managed Postgres (remove the `orpheus_engine_postgres` service from `docker-compose.yml` if so) or the one defined in the compose file.
+6.  **Environment Variables:** Configure *all* the necessary environment variables (as listed in the `.env` section above) within the Coolify application's settings. Use Coolify secrets for sensitive values. **Crucially, set `DAGSTER_ENV=production` for deployed environments.**
+7.  Deploy the application via Coolify.

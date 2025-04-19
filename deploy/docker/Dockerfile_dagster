@@ -1,0 +1,24 @@
+# Use a Python base image
+FROM python:3.10-slim
+
+# Install core Dagster components needed for webserver/daemon
+# Include postgres for instance connection, docker for run launcher, aws for potential instance-level AWS interactions (safer)
+RUN pip install --no-cache-dir \
+    dagster \
+    dagster-graphql \
+    dagster-webserver \
+    dagster-postgres \
+    dagster-docker \
+    dagster-aws \
+    psycopg2-binary \
+    boto3
+
+# Set $DAGSTER_HOME and copy configuration files
+ENV DAGSTER_HOME=/opt/dagster/dagster_home/
+RUN mkdir -p $DAGSTER_HOME
+WORKDIR $DAGSTER_HOME
+
+# Copy instance and workspace configuration into the image
+# These files will be created in the next steps
+COPY deploy/docker/dagster.yaml deploy/docker/workspace.yaml $DAGSTER_HOME/
+# Note: Adjusted COPY source paths assuming build context is project root

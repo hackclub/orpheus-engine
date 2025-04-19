@@ -1,0 +1,6 @@
+load_from:
+  - grpc_server:
+      # This 'host' must match the service name of your user code container in docker-compose.yml
+      host: orpheus_engine_user_code
+      port: 4000
+      location_name: "orpheus_engine_code" # A display name for the code location in the UI

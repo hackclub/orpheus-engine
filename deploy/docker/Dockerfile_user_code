@@ -1,0 +1,22 @@
+# Use a Python base image
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /opt/dagster/app
+
+# Copy the entire project context
+# Assumes this Dockerfile is run from the project root context
+# (We will adjust docker-compose context later)
+COPY . .
+
+# Install the project and its dependencies (including dagster-aws, dagster-postgres, dagster-docker)
+# Using editable mode ensures Python path works correctly inside the container
+# Make sure your pyproject.toml lists all necessary runtime dependencies
+RUN pip install --no-cache-dir -e ".[dev]"
+
+# Expose the gRPC port
+EXPOSE 4000
+
+# Command to run the Dagster gRPC server, loading code from your module
+# Adjust 'orpheus_engine.definitions' if your main Definitions object is elsewhere
+CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-m", "orpheus_engine.definitions"]

@@ -1,0 +1,144 @@
+version: "3.7"
+
+services:
+  # --- PostgreSQL Database ---
+  # Optional: You might use Coolify's managed Postgres instead.
+  # If so, remove this service and ensure connection details in dagster.yaml
+  # point to the managed instance via environment variables.
+  orpheus_engine_postgres:
+    image: postgres:13 # Use a specific version
+    container_name: orpheus_engine_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DAGSTER_POSTGRES_USER:-dagster}
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:-dagster}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB:-dagster}
+    networks:
+      - orpheus_engine_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Use the configured user/db for the healthcheck
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dagster} -d $${POSTGRES_DB:-dagster}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- User Code gRPC Server ---
+  orpheus_engine_user_code:
+    build:
+      # Context should be the project root relative to this docker-compose file
+      context: ../..
+      dockerfile: ./deploy/docker/Dockerfile_user_code
+    container_name: orpheus_engine_user_code
+    image: orpheus_engine_user_code_image # Specify an image name
+    restart: always
+    environment:
+      # Make Dagster instance connection details available
+      - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
+      - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
+      - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
+      - POSTGRES_HOST=orpheus_engine_postgres # Service name of the DB
+      - POSTGRES_PORT=5432
+      # Make AWS credentials available for S3 IO Manager
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION} # Or AWS_DEFAULT_REGION
+      # For DockerRunLauncher: Image to use for launching runs
+      - DAGSTER_CURRENT_IMAGE=orpheus_engine_user_code_image
+      # --- ADD ALL OTHER REQUIRED ENV VARS FOR YOUR CODE ---
+      - LOOPS_API_KEY=${LOOPS_API_KEY}
+      - LOOPS_SESSION_TOKEN=${LOOPS_SESSION_TOKEN}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - GENDERIZE_API_KEY=${GENDERIZE_API_KEY}
+      - AIRTABLE_PERSONAL_ACCESS_TOKEN=${AIRTABLE_PERSONAL_ACCESS_TOKEN} # If used by assets
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # Or other LiteLLM keys
+      - WAREHOUSE_COOLIFY_URL=${WAREHOUSE_COOLIFY_URL} # For DLT assets
+      - DAGSTER_ENV=${DAGSTER_ENV:-development} # Control caching in loops assets
+    networks:
+      - orpheus_engine_network
+    depends_on:
+      orpheus_engine_postgres:
+        condition: service_healthy # Wait for DB to be ready
+
+  # --- Dagster Webserver ---
+  orpheus_engine_webserver:
+    build:
+      context: ../..
+      dockerfile: ./deploy/docker/Dockerfile_dagster
+    container_name: orpheus_engine_webserver
+    restart: always
+    entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    expose:
+      - "3000"
+    ports:
+      # Use an environment variable for the host port, default to 3000
+      - "${DAGSTER_PORT:-3000}:3000"
+    environment:
+      # Instance connection details
+      - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
+      - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
+      - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
+      - POSTGRES_HOST=orpheus_engine_postgres
+      - POSTGRES_PORT=5432
+      # AWS credentials (optional, but needed if using S3 compute logs or instance needs AWS access)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+    volumes:
+      # Mount Docker socket to allow terminating runs from the UI
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - orpheus_engine_network
+    depends_on:
+      orpheus_engine_postgres:
+        condition: service_healthy
+      orpheus_engine_user_code:
+        condition: service_started # User code needs to start, not necessarily be healthy
+
+  # --- Dagster Daemon ---
+  orpheus_engine_daemon:
+    build:
+      context: ../..
+      dockerfile: ./deploy/docker/Dockerfile_dagster
+    container_name: orpheus_engine_daemon
+    restart: on-failure
+    entrypoint: ["dagster-daemon", "run"]
+    environment:
+      # Instance connection details
+      - DAGSTER_POSTGRES_USER=${DAGSTER_POSTGRES_USER:-dagster}
+      - DAGSTER_POSTGRES_PASSWORD=${DAGSTER_POSTGRES_PASSWORD:-dagster}
+      - DAGSTER_POSTGRES_DB=${DAGSTER_POSTGRES_DB:-dagster}
+      - POSTGRES_HOST=orpheus_engine_postgres
+      - POSTGRES_PORT=5432
+      # AWS credentials (needed by daemon to pass to run launcher for S3 IO)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      # --- ADD ALL OTHER ENV VARS needed by the run launcher (already listed above) ---
+      - LOOPS_API_KEY=${LOOPS_API_KEY}
+      - LOOPS_SESSION_TOKEN=${LOOPS_SESSION_TOKEN}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - GENDERIZE_API_KEY=${GENDERIZE_API_KEY}
+      - AIRTABLE_PERSONAL_ACCESS_TOKEN=${AIRTABLE_PERSONAL_ACCESS_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - WAREHOUSE_COOLIFY_URL=${WAREHOUSE_COOLIFY_URL}
+      - DAGSTER_ENV=${DAGSTER_ENV:-development} # Pass to runs via launcher
+    volumes:
+      # Mount Docker socket for launching runs
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - orpheus_engine_network
+    depends_on:
+      orpheus_engine_postgres:
+        condition: service_healthy
+      orpheus_engine_user_code:
+        condition: service_started
+
+networks:
+  orpheus_engine_network:
+    driver: bridge
+    name: orpheus_engine_network
+
+volumes:
+  postgres_data: # Define the named volume for Postgres data persistence

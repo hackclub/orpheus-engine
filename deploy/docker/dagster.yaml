@@ -1,0 +1,118 @@
+# Defines scheduler behavior (uses the daemon)
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
+
+# Defines run coordination (queue runs for the daemon)
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+
+# Configures how runs are launched (via Docker)
+run_launcher:
+  module: dagster_docker
+  class: DockerRunLauncher
+  config:
+    env_vars:
+      # Pass essential environment variables to run containers
+      # Add ALL secrets/configs your assets might need
+      - DAGSTER_POSTGRES_USER
+      - DAGSTER_POSTGRES_PASSWORD
+      - DAGSTER_POSTGRES_DB
+      - POSTGRES_HOST # Name of the postgres service in docker-compose
+      - POSTGRES_PORT # Port of the postgres service
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_REGION # Or AWS_DEFAULT_REGION
+      - LOOPS_API_KEY
+      - LOOPS_SESSION_TOKEN # If needed by runs
+      - GOOGLE_MAPS_API_KEY
+      - GENDERIZE_API_KEY
+      - AIRTABLE_PERSONAL_ACCESS_TOKEN # Added based on docker-compose
+      - OPENAI_API_KEY # Or other LiteLLM keys
+      - WAREHOUSE_COOLIFY_URL # For DLT assets
+      - DAGSTER_ENV # Added based on docker-compose
+      # Add any other ENV VARS your code relies on
+
+    # Network name must match the network defined in docker-compose.yml
+    network: orpheus_engine_network
+    container_kwargs:
+      # Mount the host Docker socket to allow launching sibling containers
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+      # Consider adding auto_remove: true if you want run containers deleted after completion
+
+# Configures run storage (Postgres)
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_db:
+      hostname:
+        env: POSTGRES_HOST # Use env var for hostname
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: POSTGRES_PORT # Use env var for port
+
+# Configures schedule storage (Postgres)
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname:
+        env: POSTGRES_HOST
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: POSTGRES_PORT
+
+# Configures event log storage (Postgres)
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname:
+        env: POSTGRES_HOST
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port:
+        env: POSTGRES_PORT
+
+# Defines compute log storage (optional, defaults to local)
+# compute_logs:
+#   module: dagster_aws.s3.compute_log_manager
+#   class: S3ComputeLogManager
+#   config:
+#     bucket: "your-dagster-log-bucket-name" # CHANGE ME
+#     prefix: "dagster-compute-logs/"
+#     # Ensure AWS creds are available via env vars passed to daemon/webserver
+
+# Defines the S3 IO Manager *resource* configuration
+# This needs to be added to your Definitions object in code as well (Step 7)
+resources:
+  s3_io_manager:
+    module: dagster_aws.s3
+    class: S3PickleIOManager
+    config:
+      s3_bucket:
+        env: DAGSTER_S3_BUCKET # Use environment variable
+      s3_prefix: "dagster-storage" # Optional prefix within the bucket
+      # Credentials will be picked up from environment variables by boto3
+      # Ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION are set
+      # region_name: # Optionally specify region here if not using AWS_REGION env var
+      #   env: AWS_REGION
