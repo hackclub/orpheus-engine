@@ -6,10 +6,11 @@ import json
 import urllib.parse
 import os
 import hashlib
-from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure, MetadataValue
+from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure, MetadataValue, TableColumn, TableSchema, TableRecord, DagsterInvariantViolationError
 from typing import List, Dict, Any, Optional
 from enum import Enum
 from pydantic import BaseModel
+from datetime import date
 
 import dagster as dg
 
@@ -763,53 +764,306 @@ def loops_gender_categorized_audience(context: AssetExecutionContext, loops_raw_
         }
     )
 
-
 @asset(
-    group_name="loops", 
-    description="Combines geocoding and gender updates into a single DataFrame."
+    group_name="loops",
+    description="Re-computes age from birthday when it changed or rolled over another year.",
+    compute_kind="polars",
 )
-def loops_audience_prepared_for_update(
+def loops_age_calculated_audience(
     context: AssetExecutionContext,
-    loops_geocoded_audience: pl.DataFrame, 
-    loops_gender_categorized_audience: pl.DataFrame # Added gender results input
-) -> pl.DataFrame:
-    """
-    Performs an outer join between geocoding updates and gender categorization 
-    updates based on the 'email' column.
+    loops_raw_audience: pl.DataFrame,
+) -> Output[pl.DataFrame]:
+    today = date.today()
 
-    This creates a single DataFrame containing all potential updates for each contact.
-    """
-    log = context.log
-    log.info(f"Received geocoding updates for {loops_geocoded_audience.height} contacts.")
-    log.info(f"Received gender updates for {loops_gender_categorized_audience.height} contacts.")
+    # Ensure calculatedCurrentAge is Int64, handle potential errors
+    df = loops_raw_audience.with_columns(
+        pl.col("calculatedCurrentAge").cast(pl.Int64, strict=False)
+    )
 
-    # Perform outer join on email
-    # If one df is empty, join still works and effectively returns the other df (with potential nulls for missing cols)
-    combined_df = loops_geocoded_audience.join(
-        loops_gender_categorized_audience,
-        on="email",
-        how="outer"
-    ).with_columns(
-        # Combine email and email_right into a single non-null email column
-        pl.coalesce(pl.col("email"), pl.col("email_right")).alias("email")
-    ).drop("email_right") # Now drop the redundant email_right column
-    
-    log.info(f"Combined updates DataFrame shape after coalescing email: {combined_df.shape}")
-    context.add_output_metadata({
-        "num_combined_records": combined_df.height,
-        "columns": combined_df.columns,
-        "preview": combined_df.head(5).to_dicts() 
-    })
+    # Parse birthday column safely: truncate to YYYY-MM-DD then parse
+    df = df.with_columns(
+        pl.col("birthday")
+        .str.slice(0, 10) # Extract first 10 characters (YYYY-MM-DD)
+        .str.strptime(pl.Date, format="%Y-%m-%d", strict=False) # Parse the truncated string
+        .alias("birthday_parsed")
+    )
 
-    return combined_df
+    # Define the condition for whether the birthday has passed this year using Polars expressions
+    birthday_passed_this_year = (
+        (pl.col("birthday_parsed").dt.month() < today.month) |
+        ((pl.col("birthday_parsed").dt.month() == today.month) & (pl.col("birthday_parsed").dt.day() <= today.day))
+    )
+
+    # Compute new age
+    df = df.with_columns(
+        (
+            today.year - pl.col("birthday_parsed").dt.year()
+            - pl.when(birthday_passed_this_year).then(0).otherwise(1) # Subtract 1 if birthday hasn't passed yet
+        )
+        .cast(pl.Int64)
+        .alias("new_age")
+    )
+
+    # Identify rows that need update:
+    # - Birthday must be parseable
+    # - AND (current age is null OR new age differs from current age)
+    needs_update_filter = (
+        pl.col("birthday_parsed").is_not_null() 
+        & (
+            pl.col("calculatedCurrentAge").is_null() 
+            | (pl.col("new_age") != pl.col("calculatedCurrentAge"))
+        )
+    )
+    needs_update_df = df.filter(needs_update_filter)
+
+    # Build output DataFrame with only delta
+    out_df = needs_update_df.select(
+        pl.col("email"),
+        pl.col("new_age").alias("calculatedCurrentAge"),
+    )
+    # Define the schema for the output table preview
+    preview_schema = TableSchema(
+        columns=[
+            TableColumn("email", "string"),
+            TableColumn("calculatedCurrentAge", "integer"),
+        ]
+    )
+    # Convert the list of dicts to a list of TableRecord objects for the preview
+    preview_records_list = [TableRecord(rec) for rec in out_df.head(5).to_dicts()]
+
+    # Attach metadata for observability
+    metadata = {
+        "num_records_processed": loops_raw_audience.height, # Use input height for total processed
+        "num_records_updated": needs_update_df.height, # Renamed from num_filtered_for_update
+        "num_output_rows": out_df.height,
+        "preview": MetadataValue.table(
+            records=preview_records_list,
+            schema=preview_schema
+        ),
+    }
+    return Output(out_df, metadata=metadata)
 
 
 @asset(
     group_name="loops",
-    description=(
-        "Take the raw Loops export and apply every non-null field "
-        "from loops_audience_prepared_for_update to produce an updated audience DF."
-    ),
+    description="Combines geocoding, gender, and age updates into a single DataFrame, checking for conflicts.", # Updated description
+)
+def loops_audience_prepared_for_update(
+    context: AssetExecutionContext,
+    loops_geocoded_audience: pl.DataFrame, 
+    loops_gender_categorized_audience: pl.DataFrame, 
+    loops_age_calculated_audience: pl.DataFrame,
+) -> Output[pl.DataFrame]: # Changed return type hint to Output
+    """
+    Combines geocoding, gender, and age update DataFrames based on 'email'.
+
+    Checks for conflicts: if multiple inputs provide different non-null values 
+    for the same field for a given email, an error is raised. 
+    Otherwise, the single non-null value (or null) is kept.
+    """
+    log = context.log
+    
+    # --- 1. Collect and Filter Input DataFrames ---
+    dfs: List[pl.DataFrame] = [
+        loops_geocoded_audience, 
+        loops_gender_categorized_audience, 
+        loops_age_calculated_audience
+    ]
+    
+    input_heights = {
+        "geocoding": loops_geocoded_audience.height,
+        "gender": loops_gender_categorized_audience.height,
+        "age": loops_age_calculated_audience.height,
+    }
+    log.info(f"Input counts - Geo: {input_heights['geocoding']}, Gender: {input_heights['gender']}, Age: {input_heights['age']}")
+
+    dfs = [df for df in dfs if not df.is_empty()]
+
+    if not dfs:
+        log.warning("All input DataFrames for merging are empty.")
+        # Return empty DataFrame with metadata
+        return Output(
+            pl.DataFrame(), 
+            metadata={                "num_output_records": 0,
+                "notes": "All input assets were empty.",
+                 **{f"num_{name}_input_records": h for name, h in input_heights.items()}
+            }
+        )
+
+    # --- 2. Determine Union of Columns and Target Schema ---
+    all_cols = set()
+    schemas = {} # Store schema info {col: [non-null dtypes]}
+    for df in dfs:
+        all_cols.update(df.columns)
+        for col, dtype in df.schema.items():
+            if col not in schemas: schemas[col] = []
+            if dtype != pl.Null: # Only consider non-null types
+                schemas[col].append(dtype)
+
+    if "email" not in all_cols:
+        raise DagsterInvariantViolationError("Input DataFrames must contain an 'email' column for merging.")
+        
+    value_cols = sorted(list(all_cols - {"email"})) 
+    required_schema_cols = ["email"] + value_cols
+
+    # Determine the target dtype for each column (use first non-null type found)
+    target_schema = {}
+    for col in required_schema_cols:
+        potential_types = schemas.get(col, [])
+        # Find the first non-null type encountered for this column across all DFs
+        # Default to pl.Null if the column only ever contained nulls or didn't exist
+        target_type = next((t for t in potential_types if t != pl.Null), pl.Null) 
+        target_schema[col] = target_type
+        log.debug(f"Target type for column '{col}': {target_type}")
+
+    # --- 3. Adjust Schemas and Concatenate ---
+    adjusted_dfs = []
+    for i, df in enumerate(dfs):
+        current_cols = set(df.columns)
+        select_exprs = []
+        
+        for col in required_schema_cols:
+            target_type = target_schema[col]
+            
+            if col in current_cols:
+                # Column exists, check if casting is needed
+                current_type = df.schema[col]
+                if current_type != target_type and target_type != pl.Null:
+                    # Cast if types differ and target is not Null
+                    log.debug(f"Casting existing column '{col}' from {current_type} to {target_type}")
+                    select_exprs.append(pl.col(col).cast(target_type))
+                elif current_type == pl.Null and target_type != pl.Null:
+                     # Cast Null column to target type if target is known
+                     log.debug(f"Casting existing Null column '{col}' to {target_type}")
+                     select_exprs.append(pl.col(col).cast(target_type))
+                else:
+                    # Types match, or target is Null (keep original)
+                    select_exprs.append(pl.col(col))
+            else:
+                # Column is missing, add it with the target type
+                log.debug(f"Adding missing column '{col}' with target type {target_type}")
+                if target_type == pl.Null:
+                    select_exprs.append(pl.lit(None).alias(col)) # Stays Null type
+                else:
+                    select_exprs.append(pl.lit(None).cast(target_type).alias(col)) # Cast null literal
+
+        # Apply the selections and casts
+        adjusted_df = df.select(select_exprs)
+        adjusted_dfs.append(adjusted_df)
+        log.debug(f"Adjusted schema for DF {i}: {adjusted_df.schema}")
+
+    # Concatenate using relaxed strategy
+    try:
+        combined_long = pl.concat(adjusted_dfs, how="vertical_relaxed") 
+    except Exception as e:
+        log.error(f"Error during concatenation: {e}")
+        # Log schemas before error for debugging
+        for i, adj_df in enumerate(adjusted_dfs):
+            log.error(f"Schema of adjusted DF {i} before concat error: {adj_df.schema}")
+        raise # Re-raise the error
+        
+    log.debug(f"Concatenated long DataFrame shape: {combined_long.shape}")
+    log.debug(f"Concatenated long DataFrame schema: {combined_long.schema}")
+
+    # --- 4. Group, Aggregate, and Check Conflicts ---
+    agg_exprs = []
+    conflict_check_cols = []
+    for col in value_cols:
+        # Expression to count unique non-null values for the current column within the group
+        unique_count_expr = pl.col(col).drop_nulls().unique().count()
+        
+        # Expression to get the first non-null value (which is the unique one if count == 1)
+        first_value_expr = pl.col(col).drop_nulls().first()
+        
+        conflict_col_name = f"_{col}_has_conflict_" 
+
+        # Define the expression for the final column value
+        final_value_expr = (
+            pl.when(unique_count_expr == 1) # Check if exactly one unique non-null value
+            .then(first_value_expr)         # If yes, take that value
+            .otherwise(pl.lit(None))        # Otherwise (0 or >1 unique), result is null
+            .alias(col)                     # Name it as the original column
+            # Ensure the output type matches the target schema, important if all inputs were null
+            .cast(target_schema[col], strict=False) 
+        )
+        
+        # Define the expression for the conflict flag
+        conflict_flag_expr = (
+            (unique_count_expr > 1) # True if more than one unique non-null value
+            .alias(conflict_col_name)
+        )
+
+        agg_exprs.append(final_value_expr)
+        agg_exprs.append(conflict_flag_expr)
+        conflict_check_cols.append(conflict_col_name)
+
+    # Perform the aggregation
+    grouped = combined_long.group_by("email").agg(agg_exprs)
+    log.debug(f"Grouped DataFrame shape (incl. conflict flags): {grouped.shape}")
+
+    # --- 5. Check for Conflicts ---
+    conflict_rows = grouped.filter(pl.any_horizontal(pl.col(c) for c in conflict_check_cols))
+
+    if not conflict_rows.is_empty():
+        error_details = []
+        max_details = 10 
+        for row in conflict_rows.head(max_details).iter_rows(named=True):
+            email = row["email"]
+            conflicting_fields = [
+                c.replace("_has_conflict_", "").strip("_") 
+                for c in conflict_check_cols if row[c]
+            ]
+            original_data = combined_long.filter(pl.col("email") == email).select(["email"] + conflicting_fields)
+            error_details.append(f"  Email '{email}': Conflicts in fields: {', '.join(conflicting_fields)}\n    Original values:\n{original_data}")
+        
+        if conflict_rows.height > max_details:
+             error_details.append(f"\n  ... and {conflict_rows.height - max_details} more conflicting emails.")
+
+        raise DagsterInvariantViolationError(
+            f"Conflicts detected during merge for {conflict_rows.height} emails:\n" + "\n".join(error_details)
+        )
+
+    # --- 6. Prepare Final Output ---
+    final_df = grouped.select(["email"] + value_cols)
+    log.info(f"Successfully merged inputs. Final shape: {final_df.shape}")
+
+    # --- Generate Preview ---
+    preview_df = final_df.head(5)
+    preview_records = [TableRecord(rec) for rec in preview_df.to_dicts()]
+    
+    # Dynamically create TableSchema from final_df columns
+    preview_schema_cols = []
+    for col_name, dtype in final_df.schema.items():
+        # Map Polars types to basic Dagster TableColumn types
+        if dtype in (pl.Utf8, pl.String): type_str = "string"
+        elif dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64): type_str = "integer"
+        elif dtype in (pl.Float32, pl.Float64): type_str = "float"
+        elif dtype == pl.Boolean: type_str = "boolean"
+        elif dtype == pl.Date: type_str = "date"
+        elif dtype == pl.Datetime: type_str = "datetime"
+        else: type_str = "string" # Default fallback
+        preview_schema_cols.append(TableColumn(col_name, type_str))
+        
+    preview_schema = TableSchema(columns=preview_schema_cols)
+    
+    # --- Return Output with Metadata (including preview) ---
+    return Output(
+        final_df,
+        metadata={
+            "num_output_records": final_df.height,
+            "columns": final_df.columns,
+             **{f"num_{name}_input_records": h for name, h in input_heights.items()},
+            "preview": MetadataValue.table(
+                records=preview_records,
+                schema=preview_schema
+            )
+        }
+    )
+
+@asset(
+    group_name="loops",
+    description="Take the raw Loops export and apply every non-null field "
+    "from loops_audience_prepared_for_update to produce an updated audience DF.",
 )
 def loops_processed_audience(
     context: AssetExecutionContext,
@@ -926,7 +1180,8 @@ defs = dg.Definitions(
         loops_geocoded_audience, 
         loops_gender_categorized_audience, 
         loops_audience_prepared_for_update,
-        loops_processed_audience,             # ← your new asset
+        loops_age_calculated_audience,
+        loops_processed_audience,
         loops_audience_update_status
     ],
     resources={
