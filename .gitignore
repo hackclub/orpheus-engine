@@ -4,6 +4,7 @@ __pycache__
 .cache/
 .env
 *.egg-info
+.venv/
 
 # DLT state
 .dlt/
