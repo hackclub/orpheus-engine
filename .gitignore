@@ -7,3 +7,5 @@ __pycache__
 
 # DLT state
 .dlt/
+
+prompt.txt
