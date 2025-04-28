@@ -1730,7 +1730,6 @@ name = "orpheus-engine"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "boto3" },
     { name = "dagster" },
     { name = "dagster-aws" },
     { name = "dagster-cloud" },
@@ -1756,7 +1755,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3" },
     { name = "dagster" },
     { name = "dagster-aws" },
     { name = "dagster-cloud" },
