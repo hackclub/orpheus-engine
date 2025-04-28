@@ -1,0 +1,8 @@
+storage:
+  postgres:
+    postgres_db:
+      username: {"env": "POSTGRES_USERNAME"}
+      password: {"env": "POSTGRES_PASSWORD"}
+      hostname: {"env": "POSTGRES_HOSTNAME"}
+      db_name: {"env": "POSTGRES_DB"}
+      port: {"env": "POSTGRES_PORT"}

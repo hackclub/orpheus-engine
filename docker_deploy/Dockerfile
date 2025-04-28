@@ -1,0 +1,29 @@
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    DAGSTER_HOME=/opt/dagster/dagster_home \
+    PYTHONPATH=/app
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+COPY orpheus_engine ./orpheus_engine
+
+RUN uv sync
+RUN uv pip install dagster
+
+RUN mkdir -p ${DAGSTER_HOME}
+
+COPY docker_deploy/dagster.yaml ${DAGSTER_HOME}/dagster.yaml
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "uv run dagster-daemon run & uv run dagster-webserver -h 0.0.0.0 -p 3000"]

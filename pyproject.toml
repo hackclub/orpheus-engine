@@ -20,6 +20,7 @@ dependencies = [
     "pyairtable",
     "dagster-docker",
     "dagster-aws",
+    "dagster-webserver>=1.10.10",
 ]
 
 [project.optional-dependencies]
