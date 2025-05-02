@@ -79,3 +79,60 @@ def loops_audience(
         context.log.error(f"DLT pipeline '{pipeline_name}' failed: {e}")
         # Re-raise the exception to mark the Dagster asset run as failed
         raise
+
+@asset(
+    compute_kind="dlt",
+    group_name="dlt",
+    description="Loads analytics_hack_clubbers data into the warehouse.analytics schema."
+)
+def analytics_hack_clubbers_warehouse(
+    context: AssetExecutionContext,
+    analytics_hack_clubbers: pl.DataFrame
+):
+    """
+    Loads the processed analytics_hack_clubbers data into the warehouse.analytics schema
+    using dlt.
+    """
+    pipeline_name = "analytics_to_warehouse"
+    dataset_name = "analytics"  # This will be the schema name in Postgres
+    table_name = "hack_clubbers"  # This will be the table name within the schema
+
+    context.log.info(f"Starting DLT pipeline '{pipeline_name}' to load data.")
+    context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name}'")
+
+    # Configure the dlt pipeline
+    pipeline = dlt.pipeline(
+        pipeline_name=pipeline_name,
+        destination=warehouse_coolify_destination(),
+        dataset_name=dataset_name,
+        progress="log"
+    )
+
+    # Convert Polars DataFrame to an iterator of dicts for DLT
+    data_iterator = analytics_hack_clubbers.iter_rows(named=True)
+    try:
+        load_info = pipeline.run(
+            data=data_iterator,
+            table_name=table_name,
+            write_disposition="replace",
+            primary_key="email"  # Assuming email is the primary key
+        )
+
+        context.log.info(f"DLT pipeline run finished successfully.")
+        context.log.info(f"Load Info: {load_info}")
+
+        return Output(
+            value=None,
+            metadata={
+                "dlt_pipeline_name": MetadataValue.text(pipeline_name),
+                "dlt_dataset_name": MetadataValue.text(dataset_name),
+                "dlt_table_name": MetadataValue.text(table_name),
+                "write_disposition": MetadataValue.text("replace"),
+                "first_run": MetadataValue.bool(load_info.first_run),
+                "num_records": MetadataValue.int(analytics_hack_clubbers.height)
+            }
+        )
+
+    except Exception as e:
+        context.log.error(f"DLT pipeline '{pipeline_name}' failed: {e}")
+        raise
