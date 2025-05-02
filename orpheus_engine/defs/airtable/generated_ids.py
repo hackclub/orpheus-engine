@@ -72,5 +72,91 @@ class AirtableIDs:
             loops_so_field_to_map = "fldgtnrn7tq1dNjDT"  # Name: Loops.so Field To Map
             program = "fld6xM9D8pPFankEB"  # Name: Program
 
+        class programs:
+            """IDs for Table 'programs' (ID: tblo0e0B4UQ4edi31)"""
+            TABLE_ID = "tblo0e0B4UQ4edi31"
+
+            name = "fldYqdE55u9NgTpTd"  # Name: Name
+            hcers_brought_in_who_did_a_ysws_this_month = "fldEvQDo61AbZ30wa"  # Name: HCers brought in who did a YSWS this month
+            hcers_brought_in_who_did_a_ysws_this_year = "fldNp5rctO7BBiLQq"  # Name: HCers brought in who did a YSWS this year
+            hcers_brought_in_this_month = "fldmjKOYaauHTf25p"  # Name: HCers brought in this month
+            hcers_brought_in_this_year = "fldbhLElo2h9l0Dnl"  # Name: HCers brought in this year
+            hcers_brought_in_this_year_who_have_engaged_in_a_2nd_program = "fldg5PKX47u5c3ErV"  # Name: HCers brought in this year who have engaged in a 2nd program
+            mapping_rules = "fldAWCJQoAQ6e4z2x"  # Name: Mapping Rules
+            participating_hack_clubbers = "fldofIaFiFbHYGpW8"  # Name: Participating Hack Clubbers
+            hack_clubbers_brought_in_by_program = "fldiG1J2xgqa8lSLL"  # Name: Hack Clubbers Brought In By Program
+            hack_clubbers_with_this_program_as_their_2nd_engagement = "fld8bY4axzv7hmwDA"  # Name: Hack Clubbers With This Program As Their 2nd Engagement
+
+
+    class neighborhood:
+        """IDs for Base 'neighborhood' (ID: appnsN4MzbnfMY0ai)"""
+        BASE_ID = "appnsN4MzbnfMY0ai"
+
+        class neighbors:
+            """IDs for Table 'neighbors' (ID: tblTGpK7QgwsqT8t0)"""
+            TABLE_ID = "tblTGpK7QgwsqT8t0"
+
+            email = "flduN2BlNtozsp5xZ"  # Name: email
+            full_name = "fldF7r89RpZ0WsaW4"  # Name: Full Name
+            date_of_birth = "fldOygvFVgwArnj36"  # Name: Date of Birth
+            token = "fldTMjrUrqTflOGBx"  # Name: token
+            sessions = "fld1HC2XIHKk29AQe"  # Name: sessions
+            projects_owned = "fld6GLHIug5vs3WkJ"  # Name: projectsOwned
+            projects_collaborated = "fldqhuMbLtpDcrGCa"  # Name: projectsCollaborated
+            github_username = "fldjw0OdVL7EN9521"  # Name: githubUsername
+            commits = "fldiV80pumQcuswPo"  # Name: commits
+            invites = "flduLNKHWAqsMCQ5Y"  # Name: invites
+            slack_neighbor = "fld3fOnOAo22kPq3c"  # Name: slackNeighbor
+            slack_id_from_slack_neighbor = "fldtGzNkSmENJ4dZM"  # Name: Slack ID (from slackNeighbor)
+            slack_handle_from_slack_neighbor = "fldS8nY4J5k6RqJOG"  # Name: Slack Handle (from slackNeighbor)
+            full_name_from_slack_neighbor = "fldh3GA2DutgIRvZ4"  # Name: Full Name (from slackNeighbor)
+            created_at = "fldHX2x94MK0eCZz5"  # Name: createdAt
+            has_hackatime_at = "fldBB56XVkvKAzFN8"  # Name: hasHackatimeAt
+            github_project = "fldKPKw7ZtnshB7Qo"  # Name: githubProject
+            project_description = "fldzCQ2BmS7kkOpa9"  # Name: projectDescription
+            project_name = "fldjBwy9h7Aixt40D"  # Name: projectName
+            hackatime_projects = "fldwulpnDLhKQP8Qi"  # Name: hackatimeProjects
+            loops_special_set_full_name = "fldtoOwj09ywVl6of"  # Name: Loops - Special - setFullName
+            loops_neighborhood_sign_up_at = "fldud54x3An7UBqXW"  # Name: Loops - neighborhoodSignUpAt
+            loops_birthday = "fldulwgHvMeu4kIFQ"  # Name: Loops - birthday
+            loops_neighborhood_has_hackatime_at = "fldMNOI6mgpffAEyW"  # Name: Loops - neighborhoodHasHackatimeAt
+            zapier_added_to_neighborhood_mailing_list_at = "fldOvjuA3x1UF3clq"  # Name: Zapier - Added to Neighborhood mailing list at
+
+
+    class shipwrecked:
+        """IDs for Base 'shipwrecked' (ID: appcfQcNlm6vXUOad)"""
+        BASE_ID = "appcfQcNlm6vXUOad"
+
+        class rsvps:
+            """IDs for Table 'rsvps' (ID: tblGW44enlxcYjDjS)"""
+            TABLE_ID = "tblGW44enlxcYjDjS"
+
+            email = "fldHtR3taM8g8CWXC"  # Name: Email
+            first_name = "fldZx3qAINejnw3iU"  # Name: First Name
+            last_name = "fldbrTWeaFL8qwwUK"  # Name: Last Name
+            birthday = "fldbnLqZdBx5kHXIY"  # Name: Birthday
+            current_age = "fld4F4Ku4wXE3PNFL"  # Name: Current Age
+            loops_first_name = "fldK8GsyirxyStpWH"  # Name: Loops - firstName
+            loops_last_name = "fldIeNq9sxBpeSsjz"  # Name: Loops - lastName
+            loops_birthday = "fldg2PDzyVgntfhdt"  # Name: Loops - birthday
+            loops_shipwrecked_sign_up_at = "fldpFp794BweHvxWN"  # Name: Loops - shipwreckedSignUpAt
+            zapier_added_to_shipwrecked_loops_mailing_list_at = "fldtjf0WgIPkxARkk"  # Name: Zapier - Added to Shipwrecked Loops mailing list at
+            referral_code = "fld5DXnUQLxcjn2Xk"  # Name: referral_code
+            referral_type = "fldOlvpXGZfaKQEN7"  # Name: referral_type
+            loops_shipwrecked_sign_up_position = "fld2qb4DViP6e9N4b"  # Name: Loops - shipwreckedSignUpPosition
+            ip_address = "fldFAELbzAbzqxjK8"  # Name: IP Address
+            country = "fldS7C8f2BqUmL1Fw"  # Name: Country
+            participants_referred = "fld1KMBVLjJtxMtmZ"  # Name: Participants Referred
+            number_of_referrals = "fldV0f6k0kjNhdDQJ"  # Name: Number of Referrals
+            disqualified_from_raffle = "fld9MCo0sAfuEXYii"  # Name: Disqualified_from_raffle
+            add_to_slack = "fldtTt0CoXuqWdiSU"  # Name: AddToSlack?
+            non_disqualified_referrals = "fldHKZkydQU1p0tjO"  # Name: Non-Disqualified Referrals
+            number_of_referrals_18 = "fldSux7TS7q9ZxLEK"  # Name: Number of Referrals <=18
+            hack_clubber = "fldCPXnlvgkO8QEPc"  # Name: Hack Clubber
+            hack_clubber_first_engagement = "fldYeV8CZYpqEEiw2"  # Name: Hack Clubber – First Engagement
+            hack_clubber_ysws = "fldBfLG18FaRMtIbX"  # Name: Hack Clubber – YSWS
+            rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
+            created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
+
 
 # fmt: on

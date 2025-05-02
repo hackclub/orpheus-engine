@@ -54,6 +54,22 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblo0e0B4UQ4edi31"
                 ),
             }
+        ),
+        "neighborhood": AirtableBaseConfig(
+            base_id="appnsN4MzbnfMY0ai",
+            tables={
+                "neighbors": AirtableTableConfig(
+                    table_id="tblTGpK7QgwsqT8t0"
+                )
+            }
+        ),
+        "shipwrecked": AirtableBaseConfig(
+            base_id="appcfQcNlm6vXUOad",
+            tables={
+                "rsvps": AirtableTableConfig(
+                    table_id="tblGW44enlxcYjDjS"
+                )
+            }
         )
     }
 )
