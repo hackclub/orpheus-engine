@@ -21,6 +21,7 @@ dependencies = [
     "dagster-docker",
     "dagster-aws",
     "dagster-webserver>=1.10.10",
+    "dagster-sling",
 ]
 
 [project.optional-dependencies]
