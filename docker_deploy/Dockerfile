@@ -25,33 +25,8 @@ COPY orpheus_engine_dbt ./orpheus_engine_dbt
 RUN uv sync
 RUN uv pip install dagster dbt-core dbt-postgres PyYAML
 
-# --- DBT Manifest Generation Step ---
-# Create a minimal temporary profile for the build stage `dbt parse`
-RUN mkdir -p ${DBT_PROFILES_DIR} && \
-    echo "\
-orpheus_engine_dbt:\n\
-  target: prod\n\
-  outputs:\n\
-    prod:\n\
-      type: postgres\n\
-      host: placeholder-host\n\
-      port: 5432\n\
-      user: placeholder-user\n\
-      pass: placeholder-pass\n\
-      dbname: placeholder-db\n\
-      schema: public\n\
-      threads: 1\n\
-" > ${DBT_PROFILES_DIR}/profiles.yml
-
-# Run dbt parse to generate manifest.json
-RUN echo "Running dbt parse..." && \
-    cd orpheus_engine_dbt && \
-    python -m dbt.cli parse --profiles-dir ${DBT_PROFILES_DIR} --profile orpheus_engine_dbt --target prod && \
-    cd .. && \
-    echo "dbt parse finished." && \
-    # Clean up the temporary build profile directory
-    rm -rf ${DBT_PROFILES_DIR}
-# --- End DBT Manifest Generation Step ---
+# Generate manifest.json for dbt project
+RUN uv run dagster-dbt project prepare-and-package --file orpheus_engine/defs/dbt/definitions.py
 
 RUN mkdir -p ${DAGSTER_HOME}
 

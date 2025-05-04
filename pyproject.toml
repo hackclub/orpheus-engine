@@ -9,7 +9,6 @@ dependencies = [
     "dagster>=1.10.10,<1.11.0",
     "dagster-cloud>=1.10.10,<1.11.0",
     "dagster-webserver>=1.10.10,<1.11.0",
-    
     # Dagster extension packages on 0.26.x versioning
     "dagster-postgres>=0.26.10,<0.27.0",
     "dagster-aws>=0.26.10,<0.27.0",
@@ -18,7 +17,6 @@ dependencies = [
     "dagster-sling>=0.26.10,<0.27.0",
     "dagster-dbt>=0.26.10,<0.27.0",
     "dagster-embedded-elt>=0.26.10,<0.27.0",
-    
     # Non-dagster dependencies
     "psycopg2-binary",
     "python-dotenv",
