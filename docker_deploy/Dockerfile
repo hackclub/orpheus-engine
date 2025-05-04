@@ -46,7 +46,7 @@ orpheus_engine_dbt:\n\
 # Run dbt parse to generate manifest.json
 RUN echo "Running dbt parse..." && \
     cd orpheus_engine_dbt && \
-    dbt parse --profiles-dir ${DBT_PROFILES_DIR} --profile orpheus_engine_dbt --target prod && \
+    python -m dbt.cli parse --profiles-dir ${DBT_PROFILES_DIR} --profile orpheus_engine_dbt --target prod && \
     cd .. && \
     echo "dbt parse finished." && \
     # Clean up the temporary build profile directory
