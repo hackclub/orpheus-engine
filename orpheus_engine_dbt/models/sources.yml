@@ -7,4 +7,6 @@ sources:
     tables:
       - name: heartbeats # The raw table name created by Sling
         description: "Raw heartbeat data replicated from the Hackatime production database by Sling."
-        # You can add columns definitions and tests here later if desired 
+        meta:
+          dagster:
+            asset_key: ['hackatime_warehouse_mirror']

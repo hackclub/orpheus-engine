@@ -1,5 +1,18 @@
 from dagster import EnvVar, AssetExecutionContext
-from dagster_sling import SlingResource, SlingConnectionResource, sling_assets
+from dagster_sling import SlingResource, SlingConnectionResource, sling_assets, DagsterSlingTranslator
+from typing import Mapping, Any
+import dagster as dg
+
+# --- Define Custom Translator ---
+class CustomDagsterSlingTranslator(DagsterSlingTranslator):
+    def get_asset_spec(self, stream_definition: Mapping[str, Any]) -> dg.AssetSpec:
+        """Overrides asset spec to set hackatime asset keys."""
+        # We create the default asset spec using super()
+        default_spec = super().get_asset_spec(stream_definition)
+        # Override the key with hackatime prefix
+        return default_spec.replace_attributes(
+            key=dg.AssetKey(["hackatime_warehouse_mirror"])
+        )
 
 # --- Define Connections ---
 
@@ -48,11 +61,14 @@ hackatime_replication_config = {
     "public.heartbeats": {
         "mode": "incremental",
         "primary_key": ["id"],
-        "update_key": ["updated_at"],
+        "update_key": ["updated_at"]
     }
 }
 
-@sling_assets(replication_config=hackatime_replication_config)
+@sling_assets(
+    replication_config=hackatime_replication_config,
+    dagster_sling_translator=CustomDagsterSlingTranslator()
+)
 def hackatime_sling_assets(context: AssetExecutionContext, sling: SlingResource):
     """
     Dagster asset definition for replicating Hackatime public schema
