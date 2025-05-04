@@ -168,7 +168,7 @@ try:
         # prepare manifest.json during runtime. note: we may need to change this
         # to preparing at build time for prod if we scale beyond a single node
         # setup
-        dbt_project.prepare()
+        dbt_project.preparer.prepare(dbt_project)
         DBT_MANIFEST_PATH = dbt_project.manifest_path
         logger.info(f"Using dbt manifest path: {DBT_MANIFEST_PATH}")
         dbt_project_valid = True
