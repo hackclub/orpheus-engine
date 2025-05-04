@@ -55,6 +55,15 @@ lang_daily AS (
     FROM valid_hb
     CROSS JOIN params p
     GROUP BY user_id, activity_date
+),
+
+-- Get user emails
+emails AS (
+    SELECT DISTINCT ON (user_id)
+           user_id,
+           LOWER(email) AS email
+    FROM   hackatime.email_addresses
+    ORDER  BY user_id, id                -- earliest id wins
 )
 
 -- Final projection
@@ -62,10 +71,13 @@ SELECT
     d.user_id                                       AS hackatime_user_id,
     d.activity_date,
     ROUND(d.seconds_day::numeric / 3600, 2)         AS hackatime_hours,
-    COALESCE(l.languages, '')                       AS languages_used
+    COALESCE(l.languages, '')                       AS languages_used,
+    e.email                                         AS first_email
 FROM       hb_daily d
 LEFT JOIN  lang_daily l
     ON  l.user_id       = d.user_id
     AND  l.activity_date = d.activity_date
+LEFT JOIN  emails e
+    ON  e.user_id       = d.user_id
 ORDER BY   d.activity_date DESC,
         d.user_id 
