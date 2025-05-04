@@ -1,0 +1,31 @@
+name: 'orpheus_engine_dbt_project'
+version: '1.0.0'
+config-version: 2
+
+# This profile name needs to match the one in our Dagster code
+profile: 'dagster_managed_profile'
+
+# Define where dbt should look for models, seeds, etc.
+model-paths: ["models"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+# Define target path (where compiled code goes) and log path
+target-path: "target"  # Relative to the dbt project directory
+log-path: "logs"      # Relative to the dbt project directory
+clean-targets:         # Directories removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+# Default settings for all models  
+models:
+  orpheus_engine_dbt_project:
+    # Default materialization for all models
+    +materialized: view
+    # Configurations for specific schema groups
+    hackatime_analytics:
+      +materialized: table 

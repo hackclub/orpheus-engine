@@ -9,4 +9,7 @@ __pycache__
 # DLT state
 .dlt/
 
+# DBT
+dbt.log
+
 prompt.txt

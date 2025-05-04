@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: hackatime_raw # A logical name for the source system/schema in the warehouse
+    # database: # Optional: Defaults to the database in your profile
+    schema: hackatime # The schema where Sling lands the data in your WAREHOUSE_DB
+    tables:
+      - name: heartbeats # The raw table name created by Sling
+        description: "Raw heartbeat data replicated from the Hackatime production database by Sling."
+        # You can add columns definitions and tests here later if desired 

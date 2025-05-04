@@ -22,6 +22,10 @@ dependencies = [
     "dagster-aws",
     "dagster-webserver>=1.10.10",
     "dagster-sling",
+    "dagster-dbt",
+    "dbt-core>=1.7.0,<2.0.0",
+    "dbt-postgres>=1.7.0,<2.0.0",
+    "PyYAML",
 ]
 
 [project.optional-dependencies]
