@@ -2088,28 +2088,27 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pyairtable" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "requests" },
 ]
 
 [package.optional-dependencies]
 dev = [
-    { name = "dagster-webserver" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dagster" },
-    { name = "dagster-aws" },
-    { name = "dagster-cloud" },
-    { name = "dagster-dbt" },
-    { name = "dagster-dlt" },
-    { name = "dagster-docker" },
-    { name = "dagster-embedded-elt" },
-    { name = "dagster-postgres" },
-    { name = "dagster-sling" },
-    { name = "dagster-webserver", specifier = ">=1.10.10" },
-    { name = "dagster-webserver", marker = "extra == 'dev'" },
+    { name = "dagster", specifier = ">=1.10.10,<1.11.0" },
+    { name = "dagster-aws", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-cloud", specifier = ">=1.10.10,<1.11.0" },
+    { name = "dagster-dbt", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-dlt", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-docker", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-embedded-elt", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-postgres", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-sling", specifier = ">=0.26.10,<0.27.0" },
+    { name = "dagster-webserver", specifier = ">=1.10.10,<1.11.0" },
     { name = "dbt-core", specifier = ">=1.7.0,<2.0.0" },
     { name = "dbt-postgres", specifier = ">=1.7.0,<2.0.0" },
     { name = "dlt", extras = ["postgres"] },
@@ -2120,6 +2119,7 @@ requires-dist = [
     { name = "pyairtable" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "requests" },
 ]
 provides-extras = ["dev"]

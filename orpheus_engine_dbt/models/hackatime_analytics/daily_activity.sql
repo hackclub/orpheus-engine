@@ -1,7 +1,6 @@
 {{ config(
-    schema='hackatime_analytics', -- Target schema for the resulting table
-    materialized='table'        -- Store results as a physical table
-    -- alias='alternative_table_name' -- Optional: if you want the table name to differ from the file name
+    schema='hackatime_analytics',
+    materialized='table'
 ) }}
 
 WITH params AS (

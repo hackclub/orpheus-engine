@@ -3,7 +3,7 @@ version: '1.0.0'
 config-version: 2
 
 # This profile name needs to match the one in our Dagster code
-profile: 'dagster_managed_profile'
+profile: 'orpheus_engine_dbt'
 
 # Define where dbt should look for models, seeds, etc.
 model-paths: ["models"]
