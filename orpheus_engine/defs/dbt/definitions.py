@@ -165,8 +165,10 @@ try:
             profiles_dir=DBT_PROFILES_DIR_PATH,
         )
         
-        # Generate the manifest during dev mode
-        dbt_project.prepare_if_dev()
+        # prepare manifest.json during runtime. note: we may need to change this
+        # to preparing at build time for prod if we scale beyond a single node
+        # setup
+        dbt_project.prepare()
         DBT_MANIFEST_PATH = dbt_project.manifest_path
         logger.info(f"Using dbt manifest path: {DBT_MANIFEST_PATH}")
         dbt_project_valid = True

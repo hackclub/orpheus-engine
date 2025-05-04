@@ -25,9 +25,6 @@ COPY orpheus_engine_dbt ./orpheus_engine_dbt
 RUN uv sync
 RUN uv pip install dagster dbt-core dbt-postgres PyYAML
 
-# Generate manifest.json for dbt project
-RUN uv run dagster-dbt project prepare-and-package --file orpheus_engine/defs/dbt/definitions.py
-
 RUN mkdir -p ${DAGSTER_HOME}
 
 COPY docker_deploy/dagster.yaml ${DAGSTER_HOME}/dagster.yaml
