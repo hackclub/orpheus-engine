@@ -20,7 +20,7 @@ dependencies = [
     # Non-dagster dependencies
     "psycopg2-binary",
     "python-dotenv",
-    "polars",
+    "polars[all]",
     "requests",
     "dlt[postgres]",
     "googlemaps",
@@ -29,11 +29,25 @@ dependencies = [
     "dbt-core>=1.7.0,<2.0.0",
     "dbt-postgres>=1.7.0,<2.0.0",
     "PyYAML",
+    "jupyter>=1.1.1",
+    "pandas>=2.2.3",
+    "connectorx>=0.3.3",
+    "pyod>=2.0.5",
+    "scikit-learn>=1.6.1",
+    "joblib>=1.5.0",
+    "scipy>=1.13.1",
+    "tqdm>=4.67.1",
+    "python-rapidjson>=1.20",
+    "tldextract>=5.3.0",
+    "metaod>=0.0.2",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "jupyter",
+    "ipykernel",
+    "notebook",
 ]
 
 [build-system]
