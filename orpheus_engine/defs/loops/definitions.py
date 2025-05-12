@@ -79,7 +79,7 @@ def loops_raw_audience(context) -> pl.DataFrame:
             try:
                 df = pl.read_csv(
                     cache_file_path, # Use the static path
-                    infer_schema_length=10000,
+                    infer_schema_length=None, # Infer from all rows
                     ignore_errors=False
                 )
                 log.info(f"Successfully loaded data from cache. DataFrame shape: {df.shape}")
@@ -221,7 +221,7 @@ def loops_raw_audience(context) -> pl.DataFrame:
         # without explicit overrides.
         df = pl.read_csv(
             io.BytesIO(csv_content),
-            infer_schema_length=10000, # Look at more rows to guess dtypes
+            infer_schema_length=None, # Infer from all rows
             ignore_errors=False
         )
         log.info(f"Successfully loaded data. DataFrame shape: {df.shape}")
