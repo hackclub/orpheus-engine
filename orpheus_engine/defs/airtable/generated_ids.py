@@ -97,16 +97,18 @@ class AirtableIDs:
             TABLE_ID = "tblTGpK7QgwsqT8t0"
 
             email = "flduN2BlNtozsp5xZ"  # Name: email
+            total_time_hackatime_hours = "fldgawsm3YG4b2C5V"  # Name: totalTimeHackatimeHours
+            total_time_stopwatch_hours = "fldD8IywF8keOhSJd"  # Name: totalTimeStopwatchHours
+            total_time_combined_hours = "fldQmyJBIHfmAp73d"  # Name: totalTimeCombinedHours
             full_name = "fldF7r89RpZ0WsaW4"  # Name: Full Name
             date_of_birth = "fldOygvFVgwArnj36"  # Name: Date of Birth
             token = "fldTMjrUrqTflOGBx"  # Name: token
             sessions = "fld1HC2XIHKk29AQe"  # Name: sessions
-            projects_owned = "fld6GLHIug5vs3WkJ"  # Name: projectsOwned
-            projects_collaborated = "fldqhuMbLtpDcrGCa"  # Name: projectsCollaborated
             github_username = "fldjw0OdVL7EN9521"  # Name: githubUsername
             commits = "fldiV80pumQcuswPo"  # Name: commits
             invites = "flduLNKHWAqsMCQ5Y"  # Name: invites
             slack_neighbor = "fld3fOnOAo22kPq3c"  # Name: slackNeighbor
+            pfp_from_slack_neighbor = "fldv0qc5jSXftaxxt"  # Name: Pfp (from slackNeighbor)
             slack_id_from_slack_neighbor = "fldtGzNkSmENJ4dZM"  # Name: Slack ID (from slackNeighbor)
             slack_handle_from_slack_neighbor = "fldS8nY4J5k6RqJOG"  # Name: Slack Handle (from slackNeighbor)
             full_name_from_slack_neighbor = "fldh3GA2DutgIRvZ4"  # Name: Full Name (from slackNeighbor)
@@ -121,6 +123,23 @@ class AirtableIDs:
             loops_birthday = "fldulwgHvMeu4kIFQ"  # Name: Loops - birthday
             loops_neighborhood_has_hackatime_at = "fldMNOI6mgpffAEyW"  # Name: Loops - neighborhoodHasHackatimeAt
             zapier_added_to_neighborhood_mailing_list_at = "fldOvjuA3x1UF3clq"  # Name: Zapier - Added to Neighborhood mailing list at
+            apps = "fldgP54dgV9BYOOUD"  # Name: Apps
+            devlog = "fldijYi51GpUlaOJk"  # Name: devlog
+            total_time_hackatime_seconds = "fldoWMncGnNk7PkZe"  # Name: totalTimeHackatimeSeconds
+            total_time_stopwatch_minutes = "fldIXiD6QzBKg0q4V"  # Name: totalTimeStopwatchMinutes
+            hack_clubber = "fldzsY67bxOBzpF2U"  # Name: Hack Clubber
+            gender_from_hack_clubber = "fldYuNPOiE9BZTDWB"  # Name: Gender (from Hack Clubber)
+            first_engagement_from_hack_clubber = "fldmHCJ4LEFrCUgLr"  # Name: First Engagement (from Hack Clubber)
+            first_engagement_at_from_hack_clubber = "fldOeJoYxsqUVrags"  # Name: First Engagement At (from Hack Clubber)
+            email_from_hack_clubber = "fldynlPE3lSYTNoPn"  # Name: Email (from Hack Clubber)
+            ysws_project_submission_from_apps = "fldCCqeLZ98QGjuNz"  # Name: YSWS Project Submission (from Apps)
+            move_in_date = "fldvl9C0PdGB4rCSJ"  # Name: move-in-date
+            move_out_date = "flddD3Uq93uS3SoT4"  # Name: move-out-date
+            rooms = "fld1CRYR8fm1gWfeI"  # Name: Rooms
+            room_gender = "fldmqxYDLp98zdpMC"  # Name: RoomGender
+            comments = "fldtiQ5qz93Pg2eHU"  # Name: Comments
+            total_days = "fldSO66JuHbuhkQKr"  # Name: total-days
+            visa_home_assignments = "fldmTtg5U8BmPQXlO"  # Name: VisaHomeAssignments
 
 
     class shipwrecked:
