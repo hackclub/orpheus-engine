@@ -140,7 +140,7 @@ class AirtableIDs:
             comments = "fldtiQ5qz93Pg2eHU"  # Name: Comments
             total_days = "fldSO66JuHbuhkQKr"  # Name: total-days
             visa_home_assignments = "fldmTtg5U8BmPQXlO"  # Name: VisaHomeAssignments
-            current_age = "fldzuo4LvG4l1ayDr"  # Name: Current Age
+            age_at_sign_up = "fldzuo4LvG4l1ayDr"  # Name: Age At Sign-Up
 
 
     class shipwrecked:
