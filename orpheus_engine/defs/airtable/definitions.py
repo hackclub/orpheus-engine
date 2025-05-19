@@ -70,6 +70,14 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblGW44enlxcYjDjS"
                 )
             }
+        ),
+        "highway": AirtableBaseConfig(
+            base_id="appuDQSHCdCHyOrxw",
+            tables={
+                "rsvps": AirtableTableConfig(
+                    table_id="tblhGTc3WX9nYzU18"
+                )
+            }
         )
     }
 )
