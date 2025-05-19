@@ -141,6 +141,12 @@ shipwrecked_assets = create_airtable_sync_assets(
     description="Loads shipwrecked.rsvps data into the warehouse.shipwrecked schema."
 )
 
+highway_assets = create_airtable_sync_assets(
+    base_name="highway",
+    tables=["rsvps"],
+    description="Loads highway.rsvps data into the warehouse.highway schema."
+)
+
 # --- DLT Asset: Loads Data into Warehouse using DLT ---
 @asset(
     compute_kind="dlt", # Tagging the compute type for UI clarity
