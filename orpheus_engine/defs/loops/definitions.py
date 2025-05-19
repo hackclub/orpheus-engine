@@ -1155,6 +1155,7 @@ def loops_audience_update_status(
             response = loops_client.update_contact(email=email, **payload_updates)
             log.info(f"Successfully updated contact {email}. Response ID: {response.get('id')}")
             updated_count += 1
+            time.sleep(1)
         except LoopsApiError as e:
             log.error(f"Failed to update contact {email}: {e}")
             failed_count += 1
