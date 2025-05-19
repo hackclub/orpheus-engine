@@ -140,6 +140,7 @@ class AirtableIDs:
             comments = "fldtiQ5qz93Pg2eHU"  # Name: Comments
             total_days = "fldSO66JuHbuhkQKr"  # Name: total-days
             visa_home_assignments = "fldmTtg5U8BmPQXlO"  # Name: VisaHomeAssignments
+            current_age = "fldzuo4LvG4l1ayDr"  # Name: Current Age
 
 
     class shipwrecked:
@@ -176,6 +177,27 @@ class AirtableIDs:
             hack_clubber_ysws = "fldBfLG18FaRMtIbX"  # Name: Hack Clubber – YSWS
             rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
             created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
+
+
+    class highway:
+        """IDs for Base 'highway' (ID: appuDQSHCdCHyOrxw)"""
+        BASE_ID = "appuDQSHCdCHyOrxw"
+
+        class rsvps:
+            """IDs for Table 'rsvps' (ID: tblhGTc3WX9nYzU18)"""
+            TABLE_ID = "tblhGTc3WX9nYzU18"
+
+            email = "flduP5J737EBLvvbk"  # Name: email
+            invited_to_slack = "fldkfyVH8J1qkmZbO"  # Name: invited_to_slack
+            welcome_message_sent = "fldFIleT1Rf1B8b5N"  # Name: welcome_message_sent
+            dm_error = "flduZHuUw19rIajXp"  # Name: dm_error
+            birthday = "fldJRYzfImVmNeS9c"  # Name: birthday
+            age = "fldTHAuLbNyDCYDdr"  # Name: age
+            source = "fldSaQbhApCRWu1Mz"  # Name: source
+            url_params = "fldDn8Y6HWI9Ekqll"  # Name: url_params
+            loops_highway_pre_rsvp_at = "fldWlrEOmkdRFj7Hl"  # Name: Loops - highwayPreRsvpAt
+            loops_birthday = "fldAI2YR7PPo5YhM8"  # Name: Loops - birthday
+            record_id = "fldYojFZSkbcUw43e"  # Name: Record ID
 
 
 # fmt: on
