@@ -141,6 +141,14 @@ class AirtableIDs:
             total_days = "fldSO66JuHbuhkQKr"  # Name: total-days
             visa_home_assignments = "fldmTtg5U8BmPQXlO"  # Name: VisaHomeAssignments
             age_at_sign_up = "fldzuo4LvG4l1ayDr"  # Name: Age At Sign-Up
+            age_eligible_at = "fld6k4njoQS3nmo1o"  # Name: ageEligibleAt
+            time_over1_hour = "fldvcDJtToZy3MmiE"  # Name: timeOver1Hour
+            time_over25_hours = "fldAjUL5ho3DvMqhg"  # Name: timeOver25Hours
+            time_over50_hours = "fldBB0vqfHjHFwyyB"  # Name: timeOver50Hours
+            time_over75_hours = "fldqHEpIypRvxH3bL"  # Name: timeOver75Hours
+            time_over100_hours = "fldNmKOC1UmhuUCmu"  # Name: timeOver100Hours
+            ysws_project_submitted_at = "fldjgX1MI2N6JwULl"  # Name: yswsProjectSubmittedAt
+            ysws_project_submitted_staff_approved = "fldoBkA3lrmvtFoyX"  # Name: yswsProjectSubmittedStaffApproved
 
 
     class shipwrecked:
