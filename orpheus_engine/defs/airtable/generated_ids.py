@@ -149,6 +149,29 @@ class AirtableIDs:
             time_over100_hours = "fldNmKOC1UmhuUCmu"  # Name: timeOver100Hours
             ysws_project_submitted_at = "fldjgX1MI2N6JwULl"  # Name: yswsProjectSubmittedAt
             ysws_project_submitted_staff_approved = "fldoBkA3lrmvtFoyX"  # Name: yswsProjectSubmittedStaffApproved
+            country = "fldodb9BuLa4ApYbN"  # Name: country
+
+        class hackatime_projects:
+            """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
+            TABLE_ID = "tblIqliBgKvoNT3uD"
+
+            id_auto = "fld5AIb2Hce93a7no"  # Name: idAuto
+            name = "fldxfUM1hVmUp9wcG"  # Name: name
+            email = "flddVY9cveGbXqP6K"  # Name: email
+            commits = "fldCiY5HxO6yvVvWo"  # Name: commits
+            description = "fld0s3MW3Q77mr53z"  # Name: description
+            neighbor = "fldYgoiBlHUMElnYK"  # Name: neighbor
+            github_link = "fldLTbhfMJVYPVjB7"  # Name: githubLink
+            invites = "fld8TaHXV4Ev8cUm6"  # Name: invites
+            created_at = "fldl0zGygN16MWynk"  # Name: createdAt
+            sessions = "fld9d6sivClb6GIwa"  # Name: sessions
+            apps = "fldSJ8ltjI8CMNUyy"  # Name: Apps
+            calcul = "fld1RndPLnMvmD7zf"  # Name: Calcul
+            slack_id = "fldDu4An1KY5utXC1"  # Name: slackId
+            total_time = "fldqSsiI9hZb2OW9g"  # Name: totalTime
+            total_time_hours = "fldILpudcwm5io04z"  # Name: totalTimeHours
+            more_than_one_user = "fldlPV7I6oORuOIj1"  # Name: moreThanOneUser
+            created = "fld7SuT6aT0AUGGyC"  # Name: Created
 
 
     class shipwrecked:
@@ -200,11 +223,13 @@ class AirtableIDs:
             welcome_message_sent = "fldFIleT1Rf1B8b5N"  # Name: welcome_message_sent
             dm_error = "flduZHuUw19rIajXp"  # Name: dm_error
             birthday = "fldJRYzfImVmNeS9c"  # Name: birthday
+            sticker_request_birthday = "fldud8kjykhWtjApx"  # Name: sticker_request_birthday
+            available_birthday = "fldneqipow42yzySz"  # Name: available_birthday
+            sticker_request = "fldMVkYiW3NNW4qNX"  # Name: sticker_request
             age = "fldTHAuLbNyDCYDdr"  # Name: age
             source = "fldSaQbhApCRWu1Mz"  # Name: source
             url_params = "fldDn8Y6HWI9Ekqll"  # Name: url_params
             loops_highway_pre_rsvp_at = "fldWlrEOmkdRFj7Hl"  # Name: Loops - highwayPreRsvpAt
-            loops_birthday = "fldAI2YR7PPo5YhM8"  # Name: Loops - birthday
             record_id = "fldYojFZSkbcUw43e"  # Name: Record ID
 
 

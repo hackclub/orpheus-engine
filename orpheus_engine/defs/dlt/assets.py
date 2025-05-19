@@ -131,8 +131,8 @@ def create_airtable_sync_assets(
 
 neighborhood_assets = create_airtable_sync_assets(
     base_name="neighborhood",
-    tables=["neighbors"],
-    description="Loads neighborhood.neighbors data into the warehouse.neighborhood schema."
+    tables=["neighbors", "hackatime_projects"],
+    description="Loads neighborhood.neighbors and neighborhood.hackatime_projects data into the warehouse.neighborhood schema."
 )
 
 shipwrecked_assets = create_airtable_sync_assets(

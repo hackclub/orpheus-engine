@@ -60,6 +60,9 @@ airtable_config = AirtableServiceConfig(
             tables={
                 "neighbors": AirtableTableConfig(
                     table_id="tblTGpK7QgwsqT8t0"
+                ),
+                "hackatime_projects": AirtableTableConfig(
+                    table_id="tblIqliBgKvoNT3uD"
                 )
             }
         ),
