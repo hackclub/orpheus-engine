@@ -16,7 +16,7 @@ import dagster as dg
 
 from orpheus_engine.defs.geocoder.resources import GeocoderResource, GeocodingError
 from orpheus_engine.defs.ai.resources import AIResource
-from orpheus_engine.defs.genderize.resources import GenderizeResource
+from orpheus_engine.defs.genderize.resources import GenderizeResource, GenderizeApiError
 
 # Import the Loops resource and error
 from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError 
