@@ -34,100 +34,103 @@ def create_airtable_sync_assets(
         tables: List of table names to sync (e.g., ['neighbors', 'projects'])
         description: Optional custom description for the assets
     """
-    assets = []
+    assets_list = []  # Renamed from 'assets' to avoid potential module name conflict
     
     for table_name in tables:
-        asset_name = f"{base_name}_{table_name}_warehouse"
-        group_name = f"dlt_airtable_{base_name}"
-        
-        @asset(
-            name=asset_name,
-            compute_kind="dlt",
-            group_name=group_name,
-            description=description or f"Loads {base_name}.{table_name} data into the warehouse.airtable_{base_name} schema.",
-            ins={
-                table_name: AssetIn(key_prefix=["airtable", base_name])
-            }
-        )
-        def sync_asset(
-            context: AssetExecutionContext,
-            **kwargs
-        ):
-            pipeline_name = f"{base_name}_to_warehouse"
-            dataset_name = f"airtable_{base_name}"
-            table_name_warehouse = table_name
-
-            # Get the input DataFrame
-            df = kwargs[table_name]
-
-            # Get field mappings from generated_ids
-            base_class = getattr(AirtableIDs, base_name)
-            table_class = getattr(base_class, table_name)
-            field_mappings = {
-                getattr(table_class, field_name): field_name
-                for field_name in dir(table_class)
-                if not field_name.startswith('_') and field_name != 'TABLE_ID'
-            }
-
-            # Filter mappings to only include columns that exist in the DataFrame
-            existing_columns = set(df.columns)
-            valid_mappings = {
-                old_name: new_name 
-                for old_name, new_name in field_mappings.items() 
-                if old_name in existing_columns
-            }
-
-            context.log.info(f"Found {len(valid_mappings)} columns to rename out of {len(existing_columns)} total columns")
-            context.log.info(f"Columns to rename: {valid_mappings}")
-
-            # Rename columns using the filtered mappings
-            renamed_df = df.rename(valid_mappings)
-
-            context.log.info(f"Starting DLT pipeline '{pipeline_name}' to load data.")
-            context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name_warehouse}'")
-            context.log.info(f"Columns after renaming: {renamed_df.columns}")
-
-            pipeline = dlt.pipeline(
-                pipeline_name=pipeline_name,
-                destination=warehouse_coolify_destination(),
-                dataset_name=dataset_name,
-                progress="log"
+        # Create a factory function to properly capture the table_name
+        def create_sync_asset_for_table(specific_table_name):
+            """Factory function that creates an asset function for a specific table"""
+            @asset(
+                name=f"{base_name}_{specific_table_name}_warehouse",
+                compute_kind="dlt",
+                group_name=f"dlt_airtable_{base_name}",
+                description=description or f"Loads {base_name}.{specific_table_name} data into the warehouse.airtable_{base_name} schema.",
+                ins={
+                    specific_table_name: AssetIn(key_prefix=["airtable", base_name])
+                }
             )
+            def sync_asset(context: AssetExecutionContext, **kwargs):
+                # Use specific_table_name that was captured by the factory function closure
+                pipeline_name_base = f"{base_name}_to_warehouse" 
+                dataset_name = f"airtable_{base_name}"
+                table_name_warehouse = specific_table_name
 
-            data_iterator = renamed_df.iter_rows(named=True)
-            try:
-                load_info = pipeline.run(
-                    data=data_iterator,
-                    table_name=table_name_warehouse,
-                    write_disposition="replace",
-                    primary_key="id"  # Always use Airtable record ID
+                # Get the input DataFrame
+                df = kwargs[specific_table_name]
+
+                # Get field mappings from generated_ids
+                base_class = getattr(AirtableIDs, base_name) 
+                table_class = getattr(base_class, specific_table_name)
+                field_mappings = {
+                    getattr(table_class, field_name): field_name
+                    for field_name in dir(table_class)
+                    if not field_name.startswith('_') and field_name != 'TABLE_ID'
+                }
+
+                existing_columns = set(df.columns)
+                valid_mappings = {
+                    old_name: new_name 
+                    for old_name, new_name in field_mappings.items() 
+                    if old_name in existing_columns
+                }
+
+                context.log.info(f"Found {len(valid_mappings)} columns to rename out of {len(existing_columns)} total columns for table '{specific_table_name}'")
+                context.log.info(f"Columns to rename for '{specific_table_name}': {valid_mappings}")
+
+                renamed_df = df.rename(valid_mappings)
+                
+                # Make DLT pipeline name unique per table to avoid state conflicts
+                dlt_pipeline_name = f"{pipeline_name_base}_{specific_table_name}"
+
+                context.log.info(f"Starting DLT pipeline '{dlt_pipeline_name}' to load data.")
+                context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name_warehouse}'")
+                context.log.info(f"Columns after renaming: {renamed_df.columns}")
+
+                pipeline = dlt.pipeline(
+                    pipeline_name=dlt_pipeline_name, # Use unique pipeline name
+                    destination=warehouse_coolify_destination(),
+                    dataset_name=dataset_name,
+                    progress="log"
                 )
 
-                context.log.info(f"DLT pipeline run finished successfully.")
-                context.log.info(f"Load Info: {load_info}")
+                data_iterator = renamed_df.iter_rows(named=True)
+                try:
+                    load_info = pipeline.run(
+                        data=data_iterator,
+                        table_name=table_name_warehouse,
+                        write_disposition="replace",
+                        primary_key="id"
+                    )
 
-                return Output(
-                    value=None,
-                    metadata={
-                        "dlt_pipeline_name": MetadataValue.text(pipeline_name),
-                        "dlt_dataset_name": MetadataValue.text(dataset_name),
-                        "dlt_table_name": MetadataValue.text(table_name_warehouse),
-                        "write_disposition": MetadataValue.text("replace"),
-                        "first_run": MetadataValue.bool(load_info.first_run),
-                        "num_records": MetadataValue.int(renamed_df.height),
-                        "columns": MetadataValue.text(", ".join(renamed_df.columns))
-                    }
-                )
+                    context.log.info(f"DLT pipeline run finished successfully for table '{specific_table_name}'.")
+                    context.log.info(f"Load Info for '{specific_table_name}': {load_info}")
 
-            except Exception as e:
-                context.log.error(f"DLT pipeline '{pipeline_name}' failed: {e}")
-                raise
+                    return Output(
+                        value=None,
+                        metadata={
+                            "dlt_pipeline_name": MetadataValue.text(dlt_pipeline_name),
+                            "dlt_dataset_name": MetadataValue.text(dataset_name),
+                            "dlt_table_name": MetadataValue.text(table_name_warehouse),
+                            "write_disposition": MetadataValue.text("replace"),
+                            "first_run": MetadataValue.bool(load_info.first_run),
+                            "num_records": MetadataValue.int(renamed_df.height),
+                            "columns": MetadataValue.text(", ".join(renamed_df.columns))
+                        }
+                    )
 
-        # Set the function name to match the asset name
-        sync_asset.__name__ = asset_name
-        assets.append(sync_asset)
+                except Exception as e:
+                    context.log.error(f"DLT pipeline '{dlt_pipeline_name}' failed: {e}")
+                    raise
+            
+            # Set the function name to match the asset name
+            sync_asset.__name__ = f"{base_name}_{specific_table_name}_warehouse"
+            return sync_asset
+        
+        # Create the asset function for this specific table and add it to our list
+        asset_function = create_sync_asset_for_table(table_name)
+        assets_list.append(asset_function)
     
-    return assets
+    return assets_list
 
 neighborhood_assets = create_airtable_sync_assets(
     base_name="neighborhood",
