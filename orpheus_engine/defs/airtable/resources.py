@@ -2,7 +2,8 @@ import polars as pl
 from dagster import ConfigurableResource, InitResourceContext, EnvVar, Field, AssetExecutionContext
 from pyairtable import Api, Table
 from pyairtable.formulas import match
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union, Set
+import json
 
 # Import the config models
 from .config import AirtableServiceConfig, AirtableBaseConfig, AirtableTableConfig
@@ -86,6 +87,45 @@ class AirtableResource(ConfigurableResource):
                 f"table '{table_key}' (ID: {table_config.table_id}): {e}"
             ) from e
 
+    def _clean_airtable_value(self, value: Any) -> Any:
+        """
+        Clean and normalize values from Airtable, handling special cases:
+        - Detect and convert special values like {"specialValue": "NaN"} to None
+        - Detect and convert error values like {"error": "#ERROR!"} to None
+        - Parse any stringified JSON objects
+        - Handle other edge cases
+        """
+        # If it's a string that looks like JSON, try to parse it 
+        if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
+            try:
+                parsed_value = json.loads(value)
+                # Check for Airtable special values
+                if isinstance(parsed_value, dict):
+                    if "specialValue" in parsed_value:
+                        # Convert special values to None
+                        return None
+                    elif "error" in parsed_value:
+                        # Convert error values to None
+                        return None
+                return parsed_value
+            except (json.JSONDecodeError, ValueError):
+                # Not valid JSON, return as is
+                return value
+        
+        # Handle dict special values directly (not as strings)
+        if isinstance(value, dict):
+            if "specialValue" in value:
+                return None
+            elif "error" in value:
+                return None
+            
+        # If it's a list, process each item
+        if isinstance(value, list):
+            return [self._clean_airtable_value(item) for item in value]
+            
+        # Return other types unchanged
+        return value
+
     def get_all_records_as_polars(
         self,
         context: AssetExecutionContext,
@@ -156,26 +196,93 @@ class AirtableResource(ConfigurableResource):
                     context.log.warning(f"Could not fetch/process schema to build empty DataFrame for {base_key}.{table_key}: {schema_err}")
                     return pl.DataFrame(schema={"id": pl.Utf8})
 
-            processed_records = []
+            # First pass: Pre-process all records to clean values and find all field IDs
+            all_fields = set(["id"])
+            preprocessed_records = []
+            
             for record in all_records_raw:
-                flat_record = record.get("fields", {}) # Keys are field IDs
-                flat_record["id"] = record.get("id")
-                processed_records.append(flat_record)
-
-            df = pl.DataFrame(processed_records)
-
-            # Ensure 'id' column exists and place it first
+                cleaned_record = {"id": record.get("id")}
+                
+                # Clean and add all fields
+                for field_id, value in record.get("fields", {}).items():
+                    all_fields.add(field_id)
+                    # Clean the values
+                    cleaned_record[field_id] = self._clean_airtable_value(value)
+                
+                preprocessed_records.append(cleaned_record)
+                
+            # Second pass: Identify fields with multi-item lists
+            fields_requiring_lists = set()
+            
+            for record in preprocessed_records:
+                for field_id, value in record.items():
+                    if isinstance(value, list) and len(value) > 1:
+                        fields_requiring_lists.add(field_id)
+            
+            context.log.info(f"Fields with multi-item lists in {base_key}.{table_key}: {sorted(fields_requiring_lists)}")
+            
+            # Third pass: Prepare final records with consistent types
+            final_records = []
+            for record in preprocessed_records:
+                final_record = {}
+                
+                # Process all known fields to ensure consistency
+                for field_id in all_fields:
+                    if field_id not in record:
+                        # Field missing in this record
+                        if field_id in fields_requiring_lists:
+                            final_record[field_id] = []  # Empty list for list fields
+                        else:
+                            final_record[field_id] = None  # None for non-list fields
+                    else:
+                        value = record[field_id]
+                        if field_id in fields_requiring_lists:
+                            # This field requires list type
+                            if isinstance(value, list):
+                                # Clean each element in the list
+                                final_record[field_id] = value
+                            else:
+                                # Convert single value to list
+                                final_record[field_id] = [value] if value is not None else []
+                        else:
+                            # This field doesn't need list type
+                            if isinstance(value, list):
+                                if len(value) == 0:
+                                    final_record[field_id] = None
+                                elif len(value) == 1:
+                                    final_record[field_id] = value[0]
+                                else:
+                                    # Should not happen based on our analysis
+                                    context.log.warning(f"Unexpected multi-item list for field {field_id}")
+                                    final_record[field_id] = value[0]
+                            else:
+                                final_record[field_id] = value
+                
+                final_records.append(final_record)
+            
+            # Build schema based on our analysis of the data
+            schema = {}
+            for field_id in all_fields:
+                if field_id in fields_requiring_lists:
+                    # Define list type columns explicitly
+                    schema[field_id] = pl.List(pl.Utf8)
+                else:
+                    # Default to string type
+                    schema[field_id] = pl.Utf8
+            
+            # Create DataFrame with explicit schema
+            context.log.info(f"Creating DataFrame from {len(final_records)} records for {base_key}.{table_key}")
+            df = pl.DataFrame(final_records, infer_schema_length=10000)
+            
+            # Ensure 'id' column is first
             if "id" in df.columns:
                 other_cols = [col for col in df.columns if col != 'id']
                 df = df.select(["id"] + other_cols)
-            else:
-                # Add 'id' as the first column if it was somehow missing
-                context.log.warning(f"'id' column missing from raw records for {base_key}.{table_key}, adding empty column.")
-                df = df.with_columns(pl.lit(None).cast(pl.Utf8).alias("id")).select(["id"] + df.columns)
-
+            
             return df
 
         except Exception as e:
+            context.log.error(f"Error processing data: {str(e)}")
             raise AirtableApiError(
                 f"Failed to fetch records from Airtable base '{base_key}', table '{table_key}' "
                 f"(Table ID: {table_config.table_id}): {e}"
