@@ -125,6 +125,7 @@ class AirtableIDs:
             zapier_added_to_neighborhood_mailing_list_at = "fldOvjuA3x1UF3clq"  # Name: Zapier - Added to Neighborhood mailing list at
             apps = "fldgP54dgV9BYOOUD"  # Name: Apps
             devlog = "fldijYi51GpUlaOJk"  # Name: devlog
+            total_checked_time = "fldEy1busms5l0z16"  # Name: totalCheckedTime
             total_time_hackatime_seconds = "fldoWMncGnNk7PkZe"  # Name: totalTimeHackatimeSeconds
             total_time_stopwatch_minutes = "fldIXiD6QzBKg0q4V"  # Name: totalTimeStopwatchMinutes
             hack_clubber = "fldzsY67bxOBzpF2U"  # Name: Hack Clubber
@@ -148,8 +149,15 @@ class AirtableIDs:
             time_over75_hours = "fldqHEpIypRvxH3bL"  # Name: timeOver75Hours
             time_over100_hours = "fldNmKOC1UmhuUCmu"  # Name: timeOver100Hours
             ysws_project_submitted_at = "fldjgX1MI2N6JwULl"  # Name: yswsProjectSubmittedAt
+            granted_hours = "fldpbGt3d43j9nUYW"  # Name: GrantedHours
             ysws_project_submitted_staff_approved = "fldoBkA3lrmvtFoyX"  # Name: yswsProjectSubmittedStaffApproved
             country = "fldodb9BuLa4ApYbN"  # Name: country
+            airport = "fldzzTahGopPmDTkl"  # Name: airport
+            has_visa = "fldAuoDvTz3IH4i3h"  # Name: hasVisa
+            unreviewed_devlog_count = "fldFEHEfibio3eiQ1"  # Name: unreviewedDevlogCount
+            ysws_project_submission = "fldWLN24iL2P4awTX"  # Name: YSWS Project Submission
+            ysws_project_submission_copy = "fld64FAjNTpT18NHi"  # Name: YSWS Project Submission copy
+            ysws_project_submission_copy = "fldncW9I2k7DEelDT"  # Name: YSWS Project Submission copy
 
         class hackatime_projects:
             """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
@@ -166,12 +174,14 @@ class AirtableIDs:
             created_at = "fldl0zGygN16MWynk"  # Name: createdAt
             sessions = "fld9d6sivClb6GIwa"  # Name: sessions
             apps = "fldSJ8ltjI8CMNUyy"  # Name: Apps
+            name_from_apps = "fldAl407aK8q34z5r"  # Name: Name (from Apps)
             calcul = "fld1RndPLnMvmD7zf"  # Name: Calcul
             slack_id = "fldDu4An1KY5utXC1"  # Name: slackId
             total_time = "fldqSsiI9hZb2OW9g"  # Name: totalTime
             total_time_hours = "fldILpudcwm5io04z"  # Name: totalTimeHours
             more_than_one_user = "fldlPV7I6oORuOIj1"  # Name: moreThanOneUser
             created = "fld7SuT6aT0AUGGyC"  # Name: Created
+            ysws_project_submission_from_apps = "fldYOwYZ57sL0r4DE"  # Name: YSWS Project Submission (from Apps)
 
 
     class shipwrecked:
@@ -201,6 +211,26 @@ class AirtableIDs:
             number_of_referrals = "fldV0f6k0kjNhdDQJ"  # Name: Number of Referrals
             disqualified_from_raffle = "fld9MCo0sAfuEXYii"  # Name: Disqualified_from_raffle
             add_to_slack = "fldtTt0CoXuqWdiSU"  # Name: AddToSlack?
+            created_at = "fldxZBl3Y92B7icVV"  # Name: createdAt
+            age_eligible_at = "fld8tatAv1Syhf8Kp"  # Name: ageEligibleAt
+            has_hackatime_at = "fldO4HAkyTTRiraKG"  # Name: hasHackatimeAt
+            logged_first_hour = "fldOZcXpk5ZUtocmZ"  # Name: loggedFirstHour
+            logged_ten_hours = "fldEUzm2kzocxUA8S"  # Name: loggedTenHours
+            submitted_first_project = "fld3Mu3BoCktJIdcw"  # Name: submittedFirstProject
+            first_project_approved = "fldSWTtuYyq7jnRTq"  # Name: firstProjectApproved
+            logged_first_hour_on_second_project = "fldj7etQaidqXuc6K"  # Name: loggedFirstHourOnSecondProject
+            submitted_second_project = "fldbw0lZyl92GxlBh"  # Name: submittedSecondProject
+            second_project_approved = "fldoGN2NW6jMhh0Nv"  # Name: secondProjectApproved
+            logged_first_hour_on_third_project = "fldfIN0aJJ6H75GCs"  # Name: loggedFirstHourOnThirdProject
+            submitted_third_project = "fldeLt3MnwE2lm6UY"  # Name: submittedThirdProject
+            third_project_approved = "fld7CXYUG2yDdvZ7t"  # Name: thirdProjectApproved
+            logged_first_hour_on_fourth_project = "fldAqWBiXsIvCh3Vt"  # Name: loggedFirstHourOnFourthProject
+            submitted_fourth_project = "fldkJCAM5lHwt5xyK"  # Name: submittedFourthProject
+            fourth_project_approved = "fldQnuIrqn0Dy17Jd"  # Name: fourthProjectApproved
+            user_exists_in_bay = "fldm1Ns9lKIaJNvnE"  # Name: userExistsInBay
+            total_raw_hackatime_hours = "fld1tdBSSLKnKOo0D"  # Name: totalRawHackatimeHours
+            total_approved_hackatime_hours = "fldJ1OC5ibU6vJe8t"  # Name: totalApprovedHackatimeHours
+            created = "fldePoj75HS2SGHQb"  # Name: Created
             non_disqualified_referrals = "fldHKZkydQU1p0tjO"  # Name: Non-Disqualified Referrals
             number_of_referrals_18 = "fldSux7TS7q9ZxLEK"  # Name: Number of Referrals <=18
             hack_clubber = "fldCPXnlvgkO8QEPc"  # Name: Hack Clubber
@@ -208,6 +238,7 @@ class AirtableIDs:
             hack_clubber_ysws = "fldBfLG18FaRMtIbX"  # Name: Hack Clubber – YSWS
             rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
             created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
+            loops_shipwrecked_user_exists_in_bay = "fldvXPNRWtyLALtIo"  # Name: Loops - shipwreckedUserExistsInBay
 
 
     class highway:
@@ -231,6 +262,105 @@ class AirtableIDs:
             url_params = "fldDn8Y6HWI9Ekqll"  # Name: url_params
             loops_highway_pre_rsvp_at = "fldWlrEOmkdRFj7Hl"  # Name: Loops - highwayPreRsvpAt
             record_id = "fldYojFZSkbcUw43e"  # Name: Record ID
+            created_at = "fldqIVKU2PGwXhqzJ"  # Name: Created At
+            send_github_email = "fldhhfdejpkQMbLoL"  # Name: send_github_email
+            was_at_kickoff = "fldVpS0j4d1cOT0MH"  # Name: was at kickoff
+
+
+    class athena_award:
+        """IDs for Base 'athena_award' (ID: appwSxpT4lASsosUI)"""
+        BASE_ID = "appwSxpT4lASsosUI"
+
+        class registered_users:
+            """IDs for Table 'registered_users' (ID: tblIk0A5f9eqSng1h)"""
+            TABLE_ID = "tblIk0A5f9eqSng1h"
+
+            email = "fld0TaaawpieJ9G2A"  # Name: email
+            role = "fldQWhQF9Jdo8Sb6Y"  # Name: role
+            slack_id = "fldDAgtj5tJnuK6cm"  # Name: slack_id
+            track = "fldduIOpBro5oKbdL"  # Name: track
+            display_name = "flda5W7GQQ3hoRWEr"  # Name: display_name
+            self_reported_partners_from_email_slack_invites = "fldBsOjnM2x6nd9nP"  # Name: self_reported_partners (from Email Slack Invites)
+            self_reported_partners_onboarding = "fldYtMpblMK26c6Ns"  # Name: self_reported_partners_onboarding
+            points = "fld782uY9yKgq3qcN"  # Name: points
+            total_time_approved_projects = "fldFJqzcq3PhqhGz0"  # Name: total_time_approved_projects
+            artifacts = "fldxx7cJTdiKZ0fDz"  # Name: artifacts
+            hackathon_codes = "fldtdzeYRpQMmaMu5"  # Name: hackathon_codes
+            hackathons = "fldqXDbPMxvL98a3i"  # Name: hackathons
+            hack_clubbers = "fldaNQTyoCfE7IVFA"  # Name: Hack Clubbers
+            record_id = "fldYyDAL5HpFr0mbN"  # Name: record_id
+            hashed_token = "fldpTp8vdsryYVte6"  # Name: hashed_token
+            registered = "fld7RHGzEfOc5OJJz"  # Name: registered
+            projects = "fldBRcF2KqPVJdvdS"  # Name: projects
+            duration_from_projects = "fldm6vhWLZOctIlIU"  # Name: duration (from projects)
+            ysws_project_submission = "fldXnJWsOhQkl2laW"  # Name: ysws_project_submission
+            approved_duration_from_projects = "fldag6JrdejDNjCAS"  # Name: approved_duration (from projects)
+            unified_ysws_projects_db = "fldFl0yclGYljU6Wg"  # Name: Unified YSWS Projects DB
+            hours_spent_rollup_from_unified_ysws_projects_db = "fldcRUHh4REm4TyOI"  # Name: Hours Spent Rollup (from Unified YSWS Projects DB)
+            hackatime_set_up_at = "fld1X9TIKhVgP0P4I"  # Name: hackatime_set_up_at
+            orders = "fldxu4NA7YMtY9oHJ"  # Name: Orders
+            force_refresh_ysws_projects = "fldRvL6FlJ7RDIwTn"  # Name: force_refresh_ysws_projects
+            loops_athena_award_first_logged_in_at = "flducWTMuVh0xpXCP"  # Name: Loops - athenaAwardFirstLoggedInAt
+            zapier_added_to_athena_mailing_list_at = "fldQJHbZozaH7MskV"  # Name: Zapier - Added to Athena mailing list at
+            referred_users = "fldVqPyWX8ZTuPCAj"  # Name: referred_users
+            email_slack_invites = "fldaofojjV18uvAN4"  # Name: Email Slack Invites
+            referred_users_account_created = "fldnghkHaGhIKF7o9"  # Name: referred_users_account_created
+            referred_users_registered_users_count = "fldl2x5dLU4pxox8N"  # Name: referred_users_registered_users_count
+            referred_users_count = "fldKkUQ312lzdgpLD"  # Name: referred_users_count
+            referred_users_registered_users_edition = "fld1Bl83LyowhNubP"  # Name: referred_users_registered_users_edition
+            profile_picture = "fldxLDUvCXQCDxfnr"  # Name: profile_picture
+            project_unique_names = "fldxlzRtJrUWuwyKY"  # Name: project_unique_names
+            approved_projects = "fldfQp5eDL8IEeVwH"  # Name: approved_projects
+            zach_has_hackatime_or_submitted_athena_project = "fldMz3kFXwonzGVix"  # Name: Zach - has_hackatime_or_submitted_athena_project
+            total_number_orders = "flddaNQgUnpAELGqE"  # Name: total_number_orders
+            email_slack_invites_copy = "fldiDAliUsDB7EQV3"  # Name: Email Slack Invites copy
+            email_slack_invites_copy = "fldxB0bFgfFQ7kO8O"  # Name: Email Slack Invites copy
+
+        class email_slack_invites:
+            """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
+            TABLE_ID = "tblmiCs66Oy9ux6eN"
+
+            email = "fld4z7buJbTKfaNwl"  # Name: email
+            self_reported_partners = "fld2W473TCyAId9Eg"  # Name: self_reported_partners
+            error = "fldTKFomRhiwIZgPx"  # Name: error
+            dm_error = "fldCT4uWXH7orBz7Q"  # Name: dm_error
+            welcome_message_sent = "fldol2W6BbcbxPZV8"  # Name: welcome_message_sent
+            registered_user = "fldy5QsE0yYmolUpz"  # Name: registered_user
+            referred_by = "fldhVLEsJUZvAutKH"  # Name: referred_by
+            utm_source = "fldrKkjeJ7DlQ5tid"  # Name: utm_source
+            created = "fld3OFPCqwso8TlPX"  # Name: Created
+            loops_athena_award_slack_invite_requested_at = "fld7hufACh1X4tp42"  # Name: Loops - athenaAwardSlackInviteRequestedAt
+            zapier_added_to_athena_mailing_list_at = "fldGAuFJmK2yb5H3v"  # Name: Zapier - Added to Athena mailing list at
+
+        class free_sticker_form:
+            """IDs for Table 'free_sticker_form' (ID: tblBOgmyC9RVK98wD)"""
+            TABLE_ID = "tblBOgmyC9RVK98wD"
+
+            email = "fldN19TbrTnCXSngO"  # Name: Email
+            first_name = "fldf3tegs4na6q0Yp"  # Name: First Name
+            last_name = "fldQjTSwM4Q2CFJwB"  # Name: Last Name
+            pronouns = "fldtE2kq4EsjdbIOI"  # Name: Pronouns
+            git_hub_username = "fldZ9X0H5Fl2gGID3"  # Name: GitHub Username
+            birthday = "fldTEJDYg9Ws6OtqY"  # Name: Birthday
+            address_line_1 = "fldQ49GD41UG0gb7Q"  # Name: Address Line 1
+            address_line_2 = "fldPXNCo4ckwUf9Hr"  # Name: Address Line 2
+            city = "fldHsStlvMorfS9gx"  # Name: City
+            state = "fldgk1AAysYHcHrpF"  # Name: State
+            zip_postcode = "fldkOjR7CJeRB2EBs"  # Name: ZIP/Postcode 
+            country = "flddIqe8RLyOnGKc2"  # Name: Country
+            loops_athena_award_stickers_requested_at = "fldVIrRhcFEzcC8vS"  # Name: Loops - athenaAwardStickersRequestedAt
+            loops_first_name = "fldEEk4v3I8MlhTQt"  # Name: Loops - firstName
+            loops_last_name = "fldWp3vGALPoh24pm"  # Name: Loops - lastName
+            loops_gender_self_reported = "fldndV1vBDxKiUGLo"  # Name: Loops - genderSelfReported
+            loops_github_username = "fldLCS6Wq52UwkNTI"  # Name: Loops - githubUsername
+            loops_special_set_full_address = "fldXckAr3vu1m1MsD"  # Name: Loops - special - setFullAddress
+            theseus_letter_id = "fld65tjhaen9iv77b"  # Name: Theseus – Letter ID
+            theseus_status = "fldQHZvDCbUMRdHnf"  # Name: Theseus – Status
+            theseus_mailed_at = "fldUSdrzjAlXx4w2l"  # Name: Theseus – Mailed At
+            theseus_received_at = "fldkxqtBALXfXzBLu"  # Name: Theseus – Received At
+            theseus_postage_cost = "fldkAbCFvMOqDFDz2"  # Name: Theseus – Postage Cost
+            theseus_create_letter = "fldfszoyV5xqqz2Yl"  # Name: Theseus – Create Letter
+            theseus_error = "fldfyIYIf8FYo2s0z"  # Name: Theseus – Error
 
 
 # fmt: on

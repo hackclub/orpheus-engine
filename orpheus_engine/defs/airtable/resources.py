@@ -221,58 +221,148 @@ class AirtableResource(ConfigurableResource):
             
             context.log.info(f"Fields with multi-item lists in {base_key}.{table_key}: {sorted(fields_requiring_lists)}")
             
-            # Third pass: Prepare final records with consistent types
+            # Third pass: Analyze data types for intelligent casting
+            field_type_analysis = {}
+            
+            for field_id in all_fields:
+                if field_id in fields_requiring_lists:
+                    field_type_analysis[field_id] = "list"
+                    continue
+                    
+                # Analyze non-list fields for best type
+                values = []
+                for record in preprocessed_records:
+                    if field_id in record and record[field_id] is not None:
+                        value = record[field_id]
+                        if isinstance(value, list):
+                            if len(value) == 1:
+                                values.append(value[0])
+                            elif len(value) == 0:
+                                continue  # Skip empty lists
+                        else:
+                            values.append(value)
+                
+                if not values:
+                    field_type_analysis[field_id] = "string"
+                    continue
+                
+                # Determine best type based on values
+                all_numeric = True
+                all_int = True
+                all_bool = True
+                
+                for value in values:
+                    if value is None:
+                        continue
+                    
+                    # Check if it's boolean
+                    if not isinstance(value, bool) and value not in [True, False, 0, 1, "true", "false", "True", "False"]:
+                        all_bool = False
+                    
+                    # Check if it's numeric
+                    try:
+                        float_val = float(value)
+                        if float_val != int(float_val):
+                            all_int = False
+                    except (ValueError, TypeError):
+                        all_numeric = False
+                        all_int = False
+                        all_bool = False
+                        break
+                
+                if all_bool and len(set(str(v).lower() for v in values if v is not None)) <= 2:
+                    field_type_analysis[field_id] = "boolean"
+                elif all_int:
+                    field_type_analysis[field_id] = "integer"
+                elif all_numeric:
+                    field_type_analysis[field_id] = "float"
+                else:
+                    field_type_analysis[field_id] = "string"
+            
+            context.log.info(f"Field type analysis for {base_key}.{table_key}: {field_type_analysis}")
+            
+            # Fourth pass: Prepare final records with intelligent type casting
             final_records = []
             for record in preprocessed_records:
                 final_record = {}
                 
                 # Process all known fields to ensure consistency
                 for field_id in all_fields:
+                    target_type = field_type_analysis[field_id]
+                    
                     if field_id not in record:
                         # Field missing in this record
-                        if field_id in fields_requiring_lists:
-                            final_record[field_id] = []  # Empty list for list fields
+                        if target_type == "list":
+                            final_record[field_id] = []
                         else:
-                            final_record[field_id] = None  # None for non-list fields
+                            final_record[field_id] = None
                     else:
                         value = record[field_id]
-                        if field_id in fields_requiring_lists:
+                        
+                        if target_type == "list":
                             # This field requires list type
                             if isinstance(value, list):
-                                # Clean each element in the list
-                                final_record[field_id] = value
+                                final_record[field_id] = [str(item) if item is not None else None for item in value]
                             else:
-                                # Convert single value to list
-                                final_record[field_id] = [value] if value is not None else []
+                                final_record[field_id] = [str(value)] if value is not None else []
                         else:
-                            # This field doesn't need list type
+                            # Extract single value from list if needed
                             if isinstance(value, list):
                                 if len(value) == 0:
-                                    final_record[field_id] = None
+                                    extracted_value = None
                                 elif len(value) == 1:
-                                    final_record[field_id] = value[0]
+                                    extracted_value = value[0]
                                 else:
-                                    # Should not happen based on our analysis
                                     context.log.warning(f"Unexpected multi-item list for field {field_id}")
-                                    final_record[field_id] = value[0]
+                                    extracted_value = value[0]
                             else:
-                                final_record[field_id] = value
+                                extracted_value = value
+                            
+                            # Cast to target type
+                            if extracted_value is None:
+                                final_record[field_id] = None
+                            elif target_type == "boolean":
+                                if isinstance(extracted_value, bool):
+                                    final_record[field_id] = extracted_value
+                                elif str(extracted_value).lower() in ["true", "1"]:
+                                    final_record[field_id] = True
+                                elif str(extracted_value).lower() in ["false", "0"]:
+                                    final_record[field_id] = False
+                                else:
+                                    final_record[field_id] = bool(extracted_value)
+                            elif target_type == "integer":
+                                try:
+                                    final_record[field_id] = int(float(extracted_value))
+                                except (ValueError, TypeError):
+                                    final_record[field_id] = None
+                            elif target_type == "float":
+                                try:
+                                    final_record[field_id] = float(extracted_value)
+                                except (ValueError, TypeError):
+                                    final_record[field_id] = None
+                            else:  # string
+                                final_record[field_id] = str(extracted_value) if extracted_value is not None else None
                 
                 final_records.append(final_record)
             
-            # Build schema based on our analysis of the data
+            # Build schema based on our type analysis
             schema = {}
             for field_id in all_fields:
-                if field_id in fields_requiring_lists:
-                    # Define list type columns explicitly
+                target_type = field_type_analysis[field_id]
+                if target_type == "list":
                     schema[field_id] = pl.List(pl.Utf8)
-                else:
-                    # Default to string type
+                elif target_type == "boolean":
+                    schema[field_id] = pl.Boolean
+                elif target_type == "integer":
+                    schema[field_id] = pl.Int64
+                elif target_type == "float":
+                    schema[field_id] = pl.Float64
+                else:  # string
                     schema[field_id] = pl.Utf8
             
             # Create DataFrame with explicit schema
             context.log.info(f"Creating DataFrame from {len(final_records)} records for {base_key}.{table_key}")
-            df = pl.DataFrame(final_records, infer_schema_length=10000)
+            df = pl.DataFrame(final_records, schema=schema)
             
             # Ensure 'id' column is first
             if "id" in df.columns:

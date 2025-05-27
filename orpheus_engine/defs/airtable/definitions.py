@@ -81,6 +81,20 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblhGTc3WX9nYzU18"
                 )
             }
+        ),
+        "athena_award": AirtableBaseConfig(
+            base_id="appwSxpT4lASsosUI",
+            tables={
+                "registered_users": AirtableTableConfig(
+                    table_id="tblIk0A5f9eqSng1h"
+                ),
+                "email_slack_invites": AirtableTableConfig(
+                    table_id="tblmiCs66Oy9ux6eN"
+                ),
+                "free_sticker_form": AirtableTableConfig(
+                    table_id="tblBOgmyC9RVK98wD"
+                )
+            }
         )
     }
 )
