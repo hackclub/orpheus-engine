@@ -1,2 +1,2 @@
 #!/bin/sh
-code2prompt -e 'uv.lock' -O prompt.txt .
+code2prompt -e 'uv.lock' -e 'playground/*' -O prompt.txt .
