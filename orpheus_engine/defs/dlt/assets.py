@@ -152,8 +152,8 @@ highway_assets = create_airtable_sync_assets(
 
 athena_award_assets = create_airtable_sync_assets(
     base_name="athena_award",
-    tables=["registered_users", "email_slack_invites", "free_sticker_form"],
-    description="Loads athena_award.registered_users, athena_award.email_slack_invites, and athena_award.free_sticker_form data into the warehouse.athena_award schema."
+    tables=["registered_users", "email_slack_invites", "free_sticker_form", "projects"],
+    description="Loads athena_award.registered_users, athena_award.email_slack_invites, athena_award.free_sticker_form, and athena_award.projects data into the warehouse.athena_award schema."
 )
 
 # --- DLT Asset: Loads Data into Warehouse using DLT ---

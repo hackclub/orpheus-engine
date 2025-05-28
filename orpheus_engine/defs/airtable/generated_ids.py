@@ -362,5 +362,33 @@ class AirtableIDs:
             theseus_create_letter = "fldfszoyV5xqqz2Yl"  # Name: Theseus – Create Letter
             theseus_error = "fldfyIYIf8FYo2s0z"  # Name: Theseus – Error
 
+        class projects:
+            """IDs for Table 'projects' (ID: tblZqHeeelwGkOkRr)"""
+            TABLE_ID = "tblZqHeeelwGkOkRr"
+
+            record_id = "fldcwoCVYQ9P3GdKv"  # Name: record_id
+            unique_name = "fld8A7FjUiOI5Ho8M"  # Name: unique_name
+            project_name = "fld6vGpatATHH7rn8"  # Name: project_name
+            project_name_override = "fldCodpGWr0hiGisg"  # Name: project_name_override
+            guided_ysws = "fld16dhOG3s49vzq5"  # Name: guided_ysws
+            automation_guided_ysws = "fldvYjS28P2rnw9H6"  # Name: automation_guided_ysws
+            hackatime_duration = "fldiMCjGxVHmafb5f"  # Name: hackatime_duration
+            existing_ysws_project_hour_override = "fldYiOsaEbm0oRa8s"  # Name: existing_ysws_project_hour_override
+            approved_duration = "fld4eD1QIbHookKrF"  # Name: approved_duration
+            stage = "fldDeBwC0YPE69Xl3"  # Name: stage
+            status = "fld8mVhD1hOom2i9i"  # Name: status
+            registered_user = "fldbWcHEPieWbwaaQ"  # Name: registered_user
+            stringified_email = "flddvqww48TLt7JKs"  # Name: stringified_email
+            form_submitted_project = "fldis1ignLpvSF5LK"  # Name: form_submitted_project
+            address_joined_no_name_from_form_submitted_project = "fld2iQEZHFPBS49n7"  # Name: address_joined_no_name (from form_submitted_project)
+            user_consent = "fldWlAVD9AlG1NYak"  # Name: user_consent
+            all_submitted_project_status = "fldFpKOTQTjnzpeZ3"  # Name: all_submitted_project_status
+            all_user_unified_db_from_form_submitted_project = "fldJ3gNj9mFdrkZnM"  # Name: all_user_unified_db (from form_submitted_project)
+            address_joined_from_ysws_project = "fldubS1WoqZqkxBh9"  # Name: address_joined (from ysws project)
+            slack_id = "fldTrCGiaOMAVED5o"  # Name: slack_id
+            order = "fld9YhS7dp9fWVzoo"  # Name: order
+            code_url = "fldBDPByuRJgVWyjw"  # Name: code_url
+            playable_url = "fldnRGAfDwBt9W94m"  # Name: playable_url
+
 
 # fmt: on

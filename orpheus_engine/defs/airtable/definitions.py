@@ -93,6 +93,9 @@ airtable_config = AirtableServiceConfig(
                 ),
                 "free_sticker_form": AirtableTableConfig(
                     table_id="tblBOgmyC9RVK98wD"
+                ),
+                "projects": AirtableTableConfig(
+                    table_id="tblZqHeeelwGkOkRr"
                 )
             }
         )
