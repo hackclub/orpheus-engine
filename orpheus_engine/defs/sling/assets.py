@@ -51,6 +51,10 @@ hackatime_db_connection = SlingConnectionResource(
     name="HACKATIME_DB",  # This name MUST match the 'source' key in replication_config
     type="postgres",
     connection_string=EnvVar("HACKATIME_COOLIFY_URL"),
+    options={
+        "pool_size": 20,
+        "max_overflow": 10
+    }
 )
 
 hcer_public_github_data_connection = SlingConnectionResource(
@@ -76,6 +80,10 @@ warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
     type="postgres",
     connection_string=EnvVar("WAREHOUSE_COOLIFY_URL"),
+    options={
+        "pool_size": 20,
+        "max_overflow": 10
+    }
 )
 
 # --- Create Sling Resource ---
@@ -97,22 +105,33 @@ hackatime_replication_config = {
     "defaults": {
         "mode": "full-refresh",
         "object": "hackatime.{stream_table}",
+        "options": {
+            "batch_size": 100000,
+            "workers": 8,
+            "drop_temp_table": True
+        }
     },
 
     "streams": {
         "public.*": None,
-    },
-
-    "public.leaderboard_entries": {
-        "mode": "incremental",
-        "primary_key": ["id"],
-        "update_key": ["updated_at"],
-    },
-
-    "public.heartbeats": {
-        "mode": "incremental",
-        "primary_key": ["id"],
-        "update_key": ["updated_at"]
+        
+        "public.leaderboard_entries": {
+            "mode": "incremental",
+            "primary_key": "id",
+            "update_key": "updated_at",
+        },
+        
+        "public.heartbeats": {
+            "mode": "incremental",
+            "primary_key": "id",
+            "update_key": "updated_at",
+            "options": {
+                "batch_size": 250000,
+                "workers": 12,
+                "use_copy": True,
+                "truncate_on_load": False
+            }
+        }
     }
 }
 
