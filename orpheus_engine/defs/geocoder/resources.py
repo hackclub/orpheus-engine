@@ -1,5 +1,4 @@
-import googlemaps
-import googlemaps.exceptions as google_exceptions
+import requests
 from dagster import ConfigurableResource, InitResourceContext, EnvVar
 
 class GeocodingError(Exception):
@@ -7,53 +6,39 @@ class GeocodingError(Exception):
     pass
 
 class GeocoderResource(ConfigurableResource):
-    """A Dagster resource for interacting with the Google Maps Geocoding API."""
+    """A Dagster resource for interacting with the Hack Club Geocoder API."""
 
-    google_maps_api_key: str = EnvVar("GOOGLE_MAPS_API_KEY")
+    api_key: str = EnvVar("HACKCLUB_GEOCODER_API_KEY")
+    base_url: str = "https://geocoder.hackclub.com/v1"
 
-    _client: googlemaps.Client | None = None
+    def geocode(self, address: str) -> dict:
+        """Geocode an address using Hack Club Geocoder API.
 
-    def setup_for_execution(self, context: InitResourceContext) -> None:
-        # EnvVar handles the presence check, so we don't need to check here.
-        try:
-            self._client = googlemaps.Client(key=self.google_maps_api_key)
-        except Exception as e:
-             raise GeocodingError(f"Failed to initialize Google Maps client: {e}") from e
-
-    @property
-    def client(self) -> googlemaps.Client:
-        if self._client is None:
-            # This shouldn't happen in normal execution as setup_for_execution is called first,
-            # but raise a specific error if it does.
-            raise GeocodingError("Resource is not initialized. Call setup_for_execution first.")
-        return self._client
-
-    def geocode(self, address: str, **kwargs) -> list[dict]:
-        """Geocode an address.
-
+        Returns:
+            dict: Geocoding result with lat, lng, formatted_address, country_name, country_code
+        
         Raises:
             GeocodingError: If any error occurs during the geocoding API call.
         """
         try:
-            return self.client.geocode(address, **kwargs)
-        except (google_exceptions.ApiError, google_exceptions.HTTPError, google_exceptions.Timeout, google_exceptions.TransportError) as e:
-             # Wrap the provider-specific exception in our generic error
-             raise GeocodingError(f"Google Maps API geocoding failed for address '{address}': {e}") from e
+            response = requests.get(
+                f"{self.base_url}/geocode",
+                params={"address": address, "key": self.api_key},
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise GeocodingError(f"Hack Club Geocoder API failed for address '{address}': {e}") from e
         except Exception as e:
-             # Catch any other unexpected errors during the client call
-             raise GeocodingError(f"An unexpected error occurred during geocoding for address '{address}': {e}") from e
+            raise GeocodingError(f"An unexpected error occurred during geocoding for address '{address}': {e}") from e
 
-    def reverse_geocode(self, latlng: tuple[float, float] | dict[str, float], **kwargs) -> list[dict]:
+    def reverse_geocode(self, latlng: tuple[float, float] | dict[str, float]) -> dict:
         """Reverse geocode a latitude/longitude coordinate.
-
+        
+        Note: This method is not supported by the Hack Club Geocoder API.
+        
         Raises:
-            GeocodingError: If any error occurs during the reverse geocoding API call.
+            GeocodingError: Always raises as reverse geocoding is not supported.
         """
-        try:
-            return self.client.reverse_geocode(latlng, **kwargs)
-        except (google_exceptions.ApiError, google_exceptions.HTTPError, google_exceptions.Timeout, google_exceptions.TransportError) as e:
-             # Wrap the provider-specific exception in our generic error
-             raise GeocodingError(f"Google Maps API reverse geocoding failed for lat/lng '{latlng}': {e}") from e
-        except Exception as e:
-            # Catch any other unexpected errors during the client call
-             raise GeocodingError(f"An unexpected error occurred during reverse geocoding for lat/lng '{latlng}': {e}") from e
+        raise GeocodingError("Reverse geocoding is not supported by the Hack Club Geocoder API")

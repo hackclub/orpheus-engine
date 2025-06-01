@@ -259,19 +259,13 @@ def loops_raw_audience(context) -> pl.DataFrame:
         raise RuntimeError(f"An unexpected error occurred during CSV download or parsing: {e}") from e
 
 
-def _extract_geocode_details(geocode_result_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Extracts relevant details from a single Google Maps geocode result."""
+def _extract_geocode_details(geocode_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extracts relevant details from Hack Club Geocoder API result."""
     try:
-        latitude = geocode_result_item["geometry"]["location"]["lat"]
-        longitude = geocode_result_item["geometry"]["location"]["lng"]
-
-        country_name = None
-        country_code = None
-        for component in geocode_result_item.get("address_components", []):
-            if "country" in component.get("types", []):
-                country_name = component.get("long_name")
-                country_code = component.get("short_name")
-                break # Found country component
+        latitude = geocode_result["lat"]
+        longitude = geocode_result["lng"]
+        country_name = geocode_result.get("country_name")
+        country_code = geocode_result.get("country_code")
 
         if latitude is not None and longitude is not None:
             return {
@@ -280,7 +274,7 @@ def _extract_geocode_details(geocode_result_item: Dict[str, Any]) -> Optional[Di
                 "calculatedGeocodedCountryName": country_name,
                 "calculatedGeocodedCountryCode": country_code,
             }
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, TypeError):
         # Handle cases where the expected structure is missing
         pass
     return None
@@ -290,7 +284,7 @@ def _extract_geocode_details(geocode_result_item: Dict[str, Any]) -> Optional[Di
     group_name="loops",
     description="Geocodes contacts from the Loops export if their address has changed or hasn't been geocoded.",
     required_resource_keys={"geocoder_client"},
-    compute_kind="google_maps",
+    compute_kind="hackclub_geocoder",
 )
 def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: pl.DataFrame) -> Output[pl.DataFrame]:
     """
@@ -370,13 +364,13 @@ def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: 
         if address_hash != existing_hash:
             log.info(f"Address hash changed for {email}. Attempting geocode. Hash: {address_hash[:7]}... String: '{address_string.replace('\n', ' ')}'") # Log truncated hash and string
             try:
-                geocode_api_result: List[Dict[str, Any]] = geocoder.geocode(address_string)
+                geocode_api_result: Dict[str, Any] = geocoder.geocode(address_string)
 
                 if not geocode_api_result:
                     log.warning(f"Geocoding returned no results for address: '{address_string.replace('\n', ' ')}' (Email: {email})")
                     continue
 
-                extracted_details = _extract_geocode_details(geocode_api_result[0])
+                extracted_details = _extract_geocode_details(geocode_api_result)
 
                 if extracted_details:
                     # Increment successful geocode counter BEFORE appending
