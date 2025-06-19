@@ -109,12 +109,12 @@ hackatime_replication_config = {
         "public.leaderboard_entries": {
             "mode": "incremental",
             "primary_key": ["id"],
-            "update_key": ["updated_at"],
+            "update_key": "updated_at",
         },
         "public.heartbeats": {
             "mode": "incremental",
             "primary_key": ["id"],
-            "update_key": ["updated_at"]
+            "update_key": "updated_at"
         }
     }
 }
