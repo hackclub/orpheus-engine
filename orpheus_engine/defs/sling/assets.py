@@ -100,19 +100,22 @@ hackatime_replication_config = {
     },
 
     "streams": {
-        "public.*": None,
-    },
-
-    "public.leaderboard_entries": {
-        "mode": "incremental",
-        "primary_key": ["id"],
-        "update_key": ["updated_at"],
-    },
-
-    "public.heartbeats": {
-        "mode": "incremental",
-        "primary_key": ["id"],
-        "update_key": ["updated_at"]
+        "public.*": {
+            "exclude": [
+                "pg_stat_statements",
+                "pg_stat_statements_info"
+            ]
+        },
+        "public.leaderboard_entries": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": ["updated_at"],
+        },
+        "public.heartbeats": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": ["updated_at"]
+        }
     }
 }
 
