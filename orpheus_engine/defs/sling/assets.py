@@ -6,47 +6,43 @@ import dagster as dg
 # --- Define Custom Translator ---
 class HackatimeSlingTranslator(DagsterSlingTranslator):
     def get_asset_spec(self, stream_definition: Mapping[str, Any]) -> dg.AssetSpec:
-        """
-        Return a unique key for each stream while keeping a single top‑level
-        prefix: hackatime_warehouse_mirror/<schema>/<table>
-        """
+        """Overrides asset spec to set hackatime asset keys."""
+        # We create the default asset spec using super()
         default_spec = super().get_asset_spec(stream_definition)
-        new_key_path = ["hackatime_warehouse_mirror", *default_spec.key.path]
-        new_asset_key = dg.AssetKey(new_key_path)
-        return default_spec.replace_attributes(key=new_asset_key)
+        # Override the key with hackatime prefix
+        return default_spec.replace_attributes(
+            key=dg.AssetKey(["hackatime_warehouse_mirror"])
+        )
 
 class HcerPublicGithubDataSlingTranslator(DagsterSlingTranslator):
     def get_asset_spec(self, stream_definition: Mapping[str, Any]) -> dg.AssetSpec:
-        """
-        Return a unique key for each stream while keeping a single top‑level
-        prefix: hcer_public_github_data_warehouse_mirror/<schema>/<table>
-        """
+        """Overrides asset spec to set hcer-public-github-data asset keys."""
+        # We create the default asset spec using super()
         default_spec = super().get_asset_spec(stream_definition)
-        new_key_path = ["hcer_public_github_data_warehouse_mirror", *default_spec.key.path]
-        new_asset_key = dg.AssetKey(new_key_path)
-        return default_spec.replace_attributes(key=new_asset_key)
+        # Override the key with hcer-public-github-data prefix
+        return default_spec.replace_attributes(
+            key=dg.AssetKey(["hcer_public_github_data_warehouse_mirror"])
+        )
 
 class JourneySlingTranslator(DagsterSlingTranslator):
     def get_asset_spec(self, stream_definition: Mapping[str, Any]) -> dg.AssetSpec:
-        """
-        Return a unique key for each stream while keeping a single top‑level
-        prefix: journey_warehouse_mirror/<schema>/<table>
-        """
+        """Overrides asset spec to set journey asset keys."""
+        # We create the default asset spec using super()
         default_spec = super().get_asset_spec(stream_definition)
-        new_key_path = ["journey_warehouse_mirror", *default_spec.key.path]
-        new_asset_key = dg.AssetKey(new_key_path)
-        return default_spec.replace_attributes(key=new_asset_key)
+        # Override the key with journey prefix
+        return default_spec.replace_attributes(
+            key=dg.AssetKey(["journey_warehouse_mirror"])
+        )
 
 class ShipwreckedTheBaySlingTranslator(DagsterSlingTranslator):
     def get_asset_spec(self, stream_definition: Mapping[str, Any]) -> dg.AssetSpec:
-        """
-        Return a unique key for each stream while keeping a single top‑level
-        prefix: shipwrecked_the_bay_warehouse_mirror/<schema>/<table>
-        """
+        """Overrides asset spec to set shipwrecked_the_bay asset keys."""
+        # We create the default asset spec using super()
         default_spec = super().get_asset_spec(stream_definition)
-        new_key_path = ["shipwrecked_the_bay_warehouse_mirror", *default_spec.key.path]
-        new_asset_key = dg.AssetKey(new_key_path)
-        return default_spec.replace_attributes(key=new_asset_key)
+        # Override the key with shipwrecked_the_bay prefix
+        return default_spec.replace_attributes(
+            key=dg.AssetKey(["shipwrecked_the_bay_warehouse_mirror"])
+        )
 
 # --- Define Connections ---
 
