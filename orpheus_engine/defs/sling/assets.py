@@ -36,6 +36,12 @@ summer_of_making_2025_db_connection = SlingConnectionResource(
     connection_string=EnvVar("SUMMER_OF_MAKING_2025_COOLIFY_URL"),
 )
 
+hackatime_legacy_db_connection = SlingConnectionResource(
+    name="HACKATIME_LEGACY_DB",
+    type="postgres",
+    connection_string=EnvVar("HACKATIME_LEGACY_COOLIFY_URL"),
+)
+
 # 2. Target Connection (Warehouse Database)
 warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
@@ -51,6 +57,7 @@ sling_replication_resource = SlingResource(
         shipwrecked_the_bay_db_connection,
         journey_db_connection,
         summer_of_making_2025_db_connection,
+        hackatime_legacy_db_connection,
         warehouse_db_connection,
     ]
 )
@@ -138,6 +145,21 @@ summer_of_making_2025_replication_config = {
     "defaults": {
         "mode": "full-refresh",
         "object": "summer_of_making_2025.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+    }
+}
+
+# --- Hackatime Legacy Database Replication Configuration ---
+hackatime_legacy_replication_config = {
+    "source": "HACKATIME_LEGACY_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "hackatime_legacy.{stream_table}",
     },
 
     "streams": {
@@ -252,6 +274,28 @@ def summer_of_making_2025_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=summer_of_making_2025_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="hackatime_legacy_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def hackatime_legacy_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Hackatime Legacy DB → warehouse in a single shot."""
+    context.log.info("Starting Hackatime Legacy → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=hackatime_legacy_replication_config,
     ):
         pass
 
