@@ -10,3 +10,12 @@ sources:
         meta:
           dagster:
             asset_key: ['hackatime_warehouse_mirror']
+  
+  - name: hackatime_legacy_raw # A logical name for the legacy hackatime source
+    schema: hackatime_legacy # The schema where Sling lands the legacy data in your WAREHOUSE_DB
+    tables:
+      - name: heartbeats # The raw table name created by Sling
+        description: "Raw heartbeat data replicated from the Hackatime Legacy database by Sling."
+        meta:
+          dagster:
+            asset_key: ['hackatime_legacy_warehouse_mirror']
