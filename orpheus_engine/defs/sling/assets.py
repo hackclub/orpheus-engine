@@ -30,6 +30,12 @@ journey_db_connection = SlingConnectionResource(
     connection_string=EnvVar("JOURNEY_COOLIFY_URL"),
 )
 
+summer_of_making_2025_db_connection = SlingConnectionResource(
+    name="SUMMER_OF_MAKING_2025_DB",
+    type="postgres",
+    connection_string=EnvVar("SUMMER_OF_MAKING_2025_COOLIFY_URL"),
+)
+
 # 2. Target Connection (Warehouse Database)
 warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
@@ -44,6 +50,7 @@ sling_replication_resource = SlingResource(
         hcer_public_github_data_connection,
         shipwrecked_the_bay_db_connection,
         journey_db_connection,
+        summer_of_making_2025_db_connection,
         warehouse_db_connection,
     ]
 )
@@ -116,6 +123,21 @@ shipwrecked_the_bay_replication_config = {
     "defaults": {
         "mode": "full-refresh",
         "object": "shipwrecked_the_bay.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+    }
+}
+
+# --- Summer of Making 2025 Database Replication Configuration ---
+summer_of_making_2025_replication_config = {
+    "source": "SUMMER_OF_MAKING_2025_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "summer_of_making_2025.{stream_table}",
     },
 
     "streams": {
@@ -208,6 +230,28 @@ def shipwrecked_the_bay_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=shipwrecked_the_bay_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="summer_of_making_2025_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def summer_of_making_2025_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Summer of Making 2025 DB → warehouse in a single shot."""
+    context.log.info("Starting Summer of Making 2025 → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=summer_of_making_2025_replication_config,
     ):
         pass
 
