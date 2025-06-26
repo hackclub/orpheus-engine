@@ -6,11 +6,11 @@ materialize_all_assets_job = dg.define_asset_job(
     selection="*",
 )
 
-# 2. Hourly schedule (30 minutes past every hour, NY time)
+# 2. Every 6 hours schedule (30 minutes past every 6 hours, NY time)
 hourly_materialize_schedule = dg.ScheduleDefinition(
     name="hourly_materialize_schedule",
     job=materialize_all_assets_job,
-    cron_schedule="30 * * * *",                             # minute hour day month weekday
+    cron_schedule="30 */6 * * *",                           # minute hour day month weekday
     execution_timezone="America/New_York",                 # keeps logs in local time
 )
 
