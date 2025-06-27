@@ -101,14 +101,9 @@ class AirtableIDs:
             total_time_stopwatch_hours = "fldD8IywF8keOhSJd"  # Name: totalTimeStopwatchHours
             total_time_combined_hours = "fldQmyJBIHfmAp73d"  # Name: totalTimeCombinedHours
             full_name = "fldF7r89RpZ0WsaW4"  # Name: Full Name
-            date_of_birth = "fldOygvFVgwArnj36"  # Name: Date of Birth
-            token = "fldTMjrUrqTflOGBx"  # Name: token
-            sessions = "fld1HC2XIHKk29AQe"  # Name: sessions
-            github_username = "fldjw0OdVL7EN9521"  # Name: githubUsername
-            commits = "fldiV80pumQcuswPo"  # Name: commits
-            invites = "flduLNKHWAqsMCQ5Y"  # Name: invites
             slack_neighbor = "fld3fOnOAo22kPq3c"  # Name: slackNeighbor
             pfp_from_slack_neighbor = "fldv0qc5jSXftaxxt"  # Name: Pfp (from slackNeighbor)
+            pfp = "fldZNlIzs5FFERF1g"  # Name: Pfp
             slack_id_from_slack_neighbor = "fldtGzNkSmENJ4dZM"  # Name: Slack ID (from slackNeighbor)
             slack_handle_from_slack_neighbor = "fldS8nY4J5k6RqJOG"  # Name: Slack Handle (from slackNeighbor)
             full_name_from_slack_neighbor = "fldh3GA2DutgIRvZ4"  # Name: Full Name (from slackNeighbor)
@@ -158,6 +153,36 @@ class AirtableIDs:
             ysws_project_submission = "fldWLN24iL2P4awTX"  # Name: YSWS Project Submission
             ysws_project_submission_copy = "fld64FAjNTpT18NHi"  # Name: YSWS Project Submission copy
             ysws_project_submission_copy = "fldncW9I2k7DEelDT"  # Name: YSWS Project Submission copy
+            hacktendo_signup = "fldUS4pHu4yOBFRXJ"  # Name: hacktendoSignup
+            stay = "fldznNSh0XWhjFPbq"  # Name: stay
+            is_irl = "fldIvA3RbNiyzm6vm"  # Name: isIRL
+            wants_flight_stipend = "fldKwfaokHy4iRc01"  # Name: WantsFlightStipend
+            hackatime_review_url_from_ysws_project_submission = "fldhrrkn3y92EI0em"  # Name: hackatimeReviewUrl (from YSWS Project Submission)
+            approved_flight_stipend = "fld97NM9KyuWjn2gH"  # Name: approvedFlightStipend
+            sent_flight_stipend = "fldr7skoqF7FQIM5C"  # Name: sentFlightStipend
+            been_dmed = "fldaSxJCk8AcCYv3y"  # Name: beenDMed
+            slack_handle_from_slack_neighbor_2 = "fldM6S1Sui1EVQwMz"  # Name: Slack Handle (from slackNeighbor) 2
+            wants_flight_stipend_2 = "fldJGS9E04wvgEtOy"  # Name: wantsFlightStipend 2
+            wants_flight_stipend_3 = "fldbfpdS5cTTkCVnt"  # Name: wantsFlightStipend 3
+            hard_review = "fldAVEU1YuuuJDa9l"  # Name: hardReview
+            gavefeedback = "fldcHX7aY7gyzZFaL"  # Name: gavefeedback
+            playable_url_from_ysws_project_submission_copy = "fldazeuFpftkgJDbi"  # Name: Playable URL (from YSWS Project Submission copy)
+            cosmin_vibe = "fldHkpyvzOZPQwHRp"  # Name: cosminVibe
+            github_link_from_ysws_project_submission_copy = "fldJbCJLNmaDglY8N"  # Name: Github Link (from YSWS Project Submission copy)
+            reviews_given = "fldGstrAsQnJyrn4I"  # Name: reviewsGiven
+            reviews_received = "fldIPHBwelYI2LYF5"  # Name: reviewsReceived
+            star_avg = "fld9VkjiJxZM1mApV"  # Name: starAvg
+            stipends_given = "fldgCIsH5iN84mLFL"  # Name: StipendsGiven
+            house = "fld86rf2ndKvPWOQG"  # Name: House
+            hide_jake_the_dog = "fldqGNqdQghBymbUB"  # Name: hideJakeTheDog
+            waiver = "fldtgrZArDX7CwTwD"  # Name: waiver
+            waivers = "fldXE3HFiSsc3f8pF"  # Name: Waivers
+            date_of_birth = "fldOygvFVgwArnj36"  # Name: Date of Birth
+            token = "fldTMjrUrqTflOGBx"  # Name: token
+            sessions = "fld1HC2XIHKk29AQe"  # Name: sessions
+            github_username = "fldjw0OdVL7EN9521"  # Name: githubUsername
+            commits = "fldiV80pumQcuswPo"  # Name: commits
+            invites = "flduLNKHWAqsMCQ5Y"  # Name: invites
 
         class hackatime_projects:
             """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
@@ -175,6 +200,7 @@ class AirtableIDs:
             sessions = "fld9d6sivClb6GIwa"  # Name: sessions
             apps = "fldSJ8ltjI8CMNUyy"  # Name: Apps
             name_from_apps = "fldAl407aK8q34z5r"  # Name: Name (from Apps)
+            app_name = "fldp1T9BUcsh04p6j"  # Name: appName
             calcul = "fld1RndPLnMvmD7zf"  # Name: Calcul
             slack_id = "fldDu4An1KY5utXC1"  # Name: slackId
             total_time = "fldqSsiI9hZb2OW9g"  # Name: totalTime
@@ -231,6 +257,9 @@ class AirtableIDs:
             total_raw_hackatime_hours = "fld1tdBSSLKnKOo0D"  # Name: totalRawHackatimeHours
             total_approved_hackatime_hours = "fldJ1OC5ibU6vJe8t"  # Name: totalApprovedHackatimeHours
             created = "fldePoj75HS2SGHQb"  # Name: Created
+            slack_id = "fldUlitvx7GDIhAxx"  # Name: slackId
+            fetch_slack_id = "fldjxVuEeKbSxiKIT"  # Name: Fetch slackID
+            user_attempted_identity = "fldoQWEvuaHkabMJS"  # Name: userAttemptedIdentity
             non_disqualified_referrals = "fldHKZkydQU1p0tjO"  # Name: Non-Disqualified Referrals
             number_of_referrals_18 = "fldSux7TS7q9ZxLEK"  # Name: Number of Referrals <=18
             hack_clubber = "fldCPXnlvgkO8QEPc"  # Name: Hack Clubber
@@ -239,6 +268,34 @@ class AirtableIDs:
             rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
             created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
             loops_shipwrecked_user_exists_in_bay = "fldvXPNRWtyLALtIo"  # Name: Loops - shipwreckedUserExistsInBay
+            invite_link = "fldKQXmuANywRragv"  # Name: Invite Link
+            waitlist_from_invite_link = "fld9paKaakz75hD8j"  # Name: Waitlist (from Invite Link)
+            needs_accommodations_after_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Accommodations After (from Invite Link)
+            needs_accommodations_before_from_invite_link = "flduy9M55adVDvHQz"  # Name: Needs Accommodations Before (from Invite Link)
+            international_from_invite_link = "fldcRWqdILiyjIl0t"  # Name: International (from Invite Link)
+            applying_for_merit_based_stipend_from_invite_link = "flduDzbEBvFizGah5"  # Name: Applying for Merit-Based Stipend (from Invite Link)
+            estimated_flight_stipend_from_invite_link = "fldX1jBj82erZFzU0"  # Name: Estimated Flight Stipend (from Invite Link)
+            estimated_flight_cost_from_invite_link = "fldPWUDHigNA15hgp"  # Name: Estimated Flight Cost (from Invite Link)
+            nearest_airport_code_s_from_invite_link = "fldDf3g0tw1Sndws6"  # Name: Nearest Airport Code(s) (from Invite Link)
+            flying_in_from_invite_link = "fldH3OibM55eFXnDb"  # Name: Flying In (from Invite Link)
+            parent_phone_number_from_invite_link = "fldLP8gNhuBy1rHNB"  # Name: Parent Phone Number (from Invite Link)
+            parent_email_from_invite_link = "fldmb1hFRFaT1QfDU"  # Name: Parent Email (from Invite Link)
+            parent_last_name_from_invite_link = "fldkz6tAZ8OVbGkdM"  # Name: Parent Last Name (from Invite Link)
+            parent_first_name_from_invite_link = "fldkicDndSp5wOHyV"  # Name: Parent First Name (from Invite Link)
+            address_from_invite_link = "fldTQZ5lpUL2rnr66"  # Name: Address (from Invite Link)
+            pronouns_from_invite_link = "fldcuxidmKcpfl2Fk"  # Name: Pronouns (from Invite Link)
+            phone_number_from_invite_link = "fldYJoOWmLZgCxdyZ"  # Name: Phone Number (from Invite Link)
+            preferred_name_from_invite_link = "fldNu3oqylQbejPUv"  # Name: Preferred Name (from Invite Link)
+            flight = "fldUYY0rfWz6djZBY"  # Name: Flight
+            hcb_reimbursement_created_from_flight = "fldIhzWPL0bysqjpd"  # Name: HCB Reimbursement Created (from Flight)
+            requested_stipend_amount_from_flight = "fldu84sxey3aQOcQn"  # Name: Requested Stipend Amount (from Flight)
+            leaving_1_day_late_from_flight = "fldJAqHhgX5CiEaom"  # Name: Leaving 1 day late (from Flight)
+            outbound_flight_number_from_flight = "fldsb1X5xwbBQXLr0"  # Name: Outbound Flight Number (from Flight)
+            outbound_flight_time_from_flight = "fldt92dh2zHqUxLfN"  # Name: Outbound Flight Time (from Flight)
+            arriving_1_day_early_from_flight = "flde1R8G5MO4nfzBI"  # Name: Arriving 1 day early (from Flight)
+            inbound_flight_time_from_flight = "fldQzBFIFIClqA244"  # Name: Inbound Flight Time (from Flight)
+            inbound_flight_number_from_flight = "fldls1Vu7FdiNytMF"  # Name: Inbound Flight Number (from Flight)
+            hcb_email_from_flight = "fldjqB1ckBzAbY0Q3"  # Name: HCB Email (from Flight)
 
 
     class highway:
@@ -276,6 +333,8 @@ class AirtableIDs:
             TABLE_ID = "tblIk0A5f9eqSng1h"
 
             email = "fld0TaaawpieJ9G2A"  # Name: email
+            team = "fldi2PJ5Q2pnm07fB"  # Name: team
+            status_change_dm_sent = "fldOk0pb1enRYmYLs"  # Name: status_change_dm_sent
             role = "fldQWhQF9Jdo8Sb6Y"  # Name: role
             slack_id = "fldDAgtj5tJnuK6cm"  # Name: slack_id
             track = "fldduIOpBro5oKbdL"  # Name: track
@@ -294,9 +353,11 @@ class AirtableIDs:
             projects = "fldBRcF2KqPVJdvdS"  # Name: projects
             duration_from_projects = "fldm6vhWLZOctIlIU"  # Name: duration (from projects)
             ysws_project_submission = "fldXnJWsOhQkl2laW"  # Name: ysws_project_submission
+            address_joined_from_ysws_project_submission = "fldcdqsfjkvqxDGOP"  # Name: address_joined (from ysws_project_submission)
             approved_duration_from_projects = "fldag6JrdejDNjCAS"  # Name: approved_duration (from projects)
             unified_ysws_projects_db = "fldFl0yclGYljU6Wg"  # Name: Unified YSWS Projects DB
-            hours_spent_rollup_from_unified_ysws_projects_db = "fldcRUHh4REm4TyOI"  # Name: Hours Spent Rollup (from Unified YSWS Projects DB)
+            hours_spent_unified_db = "fldcRUHh4REm4TyOI"  # Name: hours_spent_unified_db
+            hours_spent_panathenaic_games = "fldyCFRjGB7sGMMJi"  # Name: hours_spent_panathenaic_games
             hackatime_set_up_at = "fld1X9TIKhVgP0P4I"  # Name: hackatime_set_up_at
             orders = "fldxu4NA7YMtY9oHJ"  # Name: Orders
             force_refresh_ysws_projects = "fldRvL6FlJ7RDIwTn"  # Name: force_refresh_ysws_projects
@@ -315,6 +376,7 @@ class AirtableIDs:
             total_number_orders = "flddaNQgUnpAELGqE"  # Name: total_number_orders
             email_slack_invites_copy = "fldiDAliUsDB7EQV3"  # Name: Email Slack Invites copy
             email_slack_invites_copy = "fldxB0bFgfFQ7kO8O"  # Name: Email Slack Invites copy
+            panathenaic_games = "fldElsHozezXtVsIa"  # Name: panathenaic games
 
         class email_slack_invites:
             """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
@@ -322,15 +384,17 @@ class AirtableIDs:
 
             email = "fld4z7buJbTKfaNwl"  # Name: email
             self_reported_partners = "fld2W473TCyAId9Eg"  # Name: self_reported_partners
+            referred_by = "fldhVLEsJUZvAutKH"  # Name: referred_by
+            ref = "fld4vbf8VXDBEJEdM"  # Name: ref
+            utm_source = "fldrKkjeJ7DlQ5tid"  # Name: utm_source
             error = "fldTKFomRhiwIZgPx"  # Name: error
             dm_error = "fldCT4uWXH7orBz7Q"  # Name: dm_error
             welcome_message_sent = "fldol2W6BbcbxPZV8"  # Name: welcome_message_sent
             registered_user = "fldy5QsE0yYmolUpz"  # Name: registered_user
-            referred_by = "fldhVLEsJUZvAutKH"  # Name: referred_by
-            utm_source = "fldrKkjeJ7DlQ5tid"  # Name: utm_source
             created = "fld3OFPCqwso8TlPX"  # Name: Created
             loops_athena_award_slack_invite_requested_at = "fld7hufACh1X4tp42"  # Name: Loops - athenaAwardSlackInviteRequestedAt
             zapier_added_to_athena_mailing_list_at = "fldGAuFJmK2yb5H3v"  # Name: Zapier - Added to Athena mailing list at
+            loops_athena_award_pyramid_scheme_sign_up_ref = "fldY4wcTCAIegtRFo"  # Name: Loops - athenaAwardPyramidSchemeSignUpRef
 
         class free_sticker_form:
             """IDs for Table 'free_sticker_form' (ID: tblBOgmyC9RVK98wD)"""
@@ -377,18 +441,166 @@ class AirtableIDs:
             approved_duration = "fld4eD1QIbHookKrF"  # Name: approved_duration
             stage = "fldDeBwC0YPE69Xl3"  # Name: stage
             status = "fld8mVhD1hOom2i9i"  # Name: status
+            order = "fld9YhS7dp9fWVzoo"  # Name: order
             registered_user = "fldbWcHEPieWbwaaQ"  # Name: registered_user
             stringified_email = "flddvqww48TLt7JKs"  # Name: stringified_email
             form_submitted_project = "fldis1ignLpvSF5LK"  # Name: form_submitted_project
+            screenshot_from_form_submitted_project = "fld60qq9Vu1DJh32S"  # Name: Screenshot (from form_submitted_project)
+            code_url = "fldBDPByuRJgVWyjw"  # Name: code_url
+            playable_url = "fldnRGAfDwBt9W94m"  # Name: playable_url
             address_joined_no_name_from_form_submitted_project = "fld2iQEZHFPBS49n7"  # Name: address_joined_no_name (from form_submitted_project)
             user_consent = "fldWlAVD9AlG1NYak"  # Name: user_consent
             all_submitted_project_status = "fldFpKOTQTjnzpeZ3"  # Name: all_submitted_project_status
             all_user_unified_db_from_form_submitted_project = "fldJ3gNj9mFdrkZnM"  # Name: all_user_unified_db (from form_submitted_project)
             address_joined_from_ysws_project = "fldubS1WoqZqkxBh9"  # Name: address_joined (from ysws project)
+            lat = "fldZhX8EGkWJMKRvX"  # Name: lat
+            lng = "fld0AcwZhDQXhx9qS"  # Name: lng
             slack_id = "fldTrCGiaOMAVED5o"  # Name: slack_id
-            order = "fld9YhS7dp9fWVzoo"  # Name: order
-            code_url = "fldBDPByuRJgVWyjw"  # Name: code_url
-            playable_url = "fldnRGAfDwBt9W94m"  # Name: playable_url
+
+
+    class unified_ysws_db:
+        """IDs for Base 'unified_ysws_db' (ID: app3A5kJwYqxMLOgh)"""
+        BASE_ID = "app3A5kJwYqxMLOgh"
+
+        class approved_projects:
+            """IDs for Table 'approved_projects' (ID: tblzWWGUYHVH7Zyqf)"""
+            TABLE_ID = "tblzWWGUYHVH7Zyqf"
+
+            id = "fldmLazalAjZ41o0u"  # Name: ID
+            email = "fldmqHE7RIvjvglfX"  # Name: Email
+            referral_reason = "fld5YYWNTvtHp1xSq"  # Name: Referral Reason
+            how_did_you_hear_about_this = "flditN5yjq6VG7FyS"  # Name: How did you hear about this?
+            what_are_we_doing_well = "fldbIKqiQBvICSyPH"  # Name: What are we doing well?
+            how_can_we_improve = "fldnstXrVNfHMQyCo"  # Name: How can we improve?
+            age_when_approved = "fldAcWtAV0rzN3ZLA"  # Name: Age When Approved
+            playable_url = "fld5plJTA93ugLnI2"  # Name: Playable URL
+            code_url = "fldZhfNBM9GR0TR0R"  # Name: Code URL
+            screenshot = "fld4vp6gwjwRQB4wM"  # Name: Screenshot
+            description = "fldoLo6I6AhKO0clK"  # Name: Description
+            git_hub_username = "fldNBBGaCR5oX4PAh"  # Name: GitHub Username
+            address_line_1 = "fldQjH6UJfJLx2OKk"  # Name: Address (Line 1)
+            address_line_2 = "fldNef7AOD2Ij7F6k"  # Name: Address (Line 2)
+            city = "fldQ4BjcgP9eLo3BR"  # Name: City
+            state_province = "fldIqBn7yNHYBHVtO"  # Name: State / Province
+            country = "fldwnMuafGvdzPC81"  # Name: Country
+            zip_postal_code = "fld2Z6AfRSA1nrOF1"  # Name: ZIP / Postal Code
+            birthday = "fldTjqgv6tj7wIwJo"  # Name: Birthday
+            hours_spent = "fldk901J18n06Q1pY"  # Name: Hours Spent
+            override_hours_spent = "fldX6BuA83jPVMH3N"  # Name: Override Hours Spent
+            override_hours_spent_justification = "fldSMvlh1LIe3m7AX"  # Name: Override Hours Spent Justification
+            ysws_weighted_project_contribution = "fldO6slYG2hKx89El"  # Name: YSWS–Weighted Project Contribution
+            ysws_weighted_project_author_attribution = "fldpvTcMezPwzMyRO"  # Name: YSWS–Weighted Project Author Attribution
+            approved_at = "fldB6hzaH7SIz9CQi"  # Name: Approved At
+            created = "fldh8rUhEKOM0uFPt"  # Name: Created
+            ysws = "fldRWPZyaEPBDDz7x"  # Name: YSWS
+            first_name = "fldVVfL6j9S5s2CSi"  # Name: First Name
+            last_name = "fldUx3OeChK5PDBg3"  # Name: Last Name
+            ysws_weighted_project_author_attribution_count = "fldAgVajme4ci52NH"  # Name: YSWS–Weighted Project Author Attribution Count
+            ysws_weighted_project_contribution_per_author = "fldWcvCzG67uJoEV0"  # Name: YSWS–Weighted Project Contribution Per Author
+            ysws_default_hours_per_grant = "fldszX7e87sog5S3y"  # Name: YSWS–Default Hours Per Grant
+            ysws_name = "fldVa0pJbIqczqwVM"  # Name: YSWS–Name
+            record_id = "fld7m7AA0teKodijc"  # Name: Record ID
+            ysws_current_owners = "fldoP6VwW6PtWdFf2"  # Name: YSWS–Current Owners
+            author_countries = "fld3hDC0UZw8wTYxt"  # Name: Author countries
+            unique_countries = "fldIVshZfUOo5ezZm"  # Name: Unique countries
+            archive_live_url = "fld23yYoziYecDwLu"  # Name: Archive - Live URL
+            archive_code_url = "fld1Xfgpcjiilk6cS"  # Name: Archive - Code URL
+            archive_archived_at = "fldBuUAbjyPGuMlv6"  # Name: Archive - Archived At
+            archive_trigger_rearchive = "fldrRoGY2AftSp2eD"  # Name: Archive - Trigger Rearchive
+            archive_trigger_rearchive_2 = "fldhB3unFat8QMeOd"  # Name: Archive - Trigger Rearchive 2
+            hack_clubber = "fldPzArB9uPrnjRWw"  # Name: Hack Clubber
+            hack_clubber_geocoded_country = "fldDyo57k4POiIlO4"  # Name: Hack Clubber–Geocoded Country
+            ysws_spot_checks = "fldm0HMxgc3oQsDNs"  # Name: YSWS Spot Checks
+            geocoded_country = "fldClKvcVnM9IkQ9t"  # Name: Geocoded - Country
+            geocoded_country_code = "fldaahUBdI2852lf9"  # Name: Geocoded - Country Code
+            geocoded_latitude = "fldoHZxN7wdYxYpr6"  # Name: Geocoded - Latitude
+            geocoded_longitude = "fldNdgSKp7JStAm6h"  # Name: Geocoded - Longitude
+            geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
+
+        class ysws_programs:
+            """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
+            TABLE_ID = "tblrGi9RARJy1A0c5"
+
+            name = "fldZgYSSBqqxIPmhR"  # Name: Name
+            average_hours_per_grant = "fldZvx6LJBp9xVELO"  # Name: Average Hours Per Grant
+            current_owners = "fldQ44zr4gy8R7h6e"  # Name: Current Owners
+            unweighted_projects_this_month = "flduPo2OfV0dXzcxe"  # Name: Unweighted Projects This Month
+            weighted_projects_this_month = "flddWQbhmy3oytww2"  # Name: Weighted Projects This Month
+            unweighted_projects_this_past_7_days_rolling = "fld0tcjjvv27MjgVC"  # Name: Unweighted Projects This Past 7 Days (rolling)
+            weighted_projects_this_past_7_days_rolling = "fldTXgejdYHGzmuqI"  # Name: Weighted Projects This Past 7 Days (rolling)
+            weighted_projects_today = "fldlQS3QMKnTGL0TN"  # Name: Weighted Projects Today
+            unweighted_projects_2025 = "fldEgwrScoA7vDl5J"  # Name: Unweighted Projects–2025
+            weighted_projects_2025 = "fldPVrNUdWKGiqv68"  # Name: Weighted Projects–2025
+            unweighted_projects_2024 = "fldaF2tMyTf7bmwBP"  # Name: Unweighted Projects–2024
+            weighted_projects_2024 = "fldN79ypYWBbJfjYs"  # Name: Weighted Projects–2024
+            weighted_total = "fldgfs70478BwFFBj"  # Name: Weighted–Total
+            unweighted_total = "fldPV2UvmrSrML24w"  # Name: Unweighted–Total
+            nps_score = "fldrWoUZtmFe3BIEF"  # Name: NPS Score
+            nps_response_count = "fldpOPSDZE1B9G7Kc"  # Name: NPS–Response Count
+            nps_median_estimated_hours = "fldsa0oY9TT5DE5hH"  # Name: NPS–Median Estimated Hours
+            airtable_id = "fld7PmAuqC5hteumO"  # Name: Airtable ID
+            slack_icon = "fldurCZZKmQAovBiT"  # Name: Slack Icon
+            icon_last_hash = "fldomRhDRIk3yHRNr"  # Name: Icon – Last Hash
+            icon_cdn_link = "fldP1FnevuLHRc2aP"  # Name: Icon – CDN Link
+            short_desc = "fldwb8w8N4SBZPaOo"  # Name: Short-Desc
+            long_desc = "fld65ZYoV2SVmJNyF"  # Name: Long-Desc
+            primary_color = "fldowxzKMd5x8lzJX"  # Name: Primary-Color
+            secondry_color = "fldxZOs46R60Mo7qa"  # Name: Secondry-Color
+            tertiary_color = "fldMByNeSrEOWlQ6p"  # Name: Tertiary-Color
+            primary_logo = "fld8HJY1xPEqN8NBP"  # Name: Primary-Logo
+            secondary_logo = "fldMzS1uuArd1rLwV"  # Name: Secondary-Logo
+            background_image = "fldJBYfoqWDw79zx1"  # Name: Background-Image
+            website_link = "fld86RCfIgpf8rma8"  # Name: Website-Link
+            slack_channel = "fldqUMwX1ynNdRflY"  # Name: Slack-Channel
+            slack_link = "fldlUZlv6198oxyy1"  # Name: Slack-Link
+            active = "fldolr86UYd7fl2xB"  # Name: Active
+            deadline = "fldBEsnRkBTULk39I"  # Name: deadline
+            nps_promoter = "fldPlyrIvIRBHBsRw"  # Name: NPS–Promoter %
+            nps_detractor = "fldhcVd4h9ZvkUnR3"  # Name: NPS–Detractor %
+            grants_awarded = "fldw177830TOPdm5X"  # Name: Grants Awarded
+            nps = "flduxo3A7RNi6Mv5H"  # Name: NPS
+            grants_awarded_copy = "fldBWw7q0JtLJR0NR"  # Name: Grants Awarded copy
+            grants_awarded_copy = "fld3OkhxEAKKVZVGi"  # Name: Grants Awarded copy
+            average_weight = "fldgEggvCPyiTCmWX"  # Name: Average weight
+            weighted_projects_jan_2025 = "fldpGZvT9OHb1Cn4g"  # Name: Weighted Projects–Jan 2025
+            total_spent_from_hcb_fund = "fldZXeZNxFeAhZEt0"  # Name: Total Spent From HCB Fund
+            cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
+            need_to_add_postage_cost = "fldueuLMJtGaaz5O3"  # Name: Need To Add Postage Cost?
+            estimated_cost_per_package = "fldjmQGftCRqGfp6J"  # Name: Estimated Cost Per Package
+            estimated_pirate_ship_spend = "fldyVNaPS0zJTuuGE"  # Name: Estimated Pirate Ship Spend
+            total_spend = "fldpQvbD1r4g1tnBx"  # Name: Total Spend
+            hcb = "fld972PVFuuSpAPY5"  # Name: HCB
+            total_sign_ups = "fldqJF8rDeJUMK2Jp"  # Name: Total Sign-Ups
+            total_sign_ups_new_to_hack_club = "fldgMET7U2QCAh4KN"  # Name: Total Sign-Ups New To Hack Club
+            cost_per_sign_up_new_to_hack_club_in_excess_of_5_hr_limit = "fldvFG8heXjNc3ob2"  # Name: Cost Per Sign Up New To Hack Club In Excess of $5/hr Limit
+            over_budget = "fldIj9DfI1qAAXsOZ"  # Name: Over Budget
+            month_override = "fldCSuoy2Os4FkfAq"  # Name: Month Override
+            avg_per_month = "fldgQX4bmCd4MRs3x"  # Name: Avg per month
+            first_grant = "fldsAQSZiyZNPe3t6"  # Name: First grant
+            last_grant = "fldM5xEaX53aPHgT4"  # Name: Last grant
+            months = "fldCwUHh5LNOjEUaL"  # Name: Months
+
+        class ysws_authors:
+            """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
+            TABLE_ID = "tblRf1BQs5H8298gW"
+
+            name = "fldlE95RqYyq8DJW4"  # Name: Name
+            slack_id = "fldb79ToRvdcXeqze"  # Name: Slack ID
+            hcb_budget_fund = "fldStVwvzbzx7Ambm"  # Name: HCB Budget Fund
+            weighted_grants_this_month = "fldPfA6UkbmKoKPE5"  # Name: Weighted Grants This Month
+            weighted_grants_2025 = "fldhG2hMtQ73KZ0qq"  # Name: Weighted Grants–2025
+            weights_grants_mar_2025 = "fld6D3uHxMqmO9Bp7"  # Name: Weights Grants–Mar 2025
+            weights_grants_feb_2025_copy = "fldjI1DCwRYUTlMUU"  # Name: Weights Grants–Feb 2025 copy
+            weights_grants_jan_2025 = "fld3Gdn4SFPUNTnuK"  # Name: Weights Grants–Jan 2025
+            weights_grants_dec_2024 = "fldNxopvpzYH3FOjk"  # Name: Weights Grants–Dec 2024
+            weights_grants_nov_2024 = "fldxJPpCMOsEmDoVx"  # Name: Weights Grants–Nov 2024
+            weights_grants_oct_2024 = "fldBOI0n9BtDxHLm0"  # Name: Weights Grants–Oct 2024
+            weighted_grants_last_month = "fldFfOt7PBDs7zc9Z"  # Name: Weighted Grants Last Month
+            weights_grants_sep_2024 = "fldHARrmhE7Q19lzu"  # Name: Weights Grants–Sep 2024
+            weighted_grants_2024 = "fld2wxB7twgaNTPBZ"  # Name: Weighted Grants–2024
+            current_ysws_programs = "fldrUpZPQmKClNouO"  # Name: Current YSWS Programs
+            weighted_grants_total = "fldllCyssGiFPi5mS"  # Name: Weighted Grants–Total
+            attributed_grants = "fldM4SHI9hXry0pPC"  # Name: Attributed Grants
 
 
 # fmt: on

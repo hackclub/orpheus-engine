@@ -98,6 +98,20 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblZqHeeelwGkOkRr"
                 )
             }
+        ),
+        "unified_ysws_db": AirtableBaseConfig(
+            base_id="app3A5kJwYqxMLOgh",
+            tables={
+                "approved_projects": AirtableTableConfig(
+                    table_id="tblzWWGUYHVH7Zyqf"
+                ),
+                "ysws_programs": AirtableTableConfig(
+                    table_id="tblrGi9RARJy1A0c5"
+                ),
+                "ysws_authors": AirtableTableConfig(
+                    table_id="tblRf1BQs5H8298gW"
+                )
+            }
         )
     }
 )

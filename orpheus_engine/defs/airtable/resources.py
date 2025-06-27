@@ -404,5 +404,97 @@ class AirtableResource(ConfigurableResource):
                 f"(Table ID: {table_config.table_id}): {e}"
             ) from e
 
+    def batch_update_records(
+        self,
+        context: AssetExecutionContext,
+        base_key: str,
+        table_key: str,
+        records: List[Dict[str, Any]],
+    ) -> Dict[str, int]:
+        """
+        Updates multiple records in a specific Airtable table using batch operations.
+        
+        Args:
+            context: The Dagster execution context for logging.
+            base_key: The logical key for the base.
+            table_key: The logical key for the table.
+            records: List of records to update. Each record must have 'id' field and update fields.
+            
+        Returns:
+            Dictionary with counts: {'successful': int, 'failed': int}
+            
+        Raises:
+            AirtableApiError: If the API request fails or configuration is invalid.
+        """
+        table = self.get_table(base_key, table_key)
+        table_config = self._get_table_config(base_key, table_key)
+        
+        if not records:
+            context.log.info("No records to update.")
+            return {'successful': 0, 'failed': 0}
+            
+        successful_count = 0
+        failed_count = 0
+        
+        # Process records in batches (Airtable API limit is 10 records per batch)
+        batch_size = 10
+        total_records = len(records)
+        
+        context.log.info(f"Starting batch update of {total_records} records in {base_key}.{table_key}")
+        
+        for i in range(0, total_records, batch_size):
+            batch = records[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_records + batch_size - 1) // batch_size
+            
+            # Format records for pyairtable batch_update
+            formatted_records = []
+            batch_failed_count = 0
+            
+            for record in batch:
+                if 'id' not in record:
+                    context.log.error(f"Record missing 'id' field: {record}")
+                    batch_failed_count += 1
+                    continue
+                    
+                # Separate id from fields
+                record_id = record['id']
+                fields = {k: v for k, v in record.items() if k != 'id' and v is not None}
+                
+                if not fields:
+                    context.log.warning(f"No fields to update for record {record_id}")
+                    batch_failed_count += 1
+                    continue
+                    
+                formatted_records.append({
+                    'id': record_id,
+                    'fields': fields
+                })
+            
+            if not formatted_records:
+                context.log.warning(f"Batch {batch_num}/{total_batches} skipped: no valid records")
+                failed_count += len(batch)
+                continue
+                
+            try:
+                context.log.debug(f"Processing batch {batch_num}/{total_batches} ({len(formatted_records)} records)")
+                
+                # Perform batch update
+                updated_records = table.batch_update(formatted_records)
+                batch_successful_count = len(updated_records)
+                successful_count += batch_successful_count
+                failed_count += batch_failed_count  # Add any pre-validation failures
+                
+                context.log.info(f"Batch {batch_num}/{total_batches} completed: {batch_successful_count} successful, {batch_failed_count} failed")
+                    
+            except Exception as e:
+                context.log.error(f"Batch {batch_num}/{total_batches} failed: {e}")
+                # All records in this batch failed
+                failed_count += len(batch)
+                
+        context.log.info(f"Batch update completed. Successful: {successful_count}, Failed: {failed_count}")
+        
+        return {'successful': successful_count, 'failed': failed_count}
+
     # Optional: Add a helper to rename columns later if needed
     # def rename_df_columns_to_ids(self, df: pl.DataFrame, base_key: str, table_key: str) -> pl.DataFrame: ...

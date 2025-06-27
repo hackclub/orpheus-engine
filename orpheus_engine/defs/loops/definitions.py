@@ -17,6 +17,7 @@ import dagster as dg
 from orpheus_engine.defs.geocoder.resources import GeocoderResource, GeocodingError
 from orpheus_engine.defs.ai.resources import AIResource
 from orpheus_engine.defs.genderize.resources import GenderizeResource, GenderizeApiError
+from orpheus_engine.defs.shared.address_utils import build_address_string_from_loops_row
 
 # Import the Loops resource and error
 from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError 
@@ -336,22 +337,9 @@ def loops_geocoded_audience(context: AssetExecutionContext, loops_raw_audience: 
         if not email or not address_line1 or not address_city:
             continue
 
-        # --- Replicate JS address string construction EXACTLY --- 
-        address_line2 = row.get("addressLine2") or ""
-        address_state = row.get("addressState") or ""
-        # Use addressZipCode to match JS precisely
-        address_zipcode = row.get("addressZipCode") or "" 
-        address_country = row.get("addressCountry") or ""
-        
-        # Build line 3 *without* stripping here
-        line3 = f"{address_city}, {address_state} {address_zipcode}"
-
-        # Combine all parts with newlines
-        address_string = f"{address_line1}\n{address_line2}\n{line3}\n{address_country}"
-        
-        # Apply strip() *only once* at the end, matching JS .trim()
-        address_string = address_string.strip()
-        # --- End JS address string construction replication ---
+        # Build address string using shared utility (ensures identical formatting to approved_projects)
+        # This maximizes geocoding cache hits across different data sources
+        address_string = build_address_string_from_loops_row(row)
 
         # Check if the string is empty *after* construction and stripping
         if not address_string:
