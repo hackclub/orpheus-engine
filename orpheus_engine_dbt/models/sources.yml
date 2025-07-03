@@ -19,3 +19,12 @@ sources:
         meta:
           dagster:
             asset_key: ['hackatime_legacy_warehouse_mirror']
+            
+  - name: loops # A logical name for the loops source
+    schema: loops # The schema where loops data is stored
+    tables:
+      - name: audience # The loops audience table
+        description: "Loops audience data loaded into warehouse via DLT"
+        meta:
+          dagster:
+            asset_key: ['loops_audience']

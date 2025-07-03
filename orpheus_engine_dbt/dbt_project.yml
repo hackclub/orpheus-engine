@@ -28,4 +28,6 @@ models:
     +materialized: view
     # Configurations for specific schema groups
     hackatime_analytics:
+      +materialized: table
+    loops_analytics:
       +materialized: table 
