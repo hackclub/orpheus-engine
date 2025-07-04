@@ -177,12 +177,16 @@ class AirtableIDs:
             hide_jake_the_dog = "fldqGNqdQghBymbUB"  # Name: hideJakeTheDog
             waiver = "fldtgrZArDX7CwTwD"  # Name: waiver
             waivers = "fldXE3HFiSsc3f8pF"  # Name: Waivers
+            is_doing_freedom_week = "fld2yaxWWeEsAggcE"  # Name: isDoingFreedomWeek
             date_of_birth = "fldOygvFVgwArnj36"  # Name: Date of Birth
             token = "fldTMjrUrqTflOGBx"  # Name: token
             sessions = "fld1HC2XIHKk29AQe"  # Name: sessions
             github_username = "fldjw0OdVL7EN9521"  # Name: githubUsername
             commits = "fldiV80pumQcuswPo"  # Name: commits
             invites = "flduLNKHWAqsMCQ5Y"  # Name: invites
+            optional_override_hours_spent_from_ysws_project_submission = "fld3LN9aJskuLjc0b"  # Name: Optional - Override Hours Spent (from YSWS Project Submission)
+            weighted_grants_contribution = "fldzVqjJSTHkYnr81"  # Name: weightedGrantsContribution
+            weighted_grants_contribution_copy = "fldzCqpWnlG8vMnEi"  # Name: weightedGrantsContribution copy
 
         class hackatime_projects:
             """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
@@ -256,18 +260,15 @@ class AirtableIDs:
             user_exists_in_bay = "fldm1Ns9lKIaJNvnE"  # Name: userExistsInBay
             total_raw_hackatime_hours = "fld1tdBSSLKnKOo0D"  # Name: totalRawHackatimeHours
             total_approved_hackatime_hours = "fldJ1OC5ibU6vJe8t"  # Name: totalApprovedHackatimeHours
+            hours_to_island_viral = "fldN3iNiCnfvRbX0h"  # Name: hoursToIslandViral
+            hours_to_island_shipped = "fld5gJK1LhjnyFD8w"  # Name: hoursToIslandShipped
+            hours_to_island_unapproved = "fld4biaWuudNGMQ36"  # Name: hoursToIslandUnapproved
+            shell_hours = "fldqudjHM1ogatTQK"  # Name: shellHours
             created = "fldePoj75HS2SGHQb"  # Name: Created
             slack_id = "fldUlitvx7GDIhAxx"  # Name: slackId
             fetch_slack_id = "fldjxVuEeKbSxiKIT"  # Name: Fetch slackID
             user_attempted_identity = "fldoQWEvuaHkabMJS"  # Name: userAttemptedIdentity
-            non_disqualified_referrals = "fldHKZkydQU1p0tjO"  # Name: Non-Disqualified Referrals
-            number_of_referrals_18 = "fldSux7TS7q9ZxLEK"  # Name: Number of Referrals <=18
-            hack_clubber = "fldCPXnlvgkO8QEPc"  # Name: Hack Clubber
-            hack_clubber_first_engagement = "fldYeV8CZYpqEEiw2"  # Name: Hack Clubber – First Engagement
-            hack_clubber_ysws = "fldBfLG18FaRMtIbX"  # Name: Hack Clubber – YSWS
-            rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
-            created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
-            loops_shipwrecked_user_exists_in_bay = "fldvXPNRWtyLALtIo"  # Name: Loops - shipwreckedUserExistsInBay
+            spot_reservation_link = "fldaHT9x9qSkpnAm1"  # Name: Spot Reservation Link
             invite_link = "fldKQXmuANywRragv"  # Name: Invite Link
             waitlist_from_invite_link = "fld9paKaakz75hD8j"  # Name: Waitlist (from Invite Link)
             needs_accommodations_after_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Accommodations After (from Invite Link)
@@ -286,7 +287,7 @@ class AirtableIDs:
             pronouns_from_invite_link = "fldcuxidmKcpfl2Fk"  # Name: Pronouns (from Invite Link)
             phone_number_from_invite_link = "fldYJoOWmLZgCxdyZ"  # Name: Phone Number (from Invite Link)
             preferred_name_from_invite_link = "fldNu3oqylQbejPUv"  # Name: Preferred Name (from Invite Link)
-            flight = "fldUYY0rfWz6djZBY"  # Name: Flight
+            flight_link = "fldUYY0rfWz6djZBY"  # Name: Flight Link
             hcb_reimbursement_created_from_flight = "fldIhzWPL0bysqjpd"  # Name: HCB Reimbursement Created (from Flight)
             requested_stipend_amount_from_flight = "fldu84sxey3aQOcQn"  # Name: Requested Stipend Amount (from Flight)
             leaving_1_day_late_from_flight = "fldJAqHhgX5CiEaom"  # Name: Leaving 1 day late (from Flight)
@@ -296,6 +297,26 @@ class AirtableIDs:
             inbound_flight_time_from_flight = "fldQzBFIFIClqA244"  # Name: Inbound Flight Time (from Flight)
             inbound_flight_number_from_flight = "fldls1Vu7FdiNytMF"  # Name: Inbound Flight Number (from Flight)
             hcb_email_from_flight = "fldjqB1ckBzAbY0Q3"  # Name: HCB Email (from Flight)
+            need_based_stipend_application_link = "fldOFLcLMFAoHkoLw"  # Name: Need-Based Stipend Application Link
+            departing_airport_from_need_based_stipend_application_link = "fldtvfFFIGNaALkqw"  # Name: Departing Airport (from Need-Based Stipend Application Link)
+            cheapest_round_trip_from_need_based_stipend_application_link = "fld2bzcyXuIdXaAu2"  # Name: Cheapest Round Trip (from Need-Based Stipend Application Link)
+            amount_able_to_contribute_from_need_based_stipend_application_link = "fldFb0V9XzbsY1ESh"  # Name: Amount Able to Contribute (from Need-Based Stipend Application Link)
+            description_of_project_from_need_based_stipend_application_link = "fldgrl1tzSmzKaU68"  # Name: Description of Project (from Need-Based Stipend Application Link)
+            repo_link_from_need_based_stipend_application_link = "fld3XW3YUCRPzLm2x"  # Name: Repo Link (from Need-Based Stipend Application Link)
+            demo_link_from_need_based_stipend_application_link = "fldjyhbDxOzoSsB9O"  # Name: Demo Link (from Need-Based Stipend Application Link)
+            what_are_you_currently_obsessed_with_that_has_nothing_to_do_with_hack_club_from_need_based_stipend_application_link = "fldkXPSD0PAq3mWu0"  # Name: What are you currently obsessed with, that has nothing to do with Hack Club? (from Need-Based Stipend Application Link)
+            what_s_something_only_you_can_bring_to_shipwrecked_from_need_based_stipend_application_link = "fldKncXwBUhZw66NT"  # Name: What's something only you can bring to Shipwrecked? (from Need-Based Stipend Application Link)
+            non_disqualified_referrals = "fldHKZkydQU1p0tjO"  # Name: Non-Disqualified Referrals
+            number_of_referrals_18 = "fldSux7TS7q9ZxLEK"  # Name: Number of Referrals <=18
+            hack_clubber = "fldCPXnlvgkO8QEPc"  # Name: Hack Clubber
+            hack_clubber_first_engagement = "fldYeV8CZYpqEEiw2"  # Name: Hack Clubber – First Engagement
+            hack_clubber_ysws = "fldBfLG18FaRMtIbX"  # Name: Hack Clubber – YSWS
+            rsvps_last_24h = "fldDhIqWDBfRFVTvs"  # Name: rsvps_last_24h
+            created_at = "fldgz5xzYbF7TORKE"  # Name: Created At
+            loops_shipwrecked_user_exists_in_bay = "fldvXPNRWtyLALtIo"  # Name: Loops - shipwreckedUserExistsInBay
+            total_hours_to_island = "fldRdGKymH2ZqdvI9"  # Name: totalHoursToIsland
+            temp_will_be_invited_after_shipathon_reviews = "fldMhJZDOKcEDWMki"  # Name: (temp) will be invited after shipathon reviews
+            temp_2_hit_viral_wave = "fldZglg7aXOII3eng"  # Name: (Temp 2) - Hit viral wave
 
 
     class highway:
@@ -466,6 +487,7 @@ class AirtableIDs:
             """IDs for Table 'approved_projects' (ID: tblzWWGUYHVH7Zyqf)"""
             TABLE_ID = "tblzWWGUYHVH7Zyqf"
 
+            record_id = "fld7m7AA0teKodijc"  # Name: Record ID
             id = "fldmLazalAjZ41o0u"  # Name: ID
             email = "fldmqHE7RIvjvglfX"  # Name: Email
             referral_reason = "fld5YYWNTvtHp1xSq"  # Name: Referral Reason
@@ -499,7 +521,6 @@ class AirtableIDs:
             ysws_weighted_project_contribution_per_author = "fldWcvCzG67uJoEV0"  # Name: YSWS–Weighted Project Contribution Per Author
             ysws_default_hours_per_grant = "fldszX7e87sog5S3y"  # Name: YSWS–Default Hours Per Grant
             ysws_name = "fldVa0pJbIqczqwVM"  # Name: YSWS–Name
-            record_id = "fld7m7AA0teKodijc"  # Name: Record ID
             ysws_current_owners = "fldoP6VwW6PtWdFf2"  # Name: YSWS–Current Owners
             author_countries = "fld3hDC0UZw8wTYxt"  # Name: Author countries
             unique_countries = "fldIVshZfUOo5ezZm"  # Name: Unique countries
@@ -516,6 +537,7 @@ class AirtableIDs:
             geocoded_latitude = "fldoHZxN7wdYxYpr6"  # Name: Geocoded - Latitude
             geocoded_longitude = "fldNdgSKp7JStAm6h"  # Name: Geocoded - Longitude
             geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
+            temp_approved_by_dev = "fldWXDUQOzOvP2n7W"  # Name: temp Approved by Dev
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -542,6 +564,17 @@ class AirtableIDs:
             slack_icon = "fldurCZZKmQAovBiT"  # Name: Slack Icon
             icon_last_hash = "fldomRhDRIk3yHRNr"  # Name: Icon – Last Hash
             icon_cdn_link = "fldP1FnevuLHRc2aP"  # Name: Icon – CDN Link
+            hcb = "fld972PVFuuSpAPY5"  # Name: HCB
+            total_spend = "fldpQvbD1r4g1tnBx"  # Name: Total Spend
+            cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
+            need_to_add_postage_cost = "fldueuLMJtGaaz5O3"  # Name: Need To Add Postage Cost?
+            estimated_cost_per_package = "fldjmQGftCRqGfp6J"  # Name: Estimated Cost Per Package
+            estimated_pirate_ship_spend = "fldyVNaPS0zJTuuGE"  # Name: Estimated Pirate Ship Spend
+            total_sign_ups = "fldqJF8rDeJUMK2Jp"  # Name: Total Sign-Ups
+            total_sign_ups_new_to_hack_club = "fldgMET7U2QCAh4KN"  # Name: Total Sign-Ups New To Hack Club
+            sign_up_stats_override_prefix = "fldLenSCDJthFje4k"  # Name: Sign-Up Stats–Override Prefix
+            cost_per_sign_up_new_to_hack_club_in_excess_of_5_hr_limit = "fldvFG8heXjNc3ob2"  # Name: Cost Per Sign Up New To Hack Club In Excess of $5/hr Limit
+            over_budget = "fldIj9DfI1qAAXsOZ"  # Name: Over Budget
             short_desc = "fldwb8w8N4SBZPaOo"  # Name: Short-Desc
             long_desc = "fld65ZYoV2SVmJNyF"  # Name: Long-Desc
             primary_color = "fldowxzKMd5x8lzJX"  # Name: Primary-Color
@@ -564,16 +597,6 @@ class AirtableIDs:
             average_weight = "fldgEggvCPyiTCmWX"  # Name: Average weight
             weighted_projects_jan_2025 = "fldpGZvT9OHb1Cn4g"  # Name: Weighted Projects–Jan 2025
             total_spent_from_hcb_fund = "fldZXeZNxFeAhZEt0"  # Name: Total Spent From HCB Fund
-            cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
-            need_to_add_postage_cost = "fldueuLMJtGaaz5O3"  # Name: Need To Add Postage Cost?
-            estimated_cost_per_package = "fldjmQGftCRqGfp6J"  # Name: Estimated Cost Per Package
-            estimated_pirate_ship_spend = "fldyVNaPS0zJTuuGE"  # Name: Estimated Pirate Ship Spend
-            total_spend = "fldpQvbD1r4g1tnBx"  # Name: Total Spend
-            hcb = "fld972PVFuuSpAPY5"  # Name: HCB
-            total_sign_ups = "fldqJF8rDeJUMK2Jp"  # Name: Total Sign-Ups
-            total_sign_ups_new_to_hack_club = "fldgMET7U2QCAh4KN"  # Name: Total Sign-Ups New To Hack Club
-            cost_per_sign_up_new_to_hack_club_in_excess_of_5_hr_limit = "fldvFG8heXjNc3ob2"  # Name: Cost Per Sign Up New To Hack Club In Excess of $5/hr Limit
-            over_budget = "fldIj9DfI1qAAXsOZ"  # Name: Over Budget
             month_override = "fldCSuoy2Os4FkfAq"  # Name: Month Override
             avg_per_month = "fldgQX4bmCd4MRs3x"  # Name: Avg per month
             first_grant = "fldsAQSZiyZNPe3t6"  # Name: First grant
