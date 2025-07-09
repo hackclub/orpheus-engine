@@ -848,7 +848,7 @@ def approved_projects_archived(
             response = requests.get(f"{archive_base_url}/core/snapshots", 
                 headers={"accept": "application/json", "X-ArchiveBox-API-Key": archive_api_key},
                 params={"with_archiveresults": "false", "limit": "1000", "offset": "0", "page": "0"}, 
-                timeout=15)
+                timeout=60)
             
             archive_results = {}
             if response.ok:
