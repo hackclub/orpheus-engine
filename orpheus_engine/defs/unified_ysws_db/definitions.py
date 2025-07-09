@@ -3,6 +3,10 @@ import polars as pl
 import os
 import re
 import requests
+import json
+import time
+from datetime import datetime, timezone
+import pytz
 from dagster import (
     asset,
     AssetExecutionContext,
@@ -657,6 +661,531 @@ def approved_projects_geocoding_candidates(
 
 @asset(
     group_name="unified_ysws_db_processing",
+    description="Identifies approved projects needing URL archiving",
+    compute_kind="data_preparation",
+    deps=[AssetKey(["airtable", "unified_ysws_db", "approved_projects"])],
+    required_resource_keys={"airtable"},
+)
+def approved_projects_archive_candidates(
+    context: AssetExecutionContext,
+) -> Output[pl.DataFrame]:
+    """
+    Filters approved projects that have URLs but are missing archive URLs.
+    Targets projects with code_url/playable_url but no corresponding archive URLs.
+    """
+    log = context.log
+    airtable: AirtableResource = context.resources.airtable
+    
+    # Get the approved projects data from airtable
+    input_df = airtable.get_all_records_as_polars(
+        context=context,
+        base_key="unified_ysws_db",
+        table_key="approved_projects",
+    )
+    
+    log.info(f"Processing {input_df.height} approved projects for archive candidates")
+    
+    # Use field IDs for cleaner code
+    code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
+    playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
+    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
+    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
+    archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
+    approved_at_col = AirtableIDs.unified_ysws_db.approved_projects.approved_at
+    
+    # Check if required fields exist
+    required_fields = [code_url_col, playable_url_col, approved_at_col]
+    missing_fields = [field for field in required_fields if field not in input_df.columns]
+    if missing_fields:
+        log.warning(f"Missing required fields: {missing_fields}")
+        return Output(
+            pl.DataFrame(schema=input_df.schema),
+            metadata={"num_candidates": 0, "reason": "Missing required fields"}
+        )
+    
+    try:
+        # Calculate current archive hash for all records
+        df_with_hash = input_df.with_columns([
+            # Fill null values with empty strings
+            pl.col(code_url_col).fill_null("").alias("code_url_clean"),
+            pl.col(playable_url_col).fill_null("").alias("playable_url_clean")
+        ]).with_columns([
+            # Calculate archive hash: sha256 of 'liveurl:{liveurl},codeurl:{codeurl}'
+            pl.concat_str([
+                pl.lit("liveurl:"),
+                pl.col("playable_url_clean"),
+                pl.lit(",codeurl:"),
+                pl.col("code_url_clean")
+            ]).map_elements(
+                lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest() if x else "",
+                return_dtype=pl.Utf8
+            ).alias("calculated_archive_hash")
+        ])
+        
+        # Define cutoff date: July 8th, 2025 4pm Eastern Time
+        eastern = pytz.timezone('US/Eastern')
+        cutoff_date = eastern.localize(datetime(2025, 7, 8, 16, 0, 0))  # 4pm ET
+        cutoff_date_utc = cutoff_date.astimezone(pytz.UTC)
+        cutoff_date_str = cutoff_date_utc.isoformat()
+        
+        log.info(f"Archive cutoff date: {cutoff_date_str} (July 8th, 2025 4pm ET)")
+        
+        # Check if archive hash field exists in the data
+        has_archive_hash_col = archive_hash_col in input_df.columns
+        has_archive_code_url_col = archive_code_url_col in input_df.columns
+        has_archive_live_url_col = archive_live_url_col in input_df.columns
+        
+        log.info(f"Archive fields present - Hash: {has_archive_hash_col}, Code URL: {has_archive_code_url_col}, Live URL: {has_archive_live_url_col}")
+        
+        # Build filter conditions for projects that need archiving
+        base_url_condition = (
+            # Has at least one URL to archive
+            (
+                (pl.col(code_url_col).is_not_null()) & (pl.col(code_url_col) != "")
+            ) | (
+                (pl.col(playable_url_col).is_not_null()) & (pl.col(playable_url_col) != "")
+            )
+        )
+        
+        # Date condition: approved_at is after July 8th, 2025 4pm ET
+        date_condition = pl.col(approved_at_col) > cutoff_date_str
+        
+        if has_archive_hash_col and has_archive_code_url_col and has_archive_live_url_col:
+            # All archive fields exist - check for hash changes or missing archive URLs
+            archive_condition = (
+                # Hash has changed (need to re-archive)
+                (pl.col("calculated_archive_hash") != pl.col(archive_hash_col)) |
+                # Missing archive URLs but have source URLs
+                (
+                    (pl.col(code_url_col).is_not_null()) & (pl.col(code_url_col) != "") &
+                    (pl.col(archive_code_url_col).is_null() | (pl.col(archive_code_url_col) == ""))
+                ) |
+                (
+                    (pl.col(playable_url_col).is_not_null()) & (pl.col(playable_url_col) != "") &
+                    (pl.col(archive_live_url_col).is_null() | (pl.col(archive_live_url_col) == ""))
+                )
+            )
+        elif has_archive_code_url_col and has_archive_live_url_col:
+            # Only archive URL fields exist - check for missing archive URLs
+            archive_condition = (
+                (
+                    (pl.col(code_url_col).is_not_null()) & (pl.col(code_url_col) != "") &
+                    (pl.col(archive_code_url_col).is_null() | (pl.col(archive_code_url_col) == ""))
+                ) |
+                (
+                    (pl.col(playable_url_col).is_not_null()) & (pl.col(playable_url_col) != "") &
+                    (pl.col(archive_live_url_col).is_null() | (pl.col(archive_live_url_col) == ""))
+                )
+            )
+        else:
+            # No archive fields exist - all projects with URLs need archiving
+            archive_condition = pl.lit(True)
+        
+        # Combine all conditions
+        candidates = df_with_hash.filter(
+            base_url_condition & date_condition & archive_condition
+        )
+        
+        log.info(f"Found {candidates.height} projects needing archiving out of {input_df.height} total")
+        
+        # Generate preview metadata
+        if candidates.height > 0:
+            try:
+                preview_metadata = MetadataValue.md(candidates.head(5).to_pandas().to_markdown(index=False))
+            except Exception:
+                preview_metadata = MetadataValue.text(str(candidates.head(5)))
+        else:
+            preview_metadata = MetadataValue.text("No projects need archiving")
+        
+        return Output(
+            candidates,
+            metadata={
+                "num_candidates": candidates.height,
+                "total_projects": input_df.height,
+                "preview": preview_metadata
+            }
+        )
+        
+    except Exception as e:
+        log.error(f"Error in archive candidate identification: {e}")
+        return Output(
+            pl.DataFrame(schema=input_df.schema),
+            metadata={"num_candidates": 0, "error": str(e)}
+        )
+
+
+@asset(
+    group_name="unified_ysws_db_processing",
+    description="Archives URLs and retrieves archive links for approved projects",
+    compute_kind="archive_api",
+)
+def approved_projects_archived(
+    context: AssetExecutionContext,
+    approved_projects_archive_candidates: pl.DataFrame,
+) -> Output[pl.DataFrame]:
+    """
+    Sends archive requests and immediately fetches archive URLs for candidate projects.
+    Returns DataFrame with id and archive URL fields for Airtable updates.
+    """
+    log = context.log
+    input_df = approved_projects_archive_candidates
+    
+    if input_df.height == 0:
+        log.info("No archive candidates to process.")
+        return Output(
+            pl.DataFrame(schema={
+                "id": pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_code_url: pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_live_url: pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at: pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_hash: pl.Utf8,
+            }),
+            metadata={"num_processed": 0, "num_successful": 0, "num_failed": 0}
+        )
+    
+    log.info(f"Processing archive requests for {input_df.height} projects")
+    
+    # Field IDs
+    code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
+    playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
+    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
+    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
+    archive_archived_at_col = AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at
+    archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
+    
+    successful_records = []
+    failed_count = 0
+    
+    # Archive API configuration
+    archive_base_url = "https://archive.hackclub.com/api/v1"
+    archive_api_key = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
+    if not archive_api_key:
+        raise ValueError("ARCHIVE_HACKCLUB_COM_API_KEY environment variable is not set")
+    
+    # Process projects in batches of 10
+    batch_size = 10
+    all_rows = list(input_df.iter_rows(named=True))
+    
+    for batch_start in range(0, len(all_rows), batch_size):
+        batch_rows = all_rows[batch_start:batch_start + batch_size]
+        log.info(f"Processing batch {batch_start//batch_size + 1}: {len(batch_rows)} projects")
+        
+        # Collect all URLs and metadata for this batch
+        batch_archive_requests = []
+        batch_project_info = []
+        
+        for row in batch_rows:
+            project_id = row.get("id")
+            code_url = row.get(code_url_col)
+            playable_url = row.get(playable_url_col)
+            calculated_archive_hash = row.get("calculated_archive_hash", "")
+            
+            # Prepare URLs for archiving
+            current_time = datetime.now(timezone.utc).isoformat()
+            archiving_code_url = code_url and code_url.strip()
+            archiving_playable_url = playable_url and playable_url.strip()
+            
+            if not archiving_code_url and not archiving_playable_url:
+                log.warning(f"No URLs to archive for project {project_id}")
+                failed_count += 1
+                continue
+            
+            # Store project info for later URL fetching
+            project_info = {
+                "id": project_id,
+                "code_url": archiving_code_url,
+                "playable_url": archiving_playable_url,
+                "timestamp": current_time,
+                "archive_hash": calculated_archive_hash
+            }
+            batch_project_info.append(project_info)
+            
+            # Build URLs for archiving request
+            urls_to_archive = []
+            if archiving_code_url:
+                urls_to_archive.append(archiving_code_url + "#" + current_time)
+            if archiving_playable_url:
+                urls_to_archive.append(archiving_playable_url + "#" + current_time)
+            
+            batch_archive_requests.extend(urls_to_archive)
+        
+        if not batch_archive_requests:
+            log.warning(f"No URLs to archive in batch {batch_start//batch_size + 1}")
+            continue
+        
+        # Send fire-and-forget batch archive request with all URLs at once
+        log.info(f"Sending batch archive request with {len(batch_archive_requests)} URLs")
+        
+        archive_request_payload = {
+            "urls": batch_archive_requests,
+            "tag": "ysws",
+            "depth": 0,
+            "update": False,
+            "update_all": False,
+            "index_only": False,
+            "overwrite": False,
+            "init": False,
+            "extractors": "",
+            "parser": "auto"
+        }
+        
+        # Fire-and-forget request for entire batch
+        try:
+            requests.post(
+                f"{archive_base_url}/cli/add",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ArchiveBox-API-Key": archive_api_key
+                },
+                json=archive_request_payload,
+                timeout=2  # Short timeout since we expect it to hang
+            )
+        except (requests.exceptions.Timeout, requests.exceptions.RequestException):
+            # Expected - the API is sketchy and will likely hang or fail
+            log.debug(f"Batch archive request sent (expected timeout/error)")
+            pass
+        
+        # Wait 5 seconds after sending the batch
+        log.debug(f"Waiting 5 seconds for batch archive processing")
+        time.sleep(5)
+        
+        # Now fetch archive URLs for all projects in this batch
+        batch_failed_count = _process_batch_archive_results(
+            batch_project_info,
+            archive_base_url,
+            archive_api_key,
+            archive_code_url_col,
+            archive_live_url_col,
+            archive_archived_at_col,
+            archive_hash_col,
+            successful_records,
+            log
+        )
+        failed_count += batch_failed_count
+    
+    # Create output DataFrame
+    output_schema = {
+        "id": pl.Utf8,
+        archive_code_url_col: pl.Utf8,
+        archive_live_url_col: pl.Utf8,
+        archive_archived_at_col: pl.Utf8,
+        archive_hash_col: pl.Utf8,
+    }
+    
+    if successful_records:
+        output_df = pl.DataFrame(successful_records, schema=output_schema)
+    else:
+        output_df = pl.DataFrame(schema=output_schema)
+    
+    successful_count = len(successful_records)
+    log.info(f"Archive processing completed. Success: {successful_count}, Failed: {failed_count}")
+    
+    # Generate preview metadata
+    if output_df.height > 0:
+        try:
+            preview_metadata = MetadataValue.md(output_df.head(10).to_pandas().to_markdown(index=False))
+        except Exception:
+            preview_metadata = MetadataValue.text(str(output_df.head(10)))
+    else:
+        preview_metadata = MetadataValue.text("No records were archived.")
+    
+    return Output(
+        output_df,
+        metadata={
+            "num_candidates": input_df.height,
+            "num_processed": successful_count + failed_count,
+            "num_successful": successful_count,
+            "num_failed": failed_count,
+            "success_rate": round((successful_count / max(input_df.height, 1)) * 100, 2),
+            "preview": preview_metadata,
+            "archive_timestamp_field": "Archive - Archived At field set for successful archives only",
+            "archive_hash_field": "Archive - Hash field set for successful archives only (failed projects will retry)"
+        }
+    )
+
+
+def _process_batch_archive_results(
+    batch_project_info: list,
+    archive_base_url: str,
+    archive_api_key: str,
+    archive_code_url_col: str,
+    archive_live_url_col: str,
+    archive_archived_at_col: str,
+    archive_hash_col: str,
+    successful_records: list,
+    log
+):
+    """
+    Process archive results for a batch of projects by checking all URLs at once.
+    """
+    # Collect all URLs to check
+    all_urls_to_check = []
+    url_to_project_mapping = {}  # Maps URL back to project info
+    
+    for project_info in batch_project_info:
+        timestamp = project_info["timestamp"]
+        
+        if project_info["code_url"]:
+            code_url_with_timestamp = project_info["code_url"] + "#" + timestamp
+            all_urls_to_check.append(code_url_with_timestamp)
+            url_to_project_mapping[code_url_with_timestamp] = {
+                "project_id": project_info["id"],
+                "url_type": "code",
+                "original_url": project_info["code_url"],
+                "timestamp": timestamp
+            }
+        
+        if project_info["playable_url"]:
+            playable_url_with_timestamp = project_info["playable_url"] + "#" + timestamp
+            all_urls_to_check.append(playable_url_with_timestamp)
+            url_to_project_mapping[playable_url_with_timestamp] = {
+                "project_id": project_info["id"],
+                "url_type": "playable",
+                "original_url": project_info["playable_url"],
+                "timestamp": timestamp
+            }
+    
+    if not all_urls_to_check:
+        return
+    
+    # Make a single batch request to check all URLs
+    archive_results = _fetch_batch_archive_urls(all_urls_to_check, archive_base_url, archive_api_key, log)
+    
+    # Create a lookup for project archive hashes
+    project_archive_hashes = {info["id"]: info["archive_hash"] for info in batch_project_info}
+    
+    # Group results by project
+    project_results = {}
+    for url, archive_url in archive_results.items():
+        if url in url_to_project_mapping:
+            mapping = url_to_project_mapping[url]
+            project_id = mapping["project_id"]
+            url_type = mapping["url_type"]
+            timestamp = mapping["timestamp"]
+            
+            if project_id not in project_results:
+                project_results[project_id] = {
+                    "timestamp": timestamp,
+                    "archive_hash": project_archive_hashes.get(project_id, "")
+                }
+            
+            if url_type == "code":
+                project_results[project_id]["archive_code_url"] = archive_url
+            elif url_type == "playable":
+                project_results[project_id]["archive_live_url"] = archive_url
+    
+    # Create records for successful projects
+    for project_id, results in project_results.items():
+        has_code_url = "archive_code_url" in results
+        has_live_url = "archive_live_url" in results
+        
+        if has_code_url or has_live_url:
+            result_record = {
+                "id": project_id,
+                archive_archived_at_col: results["timestamp"],
+                archive_hash_col: results["archive_hash"]
+            }
+            
+            if has_code_url:
+                result_record[archive_code_url_col] = results["archive_code_url"]
+            if has_live_url:
+                result_record[archive_live_url_col] = results["archive_live_url"]
+            
+            successful_records.append(result_record)
+            archived_urls = []
+            if has_code_url:
+                archived_urls.append("code_url")
+            if has_live_url:
+                archived_urls.append("live_url")
+            log.info(f"Successfully archived {', '.join(archived_urls)} for project {project_id} at {results['timestamp']}")
+    
+    # Handle failed projects - do NOT update hash so they can be retried
+    successful_project_ids = set(project_results.keys())
+    all_project_ids = {info["id"] for info in batch_project_info}
+    failed_project_ids = all_project_ids - successful_project_ids
+    
+    for project_id in failed_project_ids:
+        log.warning(f"Could not retrieve archive URLs for project {project_id} - will retry on next run")
+    
+    # Return the number of projects that failed to get archive URLs
+    # Note: Failed projects do NOT get hash updates so they will be retried
+    return len(failed_project_ids)
+
+
+def _fetch_batch_archive_urls(urls: list, archive_base_url: str, archive_api_key: str, log) -> dict:
+    """
+    Fetch archive URLs for a batch of URLs in a single request.
+    Returns a dictionary mapping original URL to archive URL.
+    """
+    archive_results = {}
+    
+    if not urls:
+        return archive_results
+    
+    log.info(f"Checking archive status for {len(urls)} URLs in single batch request")
+    
+    try:
+        # Make a single request to get all snapshots - the API should return all available snapshots
+        # We'll use a broad query to get recent snapshots and then filter for our URLs
+        params = {
+            "with_archiveresults": "false",
+            "limit": "1000",  # Increase limit to get more snapshots
+            "offset": "0",
+            "page": "0"
+        }
+        
+        response = requests.get(
+            f"{archive_base_url}/core/snapshots",
+            headers={
+                "accept": "application/json",
+                "X-ArchiveBox-API-Key": archive_api_key
+            },
+            params=params,
+            timeout=15  # Single request, allow more time
+        )
+        
+        if response.ok:
+            data = response.json()
+            items = data.get("items", [])
+            log.info(f"Retrieved {len(items)} snapshots from archive API")
+            
+            # Create a mapping of base URLs to their archive URLs
+            url_mapping = {}
+            for item in items:
+                item_url = item.get("url", "")
+                timestamp = item.get("timestamp", "")
+                
+                if item_url and timestamp:
+                    # Try to match against our URLs (remove the timestamp fragment)
+                    for target_url in urls:
+                        # Extract the base URL (before the # timestamp)
+                        base_url = target_url.split("#")[0] if "#" in target_url else target_url
+                        
+                        # Check if this snapshot matches our target URL
+                        if item_url == base_url or item_url.rstrip('/') == base_url.rstrip('/'):
+                            archive_url = f"https://archive.hackclub.com/archive/{timestamp}"
+                            url_mapping[target_url] = archive_url
+                            log.debug(f"Found archive URL for {target_url}: {archive_url}")
+                            break
+            
+            archive_results.update(url_mapping)
+            log.info(f"Found archive URLs for {len(archive_results)} out of {len(urls)} requested URLs")
+            
+        else:
+            log.warning(f"Failed to fetch archive snapshots: HTTP {response.status_code}")
+            
+    except requests.exceptions.Timeout:
+        log.warning(f"Timeout fetching archive snapshots batch (expected with sketchy API)")
+    except requests.exceptions.RequestException as e:
+        log.warning(f"Request error fetching archive snapshots batch: {e}")
+    except Exception as e:
+        log.error(f"Unexpected error fetching archive snapshots batch: {e}")
+    
+    return archive_results
+
+
+@asset(
+    group_name="unified_ysws_db_processing",
     description="Geocodes approved projects that were identified as candidates, returning only newly geocoded records.",
     required_resource_keys={"geocoder_client"},
     compute_kind="hackclub_geocoder",
@@ -782,77 +1311,161 @@ def approved_projects_geocoded(
 
 @asset(
     group_name="unified_ysws_db_processing",
-    description="Prepares geocoded approved projects data for Airtable batch update.",
+    description="Prepares approved projects data for Airtable batch update by merging geocoded and archived data.",
     compute_kind="data_preparation",
 )
 def approved_projects_prepared_for_update(
     context: AssetExecutionContext,
     approved_projects_geocoded: pl.DataFrame,
+    approved_projects_archived: pl.DataFrame,
 ) -> Output[pl.DataFrame]:
     """
-    Prepares geocoded records for Airtable batch update by formatting the data structure.
+    Merges geocoded and archived data for approved projects and prepares for Airtable batch update.
+    
+    Checks for conflicts: if multiple inputs provide different non-null values 
+    for the same field for a given project ID, an error is raised. 
+    Otherwise, the single non-null value (or null) is kept.
     """
     log = context.log
-    input_df = approved_projects_geocoded
     
-    if input_df.height == 0:
-        log.info("No geocoded records to prepare for update.")
+    # --- 1. Collect and Filter Input DataFrames ---
+    dfs = [approved_projects_geocoded, approved_projects_archived]
+    
+    input_heights = {
+        "geocoded": approved_projects_geocoded.height,
+        "archived": approved_projects_archived.height,
+    }
+    log.info(f"Input counts - Geocoded: {input_heights['geocoded']}, Archived: {input_heights['archived']}")
+
+    dfs = [df for df in dfs if not df.is_empty()]
+
+    if not dfs:
+        log.warning("All input DataFrames for merging are empty.")
         return Output(
-            pl.DataFrame(schema={"id": pl.Utf8}),
-            metadata={"num_records_prepared": 0}
+            pl.DataFrame(), 
+            metadata={
+                "num_output_records": 0,
+                "notes": "All input assets were empty.",
+                **{f"num_{name}_input_records": h for name, h in input_heights.items()}
+            }
         )
-    
-    log.info(f"Preparing {input_df.height} geocoded records for Airtable update")
-    
-    # The input DataFrame already has the correct structure for updates
-    # We just need to ensure the 'id' column is present and properly formatted
-    required_columns = ["id"]
-    missing_columns = [col for col in required_columns if col not in input_df.columns]
-    
-    if missing_columns:
-        log.error(f"Missing required columns for update: {missing_columns}")
-        return Output(
-            pl.DataFrame(schema={"id": pl.Utf8}),
-            metadata={"num_records_prepared": 0, "error": f"Missing columns: {missing_columns}"}
+
+    # --- 2. Determine Union of Columns and Target Schema ---
+    all_cols = set()
+    schemas = {} # Store schema info {col: [non-null dtypes]}
+    for df in dfs:
+        all_cols.update(df.columns)
+        for col, dtype in df.schema.items():
+            if col not in schemas: schemas[col] = []
+            if dtype != pl.Null: # Only consider non-null types
+                schemas[col].append(dtype)
+
+    if "id" not in all_cols:
+        raise ValueError("Input DataFrames must contain an 'id' column for merging.")
+        
+    value_cols = sorted(list(all_cols - {"id"})) 
+    required_schema_cols = ["id"] + value_cols
+
+    # Determine the target dtype for each column (use first non-null type found)
+    target_schema = {}
+    for col in required_schema_cols:
+        potential_types = schemas.get(col, [])
+        target_type = next((t for t in potential_types if t != pl.Null), pl.Null) 
+        target_schema[col] = target_type
+
+    # --- 3. Adjust Schemas and Concatenate ---
+    adjusted_dfs = []
+    for i, df in enumerate(dfs):
+        current_cols = set(df.columns)
+        select_exprs = []
+        
+        for col in required_schema_cols:
+            target_type = target_schema[col]
+            
+            if col in current_cols:
+                # Column exists, check if casting is needed
+                current_type = df.schema[col]
+                if current_type != target_type and target_type != pl.Null:
+                    select_exprs.append(pl.col(col).cast(target_type))
+                else:
+                    select_exprs.append(pl.col(col))
+            else:
+                # Column is missing, add it with the target type
+                if target_type == pl.Null:
+                    select_exprs.append(pl.lit(None).alias(col))
+                else:
+                    select_exprs.append(pl.lit(None).cast(target_type).alias(col))
+
+        adjusted_df = df.select(select_exprs)
+        adjusted_dfs.append(adjusted_df)
+
+    # Concatenate using vertical_relaxed strategy
+    combined_long = pl.concat(adjusted_dfs, how="vertical_relaxed") 
+        
+    # --- 4. Group, Aggregate, and Check Conflicts ---
+    agg_exprs = []
+    conflict_check_cols = []
+    for col in value_cols:
+        unique_count_expr = pl.col(col).drop_nulls().unique().count()
+        first_value_expr = pl.col(col).drop_nulls().first()
+        conflict_col_name = f"_{col}_has_conflict_" 
+
+        final_value_expr = (
+            pl.when(unique_count_expr == 1)
+            .then(first_value_expr)
+            .otherwise(pl.lit(None))
+            .alias(col)
         )
-    
-    # Validate that we have actual geocoded data
-    geocoded_fields = [
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_latitude,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_longitude,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_address_hash,
-    ]
-    
-    # Check if we have the expected geocoded fields
-    available_geocoded_fields = [field for field in geocoded_fields if field in input_df.columns]
-    
-    if not available_geocoded_fields:
-        log.error("No geocoded fields found in input DataFrame")
-        return Output(
-            pl.DataFrame(schema={"id": pl.Utf8}),
-            metadata={"num_records_prepared": 0, "error": "No geocoded fields found"}
+        
+        conflict_flag_expr = (
+            (unique_count_expr > 1)
+            .alias(conflict_col_name)
         )
-    
-    log.info(f"Available geocoded fields for update: {available_geocoded_fields}")
-    
+
+        agg_exprs.append(final_value_expr)
+        agg_exprs.append(conflict_flag_expr)
+        conflict_check_cols.append(conflict_col_name)
+
+    # Perform the aggregation
+    grouped = combined_long.group_by("id").agg(agg_exprs)
+
+    # --- 5. Check for Conflicts ---
+    conflict_rows = grouped.filter(pl.any_horizontal(pl.col(c) for c in conflict_check_cols))
+
+    if not conflict_rows.is_empty():
+        error_details = []
+        for row in conflict_rows.head(5).iter_rows(named=True):
+            project_id = row["id"]
+            conflicting_fields = [
+                c.replace("_has_conflict_", "").strip("_") 
+                for c in conflict_check_cols if row[c]
+            ]
+            error_details.append(f"Project ID '{project_id}': Conflicts in fields: {', '.join(conflicting_fields)}")
+        
+        raise ValueError(f"Conflicting field values found:\n" + "\n".join(error_details))
+
+    # --- 6. Clean and Return ---
+    # Remove conflict check columns from the final result
+    final_df = grouped.drop(conflict_check_cols)
+
+    log.info(f"Successfully merged {len(dfs)} input DataFrames into {final_df.height} records")
+
     # Generate preview metadata
-    preview_limit = 10
-    if input_df.height > 0:
-        preview_df = input_df.head(preview_limit)
+    if final_df.height > 0:
         try:
-            preview_metadata = MetadataValue.md(preview_df.to_pandas().to_markdown(index=False))
-        except Exception as md_err:
-            log.warning(f"Could not generate markdown preview: {md_err}")
-            preview_metadata = MetadataValue.text(str(preview_df))
+            preview_metadata = MetadataValue.md(final_df.head(10).to_pandas().to_markdown(index=False))
+        except Exception:
+            preview_metadata = MetadataValue.text(str(final_df.head(10)))
     else:
         preview_metadata = MetadataValue.text("No records prepared for update.")
-    
+
     return Output(
-        input_df,
+        final_df,
         metadata={
-            "num_records_prepared": input_df.height,
-            "geocoded_fields": available_geocoded_fields,
-            "update_columns": list(input_df.columns),
+            "num_records_prepared": final_df.height,
+            "num_geocoded_input": input_heights["geocoded"],
+            "num_archived_input": input_heights["archived"],
+            "update_columns": list(final_df.columns),
             "preview": preview_metadata
         }
     )
@@ -1243,6 +1856,8 @@ defs = Definitions(
     assets=[
         approved_projects_geocoding_candidates,
         approved_projects_geocoded,
+        approved_projects_archive_candidates,
+        approved_projects_archived,
         approved_projects_prepared_for_update,
         approved_projects_update_status,
         ysws_programs_sign_up_stats_candidates,

@@ -97,6 +97,7 @@ class AirtableIDs:
             TABLE_ID = "tblTGpK7QgwsqT8t0"
 
             email = "flduN2BlNtozsp5xZ"  # Name: email
+            is_irl = "fldIvA3RbNiyzm6vm"  # Name: isIRL
             total_time_hackatime_hours = "fldgawsm3YG4b2C5V"  # Name: totalTimeHackatimeHours
             total_time_stopwatch_hours = "fldD8IywF8keOhSJd"  # Name: totalTimeStopwatchHours
             total_time_combined_hours = "fldQmyJBIHfmAp73d"  # Name: totalTimeCombinedHours
@@ -155,7 +156,8 @@ class AirtableIDs:
             ysws_project_submission_copy = "fldncW9I2k7DEelDT"  # Name: YSWS Project Submission copy
             hacktendo_signup = "fldUS4pHu4yOBFRXJ"  # Name: hacktendoSignup
             stay = "fldznNSh0XWhjFPbq"  # Name: stay
-            is_irl = "fldIvA3RbNiyzm6vm"  # Name: isIRL
+            start_date_from_stay = "fldWYQ1b2RXGMQ3lD"  # Name: start_date (from stay)
+            end_date_from_stay = "fldb16euh5J5njAmR"  # Name: end_date (from stay)
             wants_flight_stipend = "fldKwfaokHy4iRc01"  # Name: WantsFlightStipend
             hackatime_review_url_from_ysws_project_submission = "fldhrrkn3y92EI0em"  # Name: hackatimeReviewUrl (from YSWS Project Submission)
             approved_flight_stipend = "fld97NM9KyuWjn2gH"  # Name: approvedFlightStipend
@@ -187,6 +189,8 @@ class AirtableIDs:
             optional_override_hours_spent_from_ysws_project_submission = "fld3LN9aJskuLjc0b"  # Name: Optional - Override Hours Spent (from YSWS Project Submission)
             weighted_grants_contribution = "fldzVqjJSTHkYnr81"  # Name: weightedGrantsContribution
             weighted_grants_contribution_copy = "fldzCqpWnlG8vMnEi"  # Name: weightedGrantsContribution copy
+            ysws_project_submission_copy = "fldLNpQEwcAng92pX"  # Name: YSWS Project Submission copy
+            booking_status_from_stay = "fldK7mp9Qssv0gKRJ"  # Name: bookingStatus (from stay)
 
         class hackatime_projects:
             """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
@@ -271,8 +275,8 @@ class AirtableIDs:
             spot_reservation_link = "fldaHT9x9qSkpnAm1"  # Name: Spot Reservation Link
             invite_link = "fldKQXmuANywRragv"  # Name: Invite Link
             waitlist_from_invite_link = "fld9paKaakz75hD8j"  # Name: Waitlist (from Invite Link)
-            needs_accommodations_after_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Accommodations After (from Invite Link)
-            needs_accommodations_before_from_invite_link = "flduy9M55adVDvHQz"  # Name: Needs Accommodations Before (from Invite Link)
+            needs_night_after_accommodations_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Night After Accommodations (from Invite Link)
+            needs_night_before_accommodations_from_invite_link = "flduy9M55adVDvHQz"  # Name: Needs Night Before Accommodations (from Invite Link)
             international_from_invite_link = "fldcRWqdILiyjIl0t"  # Name: International (from Invite Link)
             applying_for_merit_based_stipend_from_invite_link = "flduDzbEBvFizGah5"  # Name: Applying for Merit-Based Stipend (from Invite Link)
             estimated_flight_stipend_from_invite_link = "fldX1jBj82erZFzU0"  # Name: Estimated Flight Stipend (from Invite Link)
@@ -317,6 +321,10 @@ class AirtableIDs:
             total_hours_to_island = "fldRdGKymH2ZqdvI9"  # Name: totalHoursToIsland
             temp_will_be_invited_after_shipathon_reviews = "fldMhJZDOKcEDWMki"  # Name: (temp) will be invited after shipathon reviews
             temp_2_hit_viral_wave = "fldZglg7aXOII3eng"  # Name: (Temp 2) - Hit viral wave
+            night_before_accommodations = "fldQXz5G0HhWL8eHs"  # Name: Night Before Accommodations
+            night_after_accommodations = "fldVZnsxfDf2khC18"  # Name: Night After Accommodations
+            need_based_stipend_amount = "fld4DLwwlm006KSwr"  # Name: Need-Based Stipend Amount
+            requested_reimbursement_from_flight = "fld77YzWZnEKkukmM"  # Name: Requested Reimbursement (from Flight)
 
 
     class highway:
@@ -538,6 +546,7 @@ class AirtableIDs:
             geocoded_longitude = "fldNdgSKp7JStAm6h"  # Name: Geocoded - Longitude
             geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
             temp_approved_by_dev = "fldWXDUQOzOvP2n7W"  # Name: temp Approved by Dev
+            archive_hash = "fldIxgUiHJ4XtWmF5"  # Name: Archive - Hash
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -565,11 +574,12 @@ class AirtableIDs:
             icon_last_hash = "fldomRhDRIk3yHRNr"  # Name: Icon – Last Hash
             icon_cdn_link = "fldP1FnevuLHRc2aP"  # Name: Icon – CDN Link
             hcb = "fld972PVFuuSpAPY5"  # Name: HCB
-            total_spend = "fldpQvbD1r4g1tnBx"  # Name: Total Spend
-            cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
+            total_spent_from_hcb_fund = "fldZXeZNxFeAhZEt0"  # Name: Total Spent From HCB Fund
             need_to_add_postage_cost = "fldueuLMJtGaaz5O3"  # Name: Need To Add Postage Cost?
             estimated_cost_per_package = "fldjmQGftCRqGfp6J"  # Name: Estimated Cost Per Package
             estimated_pirate_ship_spend = "fldyVNaPS0zJTuuGE"  # Name: Estimated Pirate Ship Spend
+            total_spend = "fldpQvbD1r4g1tnBx"  # Name: Total Spend
+            cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
             total_sign_ups = "fldqJF8rDeJUMK2Jp"  # Name: Total Sign-Ups
             total_sign_ups_new_to_hack_club = "fldgMET7U2QCAh4KN"  # Name: Total Sign-Ups New To Hack Club
             sign_up_stats_override_prefix = "fldLenSCDJthFje4k"  # Name: Sign-Up Stats–Override Prefix
@@ -596,7 +606,6 @@ class AirtableIDs:
             grants_awarded_copy = "fld3OkhxEAKKVZVGi"  # Name: Grants Awarded copy
             average_weight = "fldgEggvCPyiTCmWX"  # Name: Average weight
             weighted_projects_jan_2025 = "fldpGZvT9OHb1Cn4g"  # Name: Weighted Projects–Jan 2025
-            total_spent_from_hcb_fund = "fldZXeZNxFeAhZEt0"  # Name: Total Spent From HCB Fund
             month_override = "fldCSuoy2Os4FkfAq"  # Name: Month Override
             avg_per_month = "fldgQX4bmCd4MRs3x"  # Name: Avg per month
             first_grant = "fldsAQSZiyZNPe3t6"  # Name: First grant
