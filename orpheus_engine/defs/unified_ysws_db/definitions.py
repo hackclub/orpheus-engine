@@ -781,14 +781,14 @@ def approved_projects_archived(
     if not archive_api_key:
         raise ValueError("ARCHIVE_HACKCLUB_COM_API_KEY environment variable is not set")
     
-    # Process in batches of 10
+    # Process in batches of 5
     all_rows = list(input_df.iter_rows(named=True))
-    total_batches = (len(all_rows) + 9) // 10
-    log.info(f"Processing {len(all_rows)} projects in {total_batches} batches of 10")
+    total_batches = (len(all_rows) + 4) // 5
+    log.info(f"Processing {len(all_rows)} projects in {total_batches} batches of 5")
     
-    for batch_start in range(0, len(all_rows), 10):
-        batch_rows = all_rows[batch_start:batch_start + 10]
-        batch_num = (batch_start // 10) + 1
+    for batch_start in range(0, len(all_rows), 5):
+        batch_rows = all_rows[batch_start:batch_start + 5]
+        batch_num = (batch_start // 5) + 1
         log.info(f"Processing batch {batch_num}/{total_batches}: {len(batch_rows)} projects")
         
         batch_archive_requests = []
@@ -839,8 +839,8 @@ def approved_projects_archived(
             pass  # Expected
         
         # Wait and fetch archive URLs
-        log.debug("Waiting 5 seconds for archive processing")
-        time.sleep(5)
+        log.debug("Waiting 10 seconds for archive processing")
+        time.sleep(10)
         
         # Get all snapshots and match to our URLs
         log.debug("Fetching archive snapshots to check status")
@@ -848,7 +848,7 @@ def approved_projects_archived(
             response = requests.get(f"{archive_base_url}/core/snapshots", 
                 headers={"accept": "application/json", "X-ArchiveBox-API-Key": archive_api_key},
                 params={"with_archiveresults": "false", "limit": "1000", "offset": "0", "page": "0"}, 
-                timeout=60)
+                timeout=120)
             
             archive_results = {}
             if response.ok:
