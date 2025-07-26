@@ -4,8 +4,7 @@ import os
 import re
 import requests
 import json
-import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 from dagster import (
     asset,
@@ -687,15 +686,14 @@ def approved_projects_archive_candidates(
     # Field IDs
     code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
     playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
-    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
-    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
     archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
     approved_at_col = AirtableIDs.unified_ysws_db.approved_projects.approved_at
     
-    # Calculate archive hash and cutoff date
+    # Calculate archive hash and cutoff date (1 week ago)
     eastern = pytz.timezone('US/Eastern')
-    cutoff_date_str = eastern.localize(datetime(2025, 7, 8, 16, 0, 0)).astimezone(pytz.UTC).isoformat()
-    log.info(f"Archive cutoff date: {cutoff_date_str} (July 8th, 2025 4pm ET)")
+    one_week_ago = datetime.now(eastern) - timedelta(weeks=1)
+    cutoff_date_str = one_week_ago.astimezone(pytz.UTC).isoformat()
+    log.info(f"Archive cutoff date: {cutoff_date_str} (1 week ago)")
     
     log.info("Calculating archive hashes and filtering candidates")
     candidates = input_df.with_columns([
@@ -715,10 +713,10 @@ def approved_projects_archive_candidates(
          (pl.col(playable_url_col).is_not_null() & (pl.col(playable_url_col) != ""))) &
         # After cutoff date
         (pl.col(approved_at_col) > cutoff_date_str) &
-        # Hash changed or missing archive URLs
-        ((pl.col("calculated_archive_hash") != pl.col(archive_hash_col)) |
-         (pl.col(archive_code_url_col).is_null() | (pl.col(archive_code_url_col) == "")) |
-         (pl.col(archive_live_url_col).is_null() | (pl.col(archive_live_url_col) == "")))
+        # Hash changed (URLs changed since last archive) OR never archived before (hash is null/empty)
+        ((pl.col(archive_hash_col).is_null()) | 
+         (pl.col(archive_hash_col) == "") |
+         (pl.col("calculated_archive_hash") != pl.col(archive_hash_col)))
     )
     
     log.info(f"Found {candidates.height} projects needing archiving out of {input_df.height} total")
@@ -735,7 +733,7 @@ def approved_projects_archive_candidates(
 
 @asset(
     group_name="unified_ysws_db_processing",
-    description="Archives URLs and retrieves archive links for approved projects",
+    description="Archives URLs using the new archive.hackclub.com API",
     compute_kind="archive_api",
 )
 def approved_projects_archived(
@@ -743,8 +741,8 @@ def approved_projects_archived(
     approved_projects_archive_candidates: pl.DataFrame,
 ) -> Output[pl.DataFrame]:
     """
-    Sends archive requests and immediately fetches archive URLs for candidate projects.
-    Returns DataFrame with id and archive URL fields for Airtable updates.
+    Archives URLs using the simplified archive.hackclub.com API.
+    Returns DataFrame with id and archive hash fields for Airtable updates.
     """
     log = context.log
     input_df = approved_projects_archive_candidates
@@ -754,8 +752,6 @@ def approved_projects_archived(
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_code_url: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_live_url: pl.Utf8,
                 AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at: pl.Utf8,
                 AirtableIDs.unified_ysws_db.approved_projects.archive_hash: pl.Utf8,
             }),
@@ -767,157 +763,74 @@ def approved_projects_archived(
     # Field IDs
     code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
     playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
-    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
-    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
     archive_archived_at_col = AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at
     archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
     
-    successful_records = []
-    failed_count = 0
-    
     # Archive API setup
-    archive_base_url = "https://archive.hackclub.com/api/v1"
     archive_api_key = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
     if not archive_api_key:
         raise ValueError("ARCHIVE_HACKCLUB_COM_API_KEY environment variable is not set")
     
-    # Process in batches of 5
-    all_rows = list(input_df.iter_rows(named=True))
-    total_batches = (len(all_rows) + 4) // 5
-    log.info(f"Processing {len(all_rows)} projects in {total_batches} batches of 5")
+    successful_records = []
+    failed_count = 0
     
-    for batch_start in range(0, len(all_rows), 5):
-        batch_rows = all_rows[batch_start:batch_start + 5]
-        batch_num = (batch_start // 5) + 1
-        log.info(f"Processing batch {batch_num}/{total_batches}: {len(batch_rows)} projects")
+    for row in input_df.iter_rows(named=True):
+        project_id = row.get("id")
+        code_url = (row.get(code_url_col) or "").strip()
+        playable_url = (row.get(playable_url_col) or "").strip()
+        calculated_archive_hash = row.get("calculated_archive_hash", "")
         
-        batch_archive_requests = []
-        batch_project_info = []
+        urls_to_archive = []
+        if code_url:
+            urls_to_archive.append(code_url)
+        if playable_url:
+            urls_to_archive.append(playable_url)
         
-        # Collect URLs and project info for this batch
-        for row in batch_rows:
-            project_id = row.get("id")
-            code_url = (row.get(code_url_col) or "").strip()
-            playable_url = (row.get(playable_url_col) or "").strip()
-            calculated_archive_hash = row.get("calculated_archive_hash", "")
-            
-            if not code_url and not playable_url:
-                log.warning(f"No URLs to archive for project {project_id}")
-                failed_count += 1
-                continue
-            
-            current_time = datetime.now(timezone.utc).isoformat()
-            project_info = {
-                "id": project_id,
-                "code_url": code_url,
-                "playable_url": playable_url,
-                "timestamp": current_time,
-                "archive_hash": calculated_archive_hash
-            }
-            batch_project_info.append(project_info)
-            
-            # Add URLs with timestamps for archive request
-            if code_url:
-                batch_archive_requests.append(code_url + "#" + current_time)
-            if playable_url:
-                batch_archive_requests.append(playable_url + "#" + current_time)
-        
-        if not batch_archive_requests:
-            log.warning(f"No valid URLs in batch {batch_num}")
+        if not urls_to_archive:
+            log.warning(f"No URLs to archive for project {project_id}")
+            failed_count += 1
             continue
         
-        # Send batch archive request (fire-and-forget)
-        log.info(f"Sending archive request for {len(batch_archive_requests)} URLs")
-        try:
-            requests.post(f"{archive_base_url}/cli/add", 
-                headers={"Content-Type": "application/json", "X-ArchiveBox-API-Key": archive_api_key},
-                json={"urls": batch_archive_requests, "tag": "ysws", "depth": 0, "update": False, 
-                      "update_all": False, "index_only": False, "overwrite": False, "init": False, 
-                      "extractors": "", "parser": "auto"}, timeout=2)
-        except (requests.exceptions.Timeout, requests.exceptions.RequestException):
-            log.debug("Archive request sent (expected timeout)")
-            pass  # Expected
-        
-        # Wait and fetch archive URLs
-        log.debug("Waiting 10 seconds for archive processing")
-        time.sleep(10)
-        
-        # Get all snapshots and match to our URLs
-        log.debug("Fetching archive snapshots to check status")
-        try:
-            response = requests.get(f"{archive_base_url}/core/snapshots", 
-                headers={"accept": "application/json", "X-ArchiveBox-API-Key": archive_api_key},
-                params={"with_archiveresults": "false", "limit": "1000", "offset": "0", "page": "0"}, 
-                timeout=120)
-            
-            archive_results = {}
-            if response.ok:
-                items = response.json().get("items", [])
-                log.debug(f"Retrieved {len(items)} snapshots from archive API")
-                for item in items:
-                    item_url = item.get("url", "")
-                    timestamp = item.get("timestamp", "")
-                    if item_url and timestamp:
-                        for target_url in batch_archive_requests:
-                            base_url = target_url.split("#")[0]
-                            if item_url == base_url or item_url.rstrip('/') == base_url.rstrip('/'):
-                                archive_results[target_url] = f"https://archive.hackclub.com/archive/{timestamp}"
-                                break
-            else:
-                log.warning(f"Failed to fetch archive snapshots: HTTP {response.status_code}")
-        except Exception as e:
-            log.warning(f"Error fetching archive snapshots: {e}")
-            archive_results = {}
-        
-        # Process results for each project
-        batch_success_count = 0
-        batch_failed_count = 0
-        
-        for project_info in batch_project_info:
-            project_id = project_info["id"]
-            code_url = project_info["code_url"]
-            playable_url = project_info["playable_url"]
-            timestamp = project_info["timestamp"]
-            archive_hash = project_info["archive_hash"]
-            
-            # Check if we got archive URLs
-            archive_code_url = archive_results.get(code_url + "#" + timestamp) if code_url else None
-            archive_live_url = archive_results.get(playable_url + "#" + timestamp) if playable_url else None
-            
-            if archive_code_url or archive_live_url:
-                # Success - create record with hash
-                result_record = {
-                    "id": project_id,
-                    archive_archived_at_col: timestamp,
-                    archive_hash_col: archive_hash
-                }
-                if archive_code_url:
-                    result_record[archive_code_url_col] = archive_code_url
-                if archive_live_url:
-                    result_record[archive_live_url_col] = archive_live_url
+        # Archive each URL using the simple API
+        project_success = True
+        for url in urls_to_archive:
+            try:
+                log.debug(f"Archiving URL for project {project_id}: {url}")
+                response = requests.post(
+                    "https://archive.hackclub.com/api/v1/archive",
+                    headers={
+                        "Authorization": f"Bearer {archive_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"url": url},
+                    timeout=30
+                )
                 
-                successful_records.append(result_record)
-                batch_success_count += 1
-                
-                archived_urls = []
-                if archive_code_url:
-                    archived_urls.append("code")
-                if archive_live_url:
-                    archived_urls.append("live")
-                log.info(f"Successfully archived {'/'.join(archived_urls)} URLs for project {project_id}")
-            else:
-                # Failed - will retry next run
-                log.warning(f"Could not retrieve archive URLs for project {project_id} - will retry next run")
-                failed_count += 1
-                batch_failed_count += 1
+                if response.status_code == 200:
+                    log.debug(f"Successfully submitted {url} for archiving")
+                else:
+                    log.warning(f"Archive API returned {response.status_code} for {url}: {response.text}")
+                    project_success = False
+                    
+            except Exception as e:
+                log.error(f"Failed to archive {url} for project {project_id}: {e}")
+                project_success = False
         
-        log.info(f"Batch {batch_num} completed: {batch_success_count} successful, {batch_failed_count} failed")
+        if project_success:
+            # Record successful archiving with updated hash
+            current_time = datetime.now(timezone.utc).isoformat()
+            successful_records.append({
+                "id": project_id,
+                archive_archived_at_col: current_time,
+                archive_hash_col: calculated_archive_hash
+            })
+            log.info(f"Successfully archived URLs for project {project_id}")
+        else:
+            failed_count += 1
     
     # Create output DataFrame
     output_schema = {
         "id": pl.Utf8,
-        archive_code_url_col: pl.Utf8,
-        archive_live_url_col: pl.Utf8,
         archive_archived_at_col: pl.Utf8,
         archive_hash_col: pl.Utf8,
     }

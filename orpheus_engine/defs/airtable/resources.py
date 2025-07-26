@@ -196,18 +196,43 @@ class AirtableResource(ConfigurableResource):
                     context.log.warning(f"Could not fetch/process schema to build empty DataFrame for {base_key}.{table_key}: {schema_err}")
                     return pl.DataFrame(schema={"id": pl.Utf8})
 
-            # First pass: Pre-process all records to clean values and find all field IDs
-            all_fields = set(["id"])
+            # Get all field IDs from table schema to ensure we include all fields
+            try:
+                schema_info: TableSchema = self.get_table_schema(base_key, table_key)
+                all_fields = set(["id"] + [f.id for f in schema_info.fields])
+                
+                # Filter fields if specific fields were requested
+                if fields:
+                    name_to_id = {f.name: f.id for f in schema_info.fields}
+                    requested_field_ids = set(["id"])
+                    for field_name in fields:
+                        if field_name in name_to_id:
+                            requested_field_ids.add(name_to_id[field_name])
+                        else:
+                            context.log.warning(f"Requested field name '{field_name}' not found in schema for {base_key}.{table_key}")
+                    all_fields = requested_field_ids
+                    
+            except Exception as schema_err:
+                context.log.warning(f"Could not fetch schema for {base_key}.{table_key}, falling back to record-based field discovery: {schema_err}")
+                # Fallback to old behavior
+                all_fields = set(["id"])
+                for record in all_records_raw:
+                    for field_id in record.get("fields", {}).keys():
+                        all_fields.add(field_id)
+            
+            # First pass: Pre-process all records to clean values
             preprocessed_records = []
             
             for record in all_records_raw:
                 cleaned_record = {"id": record.get("id")}
                 
-                # Clean and add all fields
-                for field_id, value in record.get("fields", {}).items():
-                    all_fields.add(field_id)
-                    # Clean the values
-                    cleaned_record[field_id] = self._clean_airtable_value(value)
+                # Process all known fields from schema, not just fields with data
+                for field_id in all_fields:
+                    if field_id == "id":
+                        continue
+                    value = record.get("fields", {}).get(field_id)
+                    # Clean the values (None for missing fields)
+                    cleaned_record[field_id] = self._clean_airtable_value(value) if value is not None else None
                 
                 preprocessed_records.append(cleaned_record)
                 
