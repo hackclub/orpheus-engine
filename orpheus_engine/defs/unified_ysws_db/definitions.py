@@ -93,6 +93,15 @@ def _extract_hcb_id_from_url(url: str) -> str:
     return ""
 
 
+def _calculate_archive_hash(code_url: str, playable_url: str, archive_code_url: str = "", archive_live_url: str = "") -> str:
+    """
+    Calculate archive hash including both source URLs and archive URLs.
+    This ensures changes to either source or archive URLs trigger re-archiving.
+    """
+    hash_string = f"liveurl:{playable_url or ''},codeurl:{code_url or ''},archiveLive:{archive_live_url or ''},archiveCode:{archive_code_url or ''}"
+    return hashlib.sha256(hash_string.encode('utf-8')).hexdigest()
+
+
 def _convert_to_lower_camel_case(name: str) -> str:
     """
     Convert a program name to lowerCamelCase for loops engagement prefix.
@@ -696,13 +705,22 @@ def approved_projects_archive_candidates(
     log.info(f"Archive cutoff date: {cutoff_date_str} (1 week ago)")
     
     log.info("Calculating archive hashes and filtering candidates")
+    
+    # Get archive URL field IDs for hash calculation
+    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
+    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
+    
     candidates = input_df.with_columns([
         pl.col(code_url_col).fill_null("").alias("code_url_clean"),
-        pl.col(playable_url_col).fill_null("").alias("playable_url_clean")
+        pl.col(playable_url_col).fill_null("").alias("playable_url_clean"),
+        pl.col(archive_code_url_col).fill_null("").alias("archive_code_url_clean"),
+        pl.col(archive_live_url_col).fill_null("").alias("archive_live_url_clean")
     ]).with_columns([
         pl.concat_str([
             pl.lit("liveurl:"), pl.col("playable_url_clean"),
-            pl.lit(",codeurl:"), pl.col("code_url_clean")
+            pl.lit(",codeurl:"), pl.col("code_url_clean"),
+            pl.lit(",archiveLive:"), pl.col("archive_live_url_clean"),
+            pl.lit(",archiveCode:"), pl.col("archive_code_url_clean")
         ]).map_elements(
             lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest() if x else "",
             return_dtype=pl.Utf8
@@ -752,6 +770,8 @@ def approved_projects_archived(
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_code_url: pl.Utf8,
+                AirtableIDs.unified_ysws_db.approved_projects.archive_live_url: pl.Utf8,
                 AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at: pl.Utf8,
                 AirtableIDs.unified_ysws_db.approved_projects.archive_hash: pl.Utf8,
             }),
@@ -763,6 +783,8 @@ def approved_projects_archived(
     # Field IDs
     code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
     playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
+    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
+    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
     archive_archived_at_col = AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at
     archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
     
@@ -791,8 +813,11 @@ def approved_projects_archived(
             failed_count += 1
             continue
         
-        # Archive each URL using the simple API
+        # Archive each URL and capture the archive URLs
         project_success = True
+        archive_code_url = None
+        archive_live_url = None
+        
         for url in urls_to_archive:
             try:
                 log.debug(f"Archiving URL for project {project_id}: {url}")
@@ -807,7 +832,20 @@ def approved_projects_archived(
                 )
                 
                 if response.status_code == 200:
-                    log.debug(f"Successfully submitted {url} for archiving")
+                    archive_response = response.json()
+                    archive_url = archive_response.get("url")
+                    
+                    if archive_url:
+                        # Determine if this is a code URL or live URL
+                        if url == code_url:
+                            archive_code_url = archive_url
+                            log.debug(f"Got archive URL for code: {archive_url}")
+                        elif url == playable_url:
+                            archive_live_url = archive_url
+                            log.debug(f"Got archive URL for live: {archive_url}")
+                    else:
+                        log.warning(f"Archive API returned success but no URL for {url}")
+                        project_success = False
                 else:
                     log.warning(f"Archive API returned {response.status_code} for {url}: {response.text}")
                     project_success = False
@@ -817,20 +855,44 @@ def approved_projects_archived(
                 project_success = False
         
         if project_success:
-            # Record successful archiving with updated hash
+            # Calculate final hash including the new archive URLs
+            final_hash = _calculate_archive_hash(
+                code_url, 
+                playable_url, 
+                archive_code_url or "", 
+                archive_live_url or ""
+            )
+            
+            # Record successful archiving with archive URLs and updated hash
             current_time = datetime.now(timezone.utc).isoformat()
-            successful_records.append({
+            record = {
                 "id": project_id,
                 archive_archived_at_col: current_time,
-                archive_hash_col: calculated_archive_hash
-            })
-            log.info(f"Successfully archived URLs for project {project_id}")
+                archive_hash_col: final_hash  # Use final hash that includes archive URLs
+            }
+            
+            # Add archive URLs if we got them
+            if archive_code_url:
+                record[archive_code_url_col] = archive_code_url
+            if archive_live_url:
+                record[archive_live_url_col] = archive_live_url
+                
+            successful_records.append(record)
+            
+            archived_types = []
+            if archive_code_url:
+                archived_types.append("code")
+            if archive_live_url:
+                archived_types.append("live")
+            log.info(f"Successfully archived {'/'.join(archived_types)} URLs for project {project_id}")
         else:
             failed_count += 1
     
     # Create output DataFrame
     output_schema = {
         "id": pl.Utf8,
+        archive_code_url_col: pl.Utf8,
+        archive_live_url_col: pl.Utf8,
         archive_archived_at_col: pl.Utf8,
         archive_hash_col: pl.Utf8,
     }
