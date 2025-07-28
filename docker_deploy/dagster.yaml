@@ -10,7 +10,6 @@ storage:
 run_monitoring:
   enabled: true
   poll_interval_seconds: 15  # Check every 15 seconds for stalled runs
-  run_failure_retry_delay_seconds: 60  # Delay before retrying failed runs
   max_resume_run_attempts: 3  # Max attempts to resume a failed run
 
 telemetry:
