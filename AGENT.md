@@ -22,3 +22,12 @@
 - Main code: `orpheus_engine/` (assets, resources, definitions)
 - Tests: `orpheus_engine_tests/`
 - Config: `pyproject.toml` (not setup.py)
+- **Deployment**: `docker_deploy/` directory contains Docker deployment configs
+  - `docker_deploy/Dockerfile` - production Docker setup
+  - `docker_deploy/dagster.yaml` - Dagster instance config for production (NOT project root)
+  - Docker sets `DAGSTER_HOME=/opt/dagster/dagster_home` and copies dagster.yaml there
+
+## Deployment Notes
+- **Production**: Uses Docker with configs in `docker_deploy/` directory
+- **Dagster Config**: Production dagster.yaml is in `docker_deploy/`, not project root
+- **Always check existing deployment setup before adding configuration files**
