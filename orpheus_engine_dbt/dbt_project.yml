@@ -30,4 +30,6 @@ models:
     hackatime_analytics:
       +materialized: table
     loops_analytics:
+      +materialized: table
+    unified_analytics:
       +materialized: table 
