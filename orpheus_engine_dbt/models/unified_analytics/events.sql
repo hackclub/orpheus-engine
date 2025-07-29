@@ -41,6 +41,8 @@ loops_unpivoted AS (
         AND e.value != ''
         -- Filter out columns that start with 'calculated'
         AND e.key NOT LIKE 'calculated%'
+        -- Filter out specific unwanted events
+        AND e.key != 'high_seas_last_synced_from_airtable'
 ),
 
 -- Clean loops events
