@@ -29,7 +29,7 @@ loops_unpivoted AS (
         CASE
             WHEN e.key LIKE '%_approved_at'
             THEN 'ship'
-            ELSE 'loops_event'
+            ELSE 'loops'
         END AS event_type
     FROM loops_events le,
          LATERAL jsonb_each_text(to_jsonb(le) - 'birthday') AS e(key, value)
@@ -80,7 +80,7 @@ hackatime_legacy_events AS (
         DATE(activity_time) AS event_date,
         hackatime_first_email AS email,
         'hackatimeLegacyActivity' AS event,
-        'hackatimeLegacy' AS event_type,
+        'hackatime_legacy' AS event_type,
         'hackatimeLegacy' AS source_system
     FROM {{ ref('hackatime_legacy_hourly_project_activity') }}
     WHERE hackatime_first_email IS NOT NULL
