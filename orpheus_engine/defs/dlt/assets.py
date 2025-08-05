@@ -86,12 +86,31 @@ def create_airtable_sync_assets(
                 context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name_warehouse}'")
                 context.log.info(f"Columns after renaming: {renamed_df.columns}")
 
-                pipeline = dlt.pipeline(
-                    pipeline_name=dlt_pipeline_name, # Use unique pipeline name
-                    destination=warehouse_coolify_destination(),
-                    dataset_name=dataset_name,
-                    progress="log"
-                )
+                try:
+                    pipeline = dlt.pipeline(
+                        pipeline_name=dlt_pipeline_name, # Use unique pipeline name
+                        destination=warehouse_coolify_destination(),
+                        dataset_name=dataset_name,
+                        progress="log",
+                        pipelines_dir=".dlt_pipelines"  # Consistent working directory
+                    )
+                except Exception as e:
+                    context.log.warning(f"Pipeline creation failed, likely due to corrupted state: {e}")
+                    # Drop the corrupted pipeline and recreate
+                    import shutil
+                    import os
+                    pipeline_dir = f".dlt_pipelines/{dlt_pipeline_name}"
+                    if os.path.exists(pipeline_dir):
+                        shutil.rmtree(pipeline_dir)
+                        context.log.info(f"Removed corrupted pipeline directory: {pipeline_dir}")
+                    
+                    pipeline = dlt.pipeline(
+                        pipeline_name=dlt_pipeline_name,
+                        destination=warehouse_coolify_destination(),
+                        dataset_name=dataset_name,
+                        progress="log",
+                        pipelines_dir=".dlt_pipelines"
+                    )
 
                 data_iterator = renamed_df.iter_rows(named=True)
                 try:
