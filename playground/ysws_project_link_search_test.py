@@ -6,7 +6,7 @@ Minimal GPT-5 + web-search test script with Pydantic structured output.
 import os
 import time
 import requests
-from datetime import datetime, date
+from datetime import datetime
 from typing import List
 
 from dotenv import load_dotenv
@@ -34,36 +34,86 @@ class SearchResponse(BaseModel):
     search_complete: bool
 
 
-def get_current_usage(api_key: str) -> float:
+def calculate_detailed_cost(usage_data, model: str, web_search_calls: int = 0) -> dict:
     """
-    Get current total usage cost in USD for today.
-    Note: Billing API requires special permissions that regular API keys don't have.
+    Calculate detailed cost breakdown including cached tokens, reasoning tokens, and tool costs.
+    Based on August 2025 OpenAI pricing structure.
     """
-    headers = {"Authorization": f"Bearer {api_key}"}
-    today = date.today().isoformat()
+    
+    # Get token counts from usage data
+    prompt_tokens = usage_data.prompt_tokens or 0
+    completion_tokens = usage_data.completion_tokens or 0
+    
+    # Get detailed token breakdowns
+    cached_tokens = 0
+    reasoning_tokens = 0
+    
+    if hasattr(usage_data, 'prompt_tokens_details') and usage_data.prompt_tokens_details:
+        cached_tokens = usage_data.prompt_tokens_details.cached_tokens or 0
+    
+    if hasattr(usage_data, 'completion_tokens_details') and usage_data.completion_tokens_details:
+        reasoning_tokens = usage_data.completion_tokens_details.reasoning_tokens or 0
+    
+    # Calculate non-cached input tokens
+    non_cached_tokens = prompt_tokens - cached_tokens
+    
+    # Model-specific pricing (per 1M tokens)
+    pricing = {
+        "gpt-5": {"input": 1.25, "cached": 0.125, "output": 10.00},
+        "gpt-5-mini": {"input": 0.25, "cached": 0.025, "output": 2.00},
+        "gpt-5-nano": {"input": 0.05, "cached": 0.005, "output": 0.40}
+    }
+    
+    rates = pricing.get(model, pricing["gpt-5"])  # Default to gpt-5
+    
+    # Calculate token costs
+    non_cached_cost = non_cached_tokens * rates["input"] / 1_000_000
+    cached_cost = cached_tokens * rates["cached"] / 1_000_000
+    output_cost = completion_tokens * rates["output"] / 1_000_000
+    
+    # Tool costs
+    web_search_cost = web_search_calls * 10.00 / 1_000  # $10/1K calls for GPT-5
+    
+    total_cost = non_cached_cost + cached_cost + output_cost + web_search_cost
+    
+    return {
+        "non_cached_tokens": non_cached_tokens,
+        "cached_tokens": cached_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "completion_tokens": completion_tokens,
+        "non_cached_cost": non_cached_cost,
+        "cached_cost": cached_cost,
+        "output_cost": output_cost,
+        "web_search_cost": web_search_cost,
+        "total_cost": total_cost,
+        "token_rates": rates
+    }
+
+
+def get_organization_costs(admin_api_key: str) -> float:
+    """Get current organization costs using admin API key."""
+    headers = {"Authorization": f"Bearer {admin_api_key}"}
+    
+    # Get costs for today (start_time in seconds since epoch)
+    import time
+    start_time = int(time.time()) - 86400  # 24 hours ago
     
     try:
         response = requests.get(
-            f"https://api.openai.com/v1/dashboard/billing/usage?start_date={today}&end_date={today}",
+            f"https://api.openai.com/v1/organization/costs?start_time={start_time}",
             headers=headers
         )
         response.raise_for_status()
         data = response.json()
         
-        # Sum up all costs for today
+        # Sum total costs from the response
         total_cost = 0.0
-        for day_data in data.get("data", []):
-            total_cost += day_data.get("total_cost", 0.0)
+        for item in data.get("data", []):
+            total_cost += item.get("amount", 0.0)
         
         return total_cost
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 401:
-            print(f"⚠️ Billing API access denied (API key lacks billing permissions)")
-        else:
-            print(f"⚠️ Billing API error: {e}")
-        return None
     except Exception as e:
-        print(f"⚠️ Could not fetch billing data: {e}")
+        print(f"⚠️ Could not fetch organization costs: {e}")
         return None
 
 
@@ -71,13 +121,37 @@ if __name__ == "__main__":
     # Setup
     load_dotenv()
     API_KEY = os.getenv("OPENAI_API_KEY")
+    ADMIN_KEY = os.getenv("OPENAI_ADMIN_KEY")
+    
     if not API_KEY:
         raise SystemExit("❌ OPENAI_API_KEY not found in .env")
 
     client = OpenAI(api_key=API_KEY)
+    
+    # Test billing API with simple call first
+    if ADMIN_KEY:
+        print("🔍 Testing billing API with simple call...")
+        cost_before = get_organization_costs(ADMIN_KEY)
+        
+        # Simple test call
+        test_response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": "Say hello"}]
+        )
+        
+        cost_after = get_organization_costs(ADMIN_KEY)
+        
+        if cost_before is not None and cost_after is not None:
+            test_cost = cost_after - cost_before
+            print(f"✅ Billing API works! Test cost: ${test_cost:.6f}")
+        else:
+            print("❌ Billing API not working")
+            ADMIN_KEY = None
+    else:
+        print("⚠️ OPENAI_ADMIN_KEY not found - billing tracking disabled")
 
     # Configure project URL
-    PROJECT_URL = "https://github.com/ByteAtATime/flare"
+    PROJECT_URL = "https://github.com/rsvedant/reelevate.ai"
 
     # Project viral tracking prompt
     PROMPT = f"""
@@ -101,8 +175,10 @@ For each link return:
 - Is Hack Club URL (yes / no): Whether the link is a Hack Club URL (ex. hackclub.com, hackclub.com/xyz, etc.)
     """
 
-    print("🔍 Getting baseline billing...")
-    cost_before = get_current_usage(API_KEY)
+    # Get baseline billing if admin key available
+    if ADMIN_KEY:
+        print("🔍 Getting baseline billing...")
+        cost_before = get_organization_costs(ADMIN_KEY)
     
     print("🔍 Querying GPT-5 with web search...")
     start_time = time.time()
@@ -116,27 +192,21 @@ For each link return:
         }],
         input=PROMPT
     )
-    model_used = "gpt-5"
-    input_rate = 1.25  # $1.25/1M tokens
-    output_rate = 10.00  # $10.00/1M tokens
-    search_cost = 0.02  # Estimate ~2 search calls @ $0.01 each
     
     end_time = time.time()
     duration = end_time - start_time
     
-    print("🔍 Getting actual billing...")
-    cost_after = get_current_usage(API_KEY)
+    # Get actual billing if admin key available
+    if ADMIN_KEY:
+        print("🔍 Getting actual billing...")
+        cost_after = get_organization_costs(ADMIN_KEY)
     
-    # Calculate costs
-    input_tokens = response.usage.input_tokens or 0
-    output_tokens = response.usage.output_tokens or 0
+    # Calculate detailed costs with proper token breakdown
+    estimated_search_calls = 2  # Conservative estimate
+    cost_breakdown = calculate_detailed_cost(response.usage, "gpt-5", estimated_search_calls)
     
-    # Base token cost 
-    token_cost = input_tokens * input_rate / 1_000_000 + output_tokens * output_rate / 1_000_000
-    estimated_total = token_cost + search_cost
-    
-    # Actual cost if billing API worked
-    if cost_before is not None and cost_after is not None:
+    # Calculate actual cost if available
+    if ADMIN_KEY and cost_before is not None and cost_after is not None:
         actual_cost = cost_after - cost_before
     else:
         actual_cost = None
@@ -149,22 +219,28 @@ For each link return:
         print("Raw text response:")
         print(response.output_text)
 
-    print(f"\n📊 Usage & Cost Analysis:")
-    print(f"🤖 Model: {model_used}")
+    print(f"\n📊 Detailed Usage & Cost Analysis:")
+    print(f"🤖 Model: gpt-5")
     print(f"⏱️  Duration: {duration:.2f} seconds")
-    print(f"🔢 Tokens: {input_tokens:,} in, {output_tokens:,} out")
-    print(f"💰 Token cost: ${token_cost:.4f} (${input_rate}/1M in, ${output_rate}/1M out)")
-    print(f"🔍 Search cost: ${search_cost:.4f}")
-    print(f"📊 Total estimated: ${estimated_total:.4f}")
+    
+    print(f"\n🔢 Token Breakdown:")
+    print(f"   Non-cached input: {cost_breakdown['non_cached_tokens']:,} tokens → ${cost_breakdown['non_cached_cost']:.6f}")
+    print(f"   Cached input: {cost_breakdown['cached_tokens']:,} tokens → ${cost_breakdown['cached_cost']:.6f}")
+    print(f"   Output: {cost_breakdown['completion_tokens']:,} tokens → ${cost_breakdown['output_cost']:.6f}")
+    if cost_breakdown['reasoning_tokens'] > 0:
+        print(f"   Reasoning: {cost_breakdown['reasoning_tokens']:,} tokens (included in output)")
+    
+    print(f"\n💰 Cost Breakdown:")
+    print(f"   Token costs: ${cost_breakdown['non_cached_cost'] + cost_breakdown['cached_cost'] + cost_breakdown['output_cost']:.6f}")
+    print(f"   Web search: ${cost_breakdown['web_search_cost']:.6f} (~{estimated_search_calls} calls)")
+    print(f"   📊 Total estimated: ${cost_breakdown['total_cost']:.6f}")
     
     if actual_cost is not None:
-        print(f"💳 Actual cost: ${actual_cost:.4f}")
-        if actual_cost > 0 and estimated_total > 0:
-            multiplier = actual_cost / estimated_total
-            print(f"📈 Cost multiplier: {multiplier:.1f}x")
+        print(f"   💳 Actual cost: ${actual_cost:.6f}")
+        if actual_cost > 0 and cost_breakdown['total_cost'] > 0:
+            multiplier = actual_cost / cost_breakdown['total_cost']
+            print(f"   📈 Cost multiplier: {multiplier:.1f}x")
     else:
-        print(f"💳 Actual cost: Not available (billing API requires special permissions)")
-        if search_cost > 0:
-            print(f"💡 Note: Actual costs may be 2-3x higher due to internal web searches")
+        print(f"   💡 Note: Actual costs may be 2-3x higher due to internal web searches")
     
     print(f"✅ Done at {datetime.now().isoformat()}")
