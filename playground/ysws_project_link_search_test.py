@@ -390,12 +390,23 @@ if __name__ == "__main__":
     # CUSTOMIZE THIS SECTION FOR YOUR PROJECT
     # ============================================================================
     PROJECT_INPUTS = {
+        "live_url": "https://example.com/project",
+        "code_url": "https://github.com/USERNAME/PROJECT",
+        "project_hints": {
+            "record_id": "YOUR_RECORD_ID",  # Replace with actual Airtable record ID
+            "authors": [
+                {"first_name": "FIRST_NAME", "last_name": "LAST_NAME", "handles": {"github": "GITHUB_HANDLE"}}
+            ],
+            "author_country": "United States"
+        },
+        "now_utc": "2025-08-18T23:00:00Z",
+        "max_results": 400
     }
     # ============================================================================
 
     # Generate the OSINT-style web research prompt with configurable inputs
     PROMPT = f"""
-You are an expert OSINT-style web researcher. Your job is to uncover EVERY public place a specific project has been shared or discussed online—from major platforms to tiny forums—while returning a clean, consistent JSON result that lets us recompute scores later without re-fetching any pages. Prioritize action: use tools immediately to surface links, limit internal reasoning to brief reflections, and avoid loops by capping iterations at 5 or when <3 new unique links are found in two consecutive iterations.
+You are an expert OSINT-style web researcher. Your job is to uncover EVERY public place a specific project has been shared or discussed online—from major platforms to tiny forums—while returning a clean, consistent JSON result that lets us recompute scores later without re-fetching any pages. Prioritize action: use tools immediately to surface links, and avoid loops by capping iterations at 5 or when <3 new unique links are found in two consecutive iterations.
 
 ############################################
 # INPUTS
@@ -409,6 +420,8 @@ You are an expert OSINT-style web researcher. Your job is to uncover EVERY publi
 ############################################
 # OBJECTIVE
 ############################################
+FIRST ACTION: Immediately call web_search_preview with ≥12 parallel queries across HN, Reddit, X, YouTube + JP/ZH/ES variants of distinctive terms; do not emit final JSON until after this batch (and run one more batch if <12 unique third‑party domains found).
+
 Maximize recall: aggressively find valid links across all time periods, including major platforms (Reddit, Hacker News, Twitter/X, YouTube, Stack Overflow), multilingual/regional sites (e.g., Qiita, Hatena, VK, cnblogs, Zhihu), mirrors, archives, niche communities, bookmarking services, and cross-posts. 
 
 PRIORITY PLATFORMS: Focus heavily on Reddit (all relevant subreddits), Hacker News, Twitter/X, and YouTube as these are primary viral sharing platforms.
@@ -427,14 +440,14 @@ Precision is critical: include ONLY links unambiguously referring to THIS exact 
 # FINGERPRINT & DISCOVERY MINDSET
 ############################################
 1) Deep fingerprint (from LIVE_URL and/or CODE_URL):
-- Capture title/H1, meta/og title & description, canonical links, author names/handles, distinctive phrases (e.g., "multiplayer lightcycle game over SSH", "ssh sshtron.zachlatta.com", "BrickHack 2").
+- Capture title/H1, meta/og title & description, canonical links, author names/handles, distinctive phrases (e.g., "unique project feature", "project tagline", "key functionality").
 - Generate URL variants (http/https, www/no-www, trailing slash; strip tracking params).
-- Include multilingual variants (e.g., "juego Tron via SSH", "SSHTron ゲーム").
+- Include multilingual variants (e.g., "proyecto ejemplo", "プロジェクト").
 - Store in diagnostics: url_variants_used, distinctive_terms, authors_detected.
 - If LIVE_URL inaccessible, use CODE_URL, archives, or discovered pages.
 
 2) Be aggressive and action-oriented:
-- Start broad, pivot to niche/long-tail/multilingual (e.g., "SSHTron jeu terminal" for French sites).
+- Start broad, pivot to niche/long-tail/multilingual (e.g., "project terminal", "launcher tool" for localized sites).
 - Follow author profiles, cross-posts, linkbacks; chain from discovered URLs.
 - Act first: use tools for searches/browsing before overthinking.
 - Continue until MAX_RESULTS or iterations show <3 new links twice in a row.
@@ -472,7 +485,7 @@ If a page fails to load or content is gated:
 ############################################
 Include only if ≥1 condition met (store evidence quote):
 (1) Direct link to LIVE_URL/CODE_URL (or variant).
-(2) Exact match to distinctive, project-unique phrase (e.g., "ssh sshtron.zachlatta.com").
+(2) Exact match to distinctive, project-unique phrase (e.g., "unique project identifier").
 (3) Known author explicitly references THIS project (with quote).
 
 match_confidence:
@@ -486,7 +499,7 @@ Reject <0.6 or if matches similar but different projects.
 ############################################
 Exclude project's own pages/subpages:
 A) LIVE_SCOPE: Exclude origin matching LIVE_URL and paths starting with its path (or entire origin if root).
-B) CODE_SCOPE: For GitHub/etc., exclude repo root paths (e.g., /zachlatta/sshtron/*); include platform blogs/explore.
+B) CODE_SCOPE: For GitHub/etc., exclude repo root paths (e.g., /username/reponame/*); include platform blogs/explore.
 C) Mirrors/archives of excluded pages remain excluded (cite in evidence if useful).
 Store scopes in diagnostics.exclusion_scopes; up to 10 excluded examples in diagnostics.excluded_examples.
 
@@ -557,17 +570,14 @@ Return JSON ONLY validating against schema. If no results, project_links: [], se
     base_params = {
         "model": "gpt-5",
         "tools": [
-            {
-                "type": "web_search_preview",
-                "search_context_size": "high"
-            },
-            {
-                "type": "code_interpreter",
-                "container": {"type": "auto"}
-            }
+            {"type": "web_search_preview", "search_context_size": "high"}
         ],
         "reasoning": {"effort": "high"},
-        "input": PROMPT
+        "input": [  # developer message = stronger instruction adherence
+            {"role": "developer", "content": PROMPT}
+        ],
+        "text": {"verbosity": "low"},   # optional: keep prose short, budget for search/JSON
+        "max_output_tokens": 25000      # give room to search + compile JSON
     }
     
     if USE_FLEX_PROCESSING:
@@ -607,6 +617,26 @@ Return JSON ONLY validating against schema. If no results, project_links: [], se
     # Calculate actual cost
     actual_cost = (cost_after - cost_before) if (cost_before is not None and cost_after is not None) else None
 
+    print(f"\n📦 Raw Response Debug:")
+    print(f"Response type: {type(response)}")
+    print(f"Response attributes: {dir(response)}")
+    if hasattr(response, 'output_text'):
+        print(f"Output text length: {len(response.output_text) if response.output_text else 0}")
+        if response.output_text:
+            print(f"First 500 chars of output_text: {response.output_text[:500]}")
+            print(f"Last 500 chars of output_text: {response.output_text[-500:]}")
+    if hasattr(response, 'output_parsed'):
+        print(f"Output parsed: {response.output_parsed}")
+    if hasattr(response, 'status'):
+        print(f"Response status: {response.status}")
+        if response.status == "incomplete":
+            print("⚠️ Response was incomplete!")
+    if hasattr(response, 'incomplete_details'):
+        print(f"Incomplete details: {response.incomplete_details}")
+        if response.incomplete_details and hasattr(response.incomplete_details, 'reason'):
+            if response.incomplete_details.reason == "max_output_tokens":
+                print("❌ Hit max_output_tokens limit - need to increase the limit!")
+    
     print(f"\n📦 Structured Response:")
     # Parse response based on API method used
     try:
@@ -616,6 +646,11 @@ Return JSON ONLY validating against schema. If no results, project_links: [], se
             structured_response = SearchResponse(**parsed_data)
         else:
             structured_response = response.output_parsed
+        
+        if structured_response is None:
+            print("❌ Structured response is None - parsing failed")
+            print("Raw response text:", getattr(response, 'output_text', 'No output text'))
+            exit(1)
         
         # Reasoning summary disabled for now
         reasoning_summary = ""
