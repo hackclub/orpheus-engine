@@ -6,6 +6,10 @@ import requests
 import json
 from datetime import datetime, timezone, timedelta
 import pytz
+import asyncio
+import aiohttp
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dagster import (
     asset,
     AssetExecutionContext,
@@ -22,6 +26,7 @@ from ..airtable.definitions import airtable_config
 from ..geocoder.resources import GeocoderResource, GeocodingError
 from ..airtable.generated_ids import AirtableIDs
 from ..shared.address_utils import build_address_string_from_airtable_row
+from ..analytics.definitions import format_airtable_date
 
 
 def _extract_geocode_details(geocode_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,6 +107,219 @@ def _calculate_archive_hash(code_url: str, playable_url: str, archive_code_url: 
     return hashlib.sha256(hash_string.encode('utf-8')).hexdigest()
 
 
+async def _fetch_github_stars_single_async(session: aiohttp.ClientSession, project_id: str, github_repo_url: str, gh_proxy_api_key: str, current_time: datetime, logger=None) -> dict:
+    """
+    Fetch star count for a single GitHub repository using async/await.
+    
+    TODO: REFACTOR GH-PROXY INTO DAGSTER RESOURCE
+    Currently we're handling gh-proxy API calls directly in this function with hardcoded URLs
+    and environment variable access. This should be refactored into a proper Dagster resource
+    (similar to AirtableResource) that encapsulates:
+    - API key management and validation
+    - Base URL configuration  
+    - Rate limiting logic and connection pooling
+    - Standard error handling and retry logic
+    - Consistent logging patterns
+    - Reusable across other assets that need GitHub data
+    
+    The resource should provide methods like:
+    - get_repository_info(owner, repo) -> dict
+    - get_repositories_bulk(repo_list) -> list[dict] 
+    - And handle all the aiohttp session management, auth headers, etc.
+    
+    Returns:
+        Dictionary with project_id and field values for Airtable update
+    """
+    try:
+        # Extract owner/repo from GitHub URL
+        url_parts = github_repo_url.replace("https://github.com/", "").split("/")
+        if len(url_parts) < 2:
+            return {
+                "project_id": project_id,
+                "success": False,
+                "error": f"Invalid GitHub URL format: {github_repo_url}"
+            }
+            
+        owner, repo = url_parts[0], url_parts[1]
+        
+        # Make API request to gh-proxy
+        api_url = f"https://gh-proxy.hackclub.com/gh/repos/{owner}/{repo}"
+        
+        async with session.get(
+            api_url,
+            headers={
+                "X-API-Key": gh_proxy_api_key,
+                "Accept": "application/json"
+            },
+            timeout=aiohttp.ClientTimeout(total=30)
+        ) as response:
+            
+            if response.status != 200:
+                if logger:
+                    logger.warning(f"❌ {owner}/{repo}: HTTP {response.status}")
+                
+                # Set repo_exists based on status code
+                if response.status == 404:
+                    repo_exists = "Repo 404s"
+                else:
+                    repo_exists = "Repo 404s"  # Other errors also indicate repo issues
+                
+                return {
+                    "project_id": project_id,
+                    "success": False,
+                    "repo_exists": repo_exists,
+                    "error": f"gh-proxy API returned {response.status} for {owner}/{repo}"
+                }
+                
+            data = await response.json()
+            stargazers_count = data.get("stargazers_count", 0)
+            language = data.get("language", "")  # Extract primary language
+            
+            if logger:
+                logger.info(f"✅ {owner}/{repo}: {stargazers_count} stars, {language or 'Unknown'} language")
+            
+            return {
+                "project_id": project_id,
+                "success": True,
+                "repo_exists": "Repo Exists",
+                "stars": int(stargazers_count),
+                "language": language or "",
+                "updated_at": current_time,
+                "repo": f"{owner}/{repo}"
+            }
+        
+    except aiohttp.ClientError as e:
+        return {
+            "project_id": project_id,
+            "success": False,
+            "repo_exists": "Repo 404s",  # Assume repo doesn't exist for client errors
+            "error": f"Request failed for GitHub URL {github_repo_url}: {e}"
+        }
+    except (KeyError, ValueError, TypeError) as e:
+        return {
+            "project_id": project_id,
+            "success": False,
+            "repo_exists": None,  # Unknown if repo exists due to parsing error
+            "error": f"Error parsing GitHub data for {github_repo_url}: {e}"
+        }
+    except Exception as e:
+        return {
+            "project_id": project_id,
+            "success": False,
+            "repo_exists": None,  # Unknown if repo exists due to unexpected error
+            "error": f"Unexpected error processing GitHub URL {github_repo_url}: {e}"
+        }
+
+
+async def _fetch_github_stars_async_all(projects_data: list, gh_proxy_api_key: str, current_time: datetime, logger=None, max_rps: int = 300) -> list:
+    """
+    Fetch GitHub star counts using async/await - Python equivalent of Promise.all.
+    Processes all requests concurrently up to specified RPS with automatic chunking.
+    
+    Args:
+        projects_data: List of dictionaries with project_id and github_repo_url
+        gh_proxy_api_key: API key for gh-proxy
+        current_time: Current timestamp for updated_at field
+        logger: Optional logger for progress updates
+        max_rps: Maximum requests per second (default 300)
+    
+    Returns:
+        List of results from all async API calls
+    """
+    results = []
+    
+    # Calculate optimal chunk size and timing for the target RPS
+    # Use chunks of 100 or max_rps/3, whichever is smaller for good balance
+    chunk_size = min(100, max(1, max_rps // 3))
+    chunk_interval = chunk_size / max_rps  # Time between chunks to maintain RPS
+    
+    async with aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(limit=500, limit_per_host=500),
+        timeout=aiohttp.ClientTimeout(total=30)
+    ) as session:
+        
+        for i in range(0, len(projects_data), chunk_size):
+            chunk = projects_data[i:i + chunk_size]
+            chunk_start_time = time.time()
+            
+            # Create all async tasks for this chunk (Python equivalent of Promise.all)
+            tasks = []
+            for project_data in chunk:
+                task = _fetch_github_stars_single_async(
+                    session,
+                    project_data["project_id"],
+                    project_data["github_repo_url"],
+                    gh_proxy_api_key,
+                    current_time,
+                    logger
+                )
+                tasks.append(task)
+            
+            # Execute all requests concurrently (Promise.all equivalent)
+            chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results and handle any exceptions
+            for result in chunk_results:
+                if isinstance(result, Exception):
+                    if logger:
+                        logger.error(f"Async request failed: {result}")
+                    results.append({
+                        "project_id": "unknown",
+                        "success": False,
+                        "error": str(result)
+                    })
+                else:
+                    results.append(result)
+            
+            # Rate limiting: ensure we don't exceed max_rps
+            chunk_duration = time.time() - chunk_start_time
+            if chunk_duration < chunk_interval and i + chunk_size < len(projects_data):
+                await asyncio.sleep(chunk_interval - chunk_duration)
+    
+    return results
+
+
+def _fetch_github_stars_parallel_wrapper(projects_data: list, gh_proxy_api_key: str, current_time: datetime, logger=None, max_rps: int = 300) -> list:
+    """
+    Synchronous wrapper for async GitHub stars fetching.
+    """
+    return asyncio.run(_fetch_github_stars_async_all(projects_data, gh_proxy_api_key, current_time, logger, max_rps))
+
+
+def _extract_github_repo_url(code_url: str) -> str:
+    """
+    Extract GitHub repository URL from various GitHub URL formats.
+    Skips pull request URLs as they are not valid candidates for star counting.
+    
+    Args:
+        code_url: URL that may contain a GitHub repository reference
+        
+    Returns:
+        Base GitHub repository URL (e.g., 'https://github.com/owner/repo') or empty string if not a GitHub URL or is a pull request
+        
+    Examples:
+        https://github.com/zachlatta/sshtron -> https://github.com/zachlatta/sshtron
+        https://github.com/zachlatta/sshtron/pull/123 -> "" (skipped)
+        https://github.com/zachlatta/sshtron/tree/main -> https://github.com/zachlatta/sshtron
+    """
+    if not code_url:
+        return ""
+    
+    # Skip pull request URLs
+    if '/pull/' in code_url or '/pulls' in code_url:
+        return ""
+    
+    # Pattern to match GitHub URLs and extract owner/repo
+    pattern = r'^https://github\.com/([^/]+)/([^/]+)(?:/.*)?$'
+    match = re.match(pattern, code_url.strip())
+    
+    if match:
+        owner, repo = match.groups()
+        return f"https://github.com/{owner}/{repo}"
+    
+    return ""
+
+
 def _convert_to_lower_camel_case(name: str) -> str:
     """
     Convert a program name to lowerCamelCase for loops engagement prefix.
@@ -127,6 +345,275 @@ def _convert_to_lower_camel_case(name: str) -> str:
         result += word.capitalize()
     
     return result
+
+
+@asset(
+    group_name="unified_ysws_db_processing",
+    description="Prepares approved projects that have GitHub URLs in code_url field for star count retrieval",
+    compute_kind="data_preparation",
+    deps=[AssetKey(["airtable", "unified_ysws_db", "approved_projects"])],
+    required_resource_keys={"airtable"},
+)
+def approved_projects_repo_stats_candidates(
+    context: AssetExecutionContext,
+) -> Output[pl.DataFrame]:
+    """
+    Loads approved projects and identifies those with GitHub URLs for repository stats processing.
+    
+    Returns:
+        DataFrame with id, code_url, and github_repo_url for projects with valid GitHub URLs
+    """
+    log = context.log
+    airtable: AirtableResource = context.resources.airtable
+    
+    # Get the approved_projects data from airtable
+    projects_df = airtable.get_all_records_as_polars(
+        context=context,
+        base_key="unified_ysws_db",
+        table_key="approved_projects",
+    )
+    
+    log.info(f"Processing {projects_df.height} approved projects for GitHub URL detection")
+    
+    # Get the field IDs
+    code_url_field_id = AirtableIDs.unified_ysws_db.approved_projects.code_url
+    stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
+    updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
+    language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
+    exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+    
+    if code_url_field_id not in projects_df.columns:
+        log.warning(f"Code URL field {code_url_field_id} not found in projects data")
+        # Return empty DataFrame with correct schema
+        return Output(
+            pl.DataFrame(schema={
+                "id": pl.Utf8,
+                "code_url": pl.Utf8
+            }),
+            metadata={"num_projects": 0, "num_candidates": 0}
+        )
+    
+    # Calculate 24 hours ago threshold
+    twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+    
+    # Filter for projects that have code_url field set
+    projects_with_urls = projects_df.filter(
+        (pl.col(code_url_field_id).is_not_null()) & 
+        (pl.col(code_url_field_id) != "")
+    )
+    
+    # Apply 24-hour freshness filter: only process projects that need updating
+    has_updated_at_field = updated_at_field_id in projects_df.columns
+    
+    if has_updated_at_field:
+        # Filter for records that need checking:
+        # 1. Updated at field is null/empty, OR
+        # 2. Last updated was more than 24 hours ago
+        processed_df = projects_with_urls.filter(
+            (pl.col(updated_at_field_id).is_null()) |
+            (pl.col(updated_at_field_id) == "") |
+            (pl.col(updated_at_field_id) < twenty_four_hours_ago.isoformat())
+        )
+        log.info(f"Applied 24-hour freshness filter: {processed_df.height}/{projects_with_urls.height} projects need repo stats updates")
+    else:
+        # No existing tracking field, process all projects with code_url (first time setup)
+        processed_df = projects_with_urls
+        log.info("No existing repo_stats_last_updated_at field found, processing all projects with code_url")
+    
+    # Return just id and code_url - let repo_stats asset handle GitHub URL detection
+    processed_df = processed_df.select([
+        pl.col("id"),
+        pl.col(code_url_field_id).alias("code_url")
+    ])
+    
+    log.info(f"Found {processed_df.height} projects needing repo stats updates out of {projects_df.height} total projects")
+    if processed_df.height > 0:
+        log.info(f"Sample candidates: {processed_df.head(3).to_dicts()}")
+    
+    # Generate preview metadata
+    if processed_df.height > 0:
+        try:
+            preview_metadata = MetadataValue.md(processed_df.head(10).to_pandas().to_markdown(index=False))
+        except Exception:
+            preview_metadata = MetadataValue.text(str(processed_df.head(10)))
+    else:
+        preview_metadata = MetadataValue.text("No projects need repo stats updates")
+    
+    return Output(
+        processed_df,
+        metadata={
+            "num_projects": projects_df.height,
+            "num_candidates": processed_df.height,
+            "preview": preview_metadata
+        }
+    )
+
+
+@asset(
+    group_name="unified_ysws_db_processing",
+    description="Fetches GitHub repository stats for approved projects using gh-proxy API",
+    compute_kind="api_request",
+)
+def approved_projects_repo_stats(
+    context: AssetExecutionContext,
+    approved_projects_repo_stats_candidates: pl.DataFrame,
+) -> Output[pl.DataFrame]:
+    """
+    Fetches repository stats (stars, language, exists) for GitHub repositories using async/await (up to 100 requests per second).
+    
+    Returns:
+        DataFrame with id, repo_star_count, repo_stats_last_updated_at, repo_language, and repo_exists fields
+    """
+    log = context.log
+    input_df = approved_projects_repo_stats_candidates
+    
+    if input_df.height == 0:
+        log.info("No GitHub URL candidates to process.")
+        stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
+        updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
+        language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
+        exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+        return Output(
+            pl.DataFrame(schema={
+                "id": pl.Utf8,
+                stars_field_id: pl.Int64,
+                updated_at_field_id: pl.Datetime,
+                language_field_id: pl.Utf8,
+                exists_field_id: pl.Utf8
+            }),
+            metadata={"num_processed": 0, "num_successful": 0, "num_failed": 0}
+        )
+    
+    # Configurable RPS - easy to adjust here
+    max_rps = 100
+    log.info(f"Processing GitHub repository stats for {input_df.height} projects in parallel (max {max_rps} req/sec)")
+    
+    # Get gh-proxy API key from environment
+    gh_proxy_api_key = os.getenv("GH_PROXY_API_KEY")
+    if not gh_proxy_api_key:
+        raise ValueError("GH_PROXY_API_KEY environment variable is required")
+    
+    current_time = datetime.now(timezone.utc)
+    
+    # Process each candidate - extract GitHub URLs and classify
+    github_projects = []
+    non_github_projects = []
+    
+    for row in input_df.iter_rows(named=True):
+        project_id = row.get("id")
+        code_url = row.get("code_url")
+        
+        # Determine if this is a GitHub URL
+        github_repo_url = _extract_github_repo_url(code_url) if code_url else ""
+        
+        if github_repo_url:  # Valid GitHub URL
+            github_projects.append({
+                "project_id": project_id,
+                "github_repo_url": github_repo_url
+            })
+        else:  # Non-GitHub repo
+            non_github_projects.append({
+                "project_id": project_id,
+                "code_url": code_url
+            })
+    
+    log.info(f"Processing {len(github_projects)} GitHub repos via API and {len(non_github_projects)} non-GitHub repos directly")
+    
+    # Get GitHub API results
+    github_results = []
+    if github_projects:
+        github_results = _fetch_github_stars_parallel_wrapper(github_projects, gh_proxy_api_key, current_time, log, max_rps)
+    
+    # Create records for non-GitHub projects (no API calls needed)
+    non_github_results = []
+    for project in non_github_projects:
+        non_github_results.append({
+            "project_id": project["project_id"],
+            "success": True,  # Successfully processed (just not via API)
+            "repo_exists": "Not a GitHub repo",
+            "stars": None,
+            "language": None,
+            "updated_at": current_time
+        })
+        log.info(f"📝 Project {project['project_id']}: Not a GitHub repo")
+    
+    # Combine all results
+    results = github_results + non_github_results
+    
+    # Process results and create Airtable records
+    stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
+    updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
+    language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
+    exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+    
+    all_records = []
+    num_repo_exists_success = 0
+    num_repo_404s = 0
+    num_not_a_github_repo = 0
+    
+    for result in results:
+        project_id = result["project_id"]
+        repo_status = result.get("repo_exists")
+        
+        all_records.append({
+            "id": project_id,
+            stars_field_id: result.get("stars"),
+            updated_at_field_id: result.get("updated_at", current_time),
+            language_field_id: result.get("language"),
+            exists_field_id: repo_status
+        })
+        
+        # Count by repo status
+        if repo_status == "Repo Exists":
+            num_repo_exists_success += 1
+        elif repo_status == "Repo 404s":
+            num_repo_404s += 1
+        elif repo_status == "Not a GitHub repo":
+            num_not_a_github_repo += 1
+    
+    # Create output DataFrame with explicit schema to handle mixed types
+    if all_records:
+        # Create DataFrame with explicit schema to handle None values properly
+        output_df = pl.DataFrame(
+            all_records,
+            schema={
+                "id": pl.Utf8,
+                stars_field_id: pl.Int64,
+                updated_at_field_id: pl.Datetime,
+                language_field_id: pl.Utf8,
+                exists_field_id: pl.Utf8
+            }
+        )
+    else:
+        output_df = pl.DataFrame(schema={
+            "id": pl.Utf8,
+            stars_field_id: pl.Int64,
+            updated_at_field_id: pl.Datetime,
+            language_field_id: pl.Utf8,
+            exists_field_id: pl.Utf8
+        })
+    
+    log.info(f"Repository stats processing completed. Repo Exists: {num_repo_exists_success}, Repo 404s: {num_repo_404s}, Not GitHub: {num_not_a_github_repo}")
+    
+    # Generate preview metadata
+    if output_df.height > 0:
+        try:
+            preview_metadata = MetadataValue.md(output_df.head(10).to_pandas().to_markdown(index=False))
+        except Exception:
+            preview_metadata = MetadataValue.text(str(output_df.head(10)))
+    else:
+        preview_metadata = MetadataValue.text("No repository stats processed")
+    
+    return Output(
+        output_df,
+        metadata={
+            "num_processed": input_df.height,
+            "num_repo_exists_success": num_repo_exists_success,
+            "num_repo_404s": num_repo_404s,
+            "num_not_a_github_repo": num_not_a_github_repo,
+            "preview": preview_metadata
+        }
+    )
 
 
 @asset(
@@ -1050,9 +1537,10 @@ def approved_projects_prepared_for_update(
     context: AssetExecutionContext,
     approved_projects_geocoded: pl.DataFrame,
     approved_projects_archived: pl.DataFrame,
+    approved_projects_repo_stats: pl.DataFrame,
 ) -> Output[pl.DataFrame]:
     """
-    Merges geocoded and archived data for approved projects and prepares for Airtable batch update.
+    Merges geocoded, archived, and GitHub repository stats data for approved projects and prepares for Airtable batch update.
     
     Checks for conflicts: if multiple inputs provide different non-null values 
     for the same field for a given project ID, an error is raised. 
@@ -1061,13 +1549,14 @@ def approved_projects_prepared_for_update(
     log = context.log
     
     # --- 1. Collect and Filter Input DataFrames ---
-    dfs = [approved_projects_geocoded, approved_projects_archived]
+    dfs = [approved_projects_geocoded, approved_projects_archived, approved_projects_repo_stats]
     
     input_heights = {
         "geocoded": approved_projects_geocoded.height,
         "archived": approved_projects_archived.height,
+        "repo_stats": approved_projects_repo_stats.height,
     }
-    log.info(f"Input counts - Geocoded: {input_heights['geocoded']}, Archived: {input_heights['archived']}")
+    log.info(f"Input counts - Geocoded: {input_heights['geocoded']}, Archived: {input_heights['archived']}, Repo Stats: {input_heights['repo_stats']}")
 
     dfs = [df for df in dfs if not df.is_empty()]
 
@@ -1197,6 +1686,7 @@ def approved_projects_prepared_for_update(
             "num_records_prepared": final_df.height,
             "num_geocoded_input": input_heights["geocoded"],
             "num_archived_input": input_heights["archived"],
+            "num_repo_stats_input": input_heights["repo_stats"],
             "update_columns": list(final_df.columns),
             "preview": preview_metadata
         }
@@ -1231,8 +1721,19 @@ def approved_projects_update_status(
     
     # Convert DataFrame to list of dictionaries for batch update
     records_to_update = []
+    
+    # Get datetime columns from DataFrame schema
+    datetime_columns = {col for col, dtype in input_df.schema.items() if dtype == pl.Datetime}
+    
     for row in input_df.iter_rows(named=True):
-        record = {k: v for k, v in row.items() if v is not None}
+        record = {}
+        for k, v in row.items():
+            if v is not None:
+                # Convert datetime columns to ISO format strings for Airtable
+                if k in datetime_columns:
+                    record[k] = format_airtable_date(v)
+                else:
+                    record[k] = v
         records_to_update.append(record)
     
     # Perform batch update
@@ -1590,6 +2091,8 @@ defs = Definitions(
         approved_projects_geocoded,
         approved_projects_archive_candidates,
         approved_projects_archived,
+        approved_projects_repo_stats_candidates,
+        approved_projects_repo_stats,
         approved_projects_prepared_for_update,
         approved_projects_update_status,
         ysws_programs_sign_up_stats_candidates,

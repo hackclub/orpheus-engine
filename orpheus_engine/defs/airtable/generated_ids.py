@@ -220,6 +220,7 @@ class AirtableIDs:
             created_at_from_ysws_project_submission = "fldIqZtG7vbnZ7SpI"  # Name: Created At (from YSWS Project Submission)
             optional_override_hours_spent_from_ysws_project_submission_2 = "fld4zZEnyrcYl57db"  # Name: Optional - Override Hours Spent (from YSWS Project Submission) 2
             post_event_flight_stipend_reimbursement_requests = "fldcvYLWKIKjlJYc8"  # Name: Post Event - Flight Stipend Reimbursement Requests
+            post_event_hour_transfers = "fldtReVjBNoJytnoS"  # Name: Post Event - Hour Transfers
 
         class hackatime_projects:
             """IDs for Table 'hackatime_projects' (ID: tblIqliBgKvoNT3uD)"""
@@ -256,48 +257,29 @@ class AirtableIDs:
             TABLE_ID = "tblGW44enlxcYjDjS"
 
             email = "fldHtR3taM8g8CWXC"  # Name: Email
-            not_attending = "fldwErRiOx5KbNLfZ"  # Name: Not Attending
-            first_name = "fldZx3qAINejnw3iU"  # Name: First Name
-            last_name = "fldbrTWeaFL8qwwUK"  # Name: Last Name
+            checked_in = "fldawOqtBrNH0P65U"  # Name: Checked in?
+            legal_first_name_from_invite = "fldw1qqyRYFHIf8CZ"  # Name: Legal First Name (from Invite)
+            last_name_from_invite = "fldQWM079Q0ZNEGWj"  # Name: Last Name (from Invite)
+            preferred_name_from_invite = "fldgaZ6RUA0HK5WWl"  # Name: Preferred Name (from Invite)
+            slack_id_from_invite = "fldUbOb77RWYbuRR7"  # Name: Slack ID (from Invite)
             birthday = "fldbnLqZdBx5kHXIY"  # Name: Birthday
             current_age = "fld4F4Ku4wXE3PNFL"  # Name: Current Age
-            ip_address = "fldFAELbzAbzqxjK8"  # Name: IP Address
-            country = "fldS7C8f2BqUmL1Fw"  # Name: Country
-            total_raw_hackatime_hours = "fld1tdBSSLKnKOo0D"  # Name: totalRawHackatimeHours
-            total_approved_hackatime_hours = "fldJ1OC5ibU6vJe8t"  # Name: totalApprovedHackatimeHours
-            hours_to_island_viral = "fldN3iNiCnfvRbX0h"  # Name: hoursToIslandViral
-            hours_to_island_shipped = "fld5gJK1LhjnyFD8w"  # Name: hoursToIslandShipped
-            hours_to_island_unapproved = "fld4biaWuudNGMQ36"  # Name: hoursToIslandUnapproved
-            shell_hours = "fldqudjHM1ogatTQK"  # Name: shellHours
-            night_before_accommodations = "fldQXz5G0HhWL8eHs"  # Name: Night Before Accommodations
-            night_after_accommodations = "fldVZnsxfDf2khC18"  # Name: Night After Accommodations
-            spot_reservation_link = "fldaHT9x9qSkpnAm1"  # Name: Spot Reservation Link
-            invite_link = "fldKQXmuANywRragv"  # Name: Invite Link
-            waitlist_from_invite_link = "fld9paKaakz75hD8j"  # Name: Waitlist (from Invite Link)
-            needs_night_after_accommodations_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Night After Accommodations (from Invite Link)
-            needs_night_before_accommodations_from_invite_link = "flduy9M55adVDvHQz"  # Name: Needs Night Before Accommodations (from Invite Link)
-            international_from_invite_link = "fldcRWqdILiyjIl0t"  # Name: International (from Invite Link)
-            applying_for_merit_based_stipend_from_invite_link = "flduDzbEBvFizGah5"  # Name: Applying for Merit-Based Stipend (from Invite Link)
-            estimated_flight_stipend_from_invite_link = "fldX1jBj82erZFzU0"  # Name: Estimated Flight Stipend (from Invite Link)
-            estimated_flight_cost_from_invite_link = "fldPWUDHigNA15hgp"  # Name: Estimated Flight Cost (from Invite Link)
-            nearest_airport_code_s_from_invite_link = "fldDf3g0tw1Sndws6"  # Name: Nearest Airport Code(s) (from Invite Link)
-            flying_in_from_invite_link = "fldH3OibM55eFXnDb"  # Name: Flying In (from Invite Link)
-            parent_phone_number_from_invite_link = "fldLP8gNhuBy1rHNB"  # Name: Parent Phone Number (from Invite Link)
-            parent_email_from_invite_link = "fldmb1hFRFaT1QfDU"  # Name: Parent Email (from Invite Link)
-            parent_last_name_from_invite_link = "fldkz6tAZ8OVbGkdM"  # Name: Parent Last Name (from Invite Link)
-            parent_first_name_from_invite_link = "fldkicDndSp5wOHyV"  # Name: Parent First Name (from Invite Link)
-            address_from_invite_link = "fldTQZ5lpUL2rnr66"  # Name: Address (from Invite Link)
             pronouns_from_invite_link = "fldcuxidmKcpfl2Fk"  # Name: Pronouns (from Invite Link)
-            phone_number_from_invite_link = "fldYJoOWmLZgCxdyZ"  # Name: Phone Number (from Invite Link)
-            preferred_name_from_invite_link = "fldNu3oqylQbejPUv"  # Name: Preferred Name (from Invite Link)
-            flight_link = "fldUYY0rfWz6djZBY"  # Name: Flight Link
-            outbound_flight_number_from_flight = "fldsb1X5xwbBQXLr0"  # Name: Outbound Flight Number (from Flight)
-            outbound_flight_time_from_flight = "fldt92dh2zHqUxLfN"  # Name: Outbound Flight Time (from Flight)
-            inbound_flight_number_from_flight = "fldls1Vu7FdiNytMF"  # Name: Inbound Flight Number (from Flight)
-            hcb_email_from_flight = "fldjqB1ckBzAbY0Q3"  # Name: HCB Email (from Flight)
             total_hours_to_island = "fldRdGKymH2ZqdvI9"  # Name: totalHoursToIsland
-            purchased_hours = "fld1qbULdU2A5OZAD"  # Name: purchasedHours
-            purchased_hours_not_percent = "fldxezj4zSybad3ru"  # Name: Purchased Hours (not percent)
+            attending = "fldHjSf3Q6Hn6EADP"  # Name: Attending
+            i_prefer_to_be_with_my_requested_roommate_than_in_the_executive_suite_from_roommate_form_link = "fldn6RqTDKR6xRLLP"  # Name: I prefer to be with my requested roommate than in the executive suite. (from Roommate Form Link)
+            slack_ids_of_your_requested_roommates_from_roommate_form_link = "fldmZ5WqbPe6QTnpx"  # Name: Slack IDs of your requested roommates (from Roommate Form Link)
+            how_many_roommates_would_you_like_to_have_from_roommate_form_link = "fldQMpqxRR9qjUYd0"  # Name: How many roommates would you like to have? (from Roommate Form Link)
+            what_are_some_interests_you_have_from_roommate_form_link = "fldGO2fp1I8pZEdzg"  # Name: What are some interests you have? (from Roommate Form Link)
+            do_you_like_having_background_noise_music_in_your_room_from_roommate_form_link = "fldmnXN3f9fKsOgFg"  # Name: Do you like having background noise/music in your room? (from Roommate Form Link)
+            how_tidy_are_you_from_roommate_form_link = "fldjqwY6eky75PgOj"  # Name: How tidy are you? (from Roommate Form Link)
+            what_gender_would_you_like_to_be_paired_with_from_roommate_form_link = "fld4ISEEqOa1trjcd"  # Name: What gender would you like to be paired with? (from Roommate Form Link)
+            what_gender_do_you_identify_as_from_roommate_form_link = "fld0YwptqQFtWmM4y"  # Name: What gender do you identify as? (from Roommate Form Link)
+            building = "fldH5ETcRl4JhqhsE"  # Name: Building
+            room_number = "fldW9OXr5dUKLqngd"  # Name: Room Number
+            viral = "fld7jUN8anhT5Uiic"  # Name: Viral
+            first_name = "fldZx3qAINejnw3iU"  # Name: First Name
+            last_name = "fldbrTWeaFL8qwwUK"  # Name: Last Name
             loops_first_name = "fldK8GsyirxyStpWH"  # Name: Loops - firstName
             loops_last_name = "fldIeNq9sxBpeSsjz"  # Name: Loops - lastName
             loops_birthday = "fldg2PDzyVgntfhdt"  # Name: Loops - birthday
@@ -306,6 +288,8 @@ class AirtableIDs:
             referral_code = "fld5DXnUQLxcjn2Xk"  # Name: referral_code
             referral_type = "fldOlvpXGZfaKQEN7"  # Name: referral_type
             loops_shipwrecked_sign_up_position = "fld2qb4DViP6e9N4b"  # Name: Loops - shipwreckedSignUpPosition
+            ip_address = "fldFAELbzAbzqxjK8"  # Name: IP Address
+            country = "fldS7C8f2BqUmL1Fw"  # Name: Country
             participants_referred = "fld1KMBVLjJtxMtmZ"  # Name: Participants Referred
             number_of_referrals = "fldV0f6k0kjNhdDQJ"  # Name: Number of Referrals
             disqualified_from_raffle = "fld9MCo0sAfuEXYii"  # Name: Disqualified_from_raffle
@@ -334,12 +318,45 @@ class AirtableIDs:
             submitted_fourth_project = "fldkJCAM5lHwt5xyK"  # Name: submittedFourthProject
             fourth_project_approved = "fldQnuIrqn0Dy17Jd"  # Name: fourthProjectApproved
             user_exists_in_bay = "fldm1Ns9lKIaJNvnE"  # Name: userExistsInBay
+            total_raw_hackatime_hours = "fld1tdBSSLKnKOo0D"  # Name: totalRawHackatimeHours
+            total_approved_hackatime_hours = "fldJ1OC5ibU6vJe8t"  # Name: totalApprovedHackatimeHours
+            hours_to_island_viral = "fldN3iNiCnfvRbX0h"  # Name: hoursToIslandViral
+            hours_to_island_shipped = "fld5gJK1LhjnyFD8w"  # Name: hoursToIslandShipped
+            hours_to_island_unapproved = "fld4biaWuudNGMQ36"  # Name: hoursToIslandUnapproved
+            shell_hours = "fldqudjHM1ogatTQK"  # Name: shellHours
             loops_shipwrecked_user_exists_in_bay = "fldvXPNRWtyLALtIo"  # Name: Loops - shipwreckedUserExistsInBay
             created = "fldePoj75HS2SGHQb"  # Name: Created
             slack_id = "fldUlitvx7GDIhAxx"  # Name: slackId
             fetch_slack_id = "fldjxVuEeKbSxiKIT"  # Name: Fetch slackID
             user_attempted_identity = "fldoQWEvuaHkabMJS"  # Name: userAttemptedIdentity
+            night_before_accommodations = "fldQXz5G0HhWL8eHs"  # Name: Night Before Accommodations
+            night_after_accommodations = "fldVZnsxfDf2khC18"  # Name: Night After Accommodations
+            invite_link = "fldKQXmuANywRragv"  # Name: Invite Link
+            waitlist_from_invite_link = "fld9paKaakz75hD8j"  # Name: Waitlist (from Invite Link)
+            t_shirt_size_from_invite_link = "fldv0h6MzUGfPmlNG"  # Name: T-Shirt Size (from Invite Link)
+            needs_night_after_accommodations_from_invite_link = "fld8S9KyZjXjAEsFj"  # Name: Needs Night After Accommodations (from Invite Link)
+            needs_night_before_accommodations_from_invite_link = "flduy9M55adVDvHQz"  # Name: Needs Night Before Accommodations (from Invite Link)
+            international_from_invite_link = "fldcRWqdILiyjIl0t"  # Name: International (from Invite Link)
+            applying_for_merit_based_stipend_from_invite_link = "flduDzbEBvFizGah5"  # Name: Applying for Merit-Based Stipend (from Invite Link)
+            estimated_flight_stipend_from_invite_link = "fldX1jBj82erZFzU0"  # Name: Estimated Flight Stipend (from Invite Link)
+            estimated_flight_cost_from_invite_link = "fldPWUDHigNA15hgp"  # Name: Estimated Flight Cost (from Invite Link)
+            nearest_airport_code_s_from_invite_link = "fldDf3g0tw1Sndws6"  # Name: Nearest Airport Code(s) (from Invite Link)
+            flying_in_from_invite_link = "fldH3OibM55eFXnDb"  # Name: Flying In (from Invite Link)
+            parent_phone_number_from_invite_link = "fldLP8gNhuBy1rHNB"  # Name: Parent Phone Number (from Invite Link)
+            parent_email_from_invite_link = "fldmb1hFRFaT1QfDU"  # Name: Parent Email (from Invite Link)
+            parent_last_name_from_invite_link = "fldkz6tAZ8OVbGkdM"  # Name: Parent Last Name (from Invite Link)
+            parent_first_name_from_invite_link = "fldkicDndSp5wOHyV"  # Name: Parent First Name (from Invite Link)
+            address_from_invite_link = "fldTQZ5lpUL2rnr66"  # Name: Address (from Invite Link)
+            phone_number_from_invite_link = "fldYJoOWmLZgCxdyZ"  # Name: Phone Number (from Invite Link)
+            preferred_name_from_invite_link = "fldNu3oqylQbejPUv"  # Name: Preferred Name (from Invite Link)
+            flight_link = "fldUYY0rfWz6djZBY"  # Name: Flight Link
+            inbound_flight_number_from_flight = "fldls1Vu7FdiNytMF"  # Name: Inbound Flight Number (from Flight)
+            inbound_flight_time_from_flights = "fld1Jeue8UyTRuqFc"  # Name: Inbound Flight Time (from Flights)
+            outbound_flight_number_from_flight = "fldsb1X5xwbBQXLr0"  # Name: Outbound Flight Number (from Flight)
+            outbound_flight_time_from_flight = "fldt92dh2zHqUxLfN"  # Name: Outbound Flight Time (from Flight)
+            hcb_email_from_flight = "fldjqB1ckBzAbY0Q3"  # Name: HCB Email (from Flight)
             temp_2_hit_viral_wave = "fldZglg7aXOII3eng"  # Name: (Temp 2) - Hit viral wave
+            spot_reservation_link = "fldaHT9x9qSkpnAm1"  # Name: Spot Reservation Link
             need_based_stipend_application_link = "fldOFLcLMFAoHkoLw"  # Name: Need-Based Stipend Application Link
             what_s_something_only_you_can_bring_to_shipwrecked_from_need_based_stipend_application_link = "fldKncXwBUhZw66NT"  # Name: What's something only you can bring to Shipwrecked? (from Need-Based Stipend Application Link)
             what_are_you_currently_obsessed_with_that_has_nothing_to_do_with_hack_club_from_need_based_stipend_application_link = "fldkXPSD0PAq3mWu0"  # Name: What are you currently obsessed with, that has nothing to do with Hack Club? (from Need-Based Stipend Application Link)
@@ -352,16 +369,58 @@ class AirtableIDs:
             need_based_stipend_amount = "fld4DLwwlm006KSwr"  # Name: Need-Based Stipend Amount
             requested_reimbursement_from_flight = "fld77YzWZnEKkukmM"  # Name: Requested Reimbursement (from Flight)
             unaccompanied_minor_from_flight_link = "fldWx0IWw6VbmRSZk"  # Name: Unaccompanied Minor (from Flight Link)
-            t_shirt_size_from_invite_link = "fldv0h6MzUGfPmlNG"  # Name: T-Shirt Size (from Invite Link)
             spot_reservation_approved = "fld97KMRsRYNuRyXw"  # Name: Spot Reservation Approved
             trigger_nudge_email = "fldQ9HVZm3pqvxaCm"  # Name: trigger_nudge_email
-            inbound_flight_time_from_flights = "fld1Jeue8UyTRuqFc"  # Name: Inbound Flight Time (from Flights)
             flights_slack_id = "fldPqABnaNnj6JA4b"  # Name: Flights Slack ID
             spot_reservation_slack_id = "fldeZ91SJFYhtoAnL"  # Name: Spot Reservation Slack ID
+            purchased_hours = "fld1qbULdU2A5OZAD"  # Name: purchasedHours
+            purchased_hours_not_percent = "fldxezj4zSybad3ru"  # Name: Purchased Hours (not percent)
             public_flights_from_flight = "fldvOk0koArVFbzIq"  # Name: Public Flights (from Flight)
-            reimbursement_link = "fldeM9JbchxgwGOlO"  # Name: Reimbursement Link
-            reimbursement_amount = "fldMdawKVgVOOjlTT"  # Name: Reimbursement Amount
+            not_attending = "fldwErRiOx5KbNLfZ"  # Name: Not Attending
+            reimbursement_transaction_link = "fldeM9JbchxgwGOlO"  # Name: Reimbursement/Transaction Link
+            reimbursement_transaction_amount = "fldMdawKVgVOOjlTT"  # Name: Reimbursement/Transaction Amount
             rsvp_form_sent = "flddtApxrKX4EBTUf"  # Name: RSVP Form Sent
+            amount_needed = "fldWJ5D7VAIsiZydk"  # Name: Amount Needed
+            roommate_form_link = "fldKDcYpRxZPYUgN2"  # Name: Roommate Form Link
+            do_you_need_to_take_the_1_p_m_ferry_from_roommate_form_link = "fldl09n9yR2KpoDfL"  # Name: Do you need to take the 1 p.m. ferry? (from Roommate Form Link)
+            briefly_describe_your_situation_departing_from_roommate_form_link = "fld7rLXEto7S7CUYF"  # Name: Briefly describe your situation (Departing) (from Roommate Form Link)
+            departing_terminal_from_roommate_form_link = "fld6NHFbHCWCgSnPB"  # Name: Departing Terminal (from Roommate Form Link)
+            outbound_flight_number_from_roommate_form_link = "fldn5Sy70OkzRhrV6"  # Name: Outbound flight number (from Roommate Form Link)
+            time_of_departure_from_roommate_form_link = "fld7zQk8PTwHfJGuV"  # Name: Time of departure (from Roommate Form Link)
+            after_the_event_i_would_like_to_from_roommate_form_link = "fldyvoMsw7UeYmVRw"  # Name: After the event, I would like to: (from Roommate Form Link)
+            needs_accommodations_aug_11_from_roommate_form_link = "fldejF3hkyHrJ3EQv"  # Name: Needs Accommodations Aug 11 (from Roommate Form Link)
+            will_you_be_able_to_make_the_5_p_m_ferry_from_roommate_form_link = "fldrlylH9QOZIrwzG"  # Name: Will you be able to make the 5 p.m. ferry? (from Roommate Form Link)
+            briefly_describe_how_and_where_you_will_get_to_boston_from_roommate_form_link = "fldKLjSTgcXf7ZdTz"  # Name: Briefly describe how and where you will get to Boston (from Roommate Form Link)
+            arriving_terminal_from_roommate_form_link = "fldIfA5C9PIx1VBQU"  # Name: Arriving Terminal (from Roommate Form Link)
+            inbound_flight_number_from_roommate_form_link = "fldMbol4AJNmJKzOs"  # Name: Inbound flight number (from Roommate Form Link)
+            estimated_time_of_arrival_from_roommate_form_link = "fldfeZzVIBfVXnQrW"  # Name: Estimated time of arrival (from Roommate Form Link)
+            i_will_not_be_arriving_at_boston_logan_international_airport_from_roommate_form_link = "fldM5spOy4QvFpIN4"  # Name: I will not be arriving at Boston Logan International Airport (from Roommate Form Link)
+            upon_arrival_i_would_like_to_from_roommate_form_link = "fldvGh2vopUpKpUa0"  # Name: Upon arrival, I would like to (from Roommate Form Link)
+            needs_accommodations_aug_7_from_roommate_form_link = "fld9vQFqnpAKELjjK"  # Name: Needs Accommodations Aug 7 (from Roommate Form Link)
+            additional_dietary_restriction_allergy_info_from_roommate_form_link = "fldEfs5fpEB5zewyb"  # Name: Additional Dietary Restriction/Allergy Info (from Roommate Form Link)
+            severe_allergy_from_roommate_form_link = "fldY2Ky6YU9AG3nmA"  # Name: Severe Allergy (from Roommate Form Link)
+            custom_allergy_from_roommate_form_link = "fld4Lj0nywb7S9iNf"  # Name: Custom Allergy (from Roommate Form Link)
+            food_allergies_from_roommate_form_link = "fld6xyqShQyjHlnOu"  # Name: Food Allergies (from Roommate Form Link)
+            custom_dietary_restriction_from_roommate_form_link = "fldBGdX8RaMdZuUwU"  # Name: Custom Dietary Restriction (from Roommate Form Link)
+            dietary_restrictions_from_roommate_form_link = "fldeta09l4N9MbrJY"  # Name: Dietary Restrictions (from Roommate Form Link)
+            action_trigger_logistics_email = "fldJmd4bwpUdsSwMD"  # Name: action - trigger_logistics_email
+            staff = "fldLa5WoghBnFBVo0"  # Name: Staff
+            custom_gender_from_roomates = "fldSIp4QLOt7o98cj"  # Name: Custom Gender (from Roomates)
+            hcb_status = "fldL3XNgPleg2dRKT"  # Name: HCB Status
+            wise_user_id = "fld6OppGUzf61hqZN"  # Name: Wise User ID
+            wise_transfer_id = "fldMAKveYsXN1g9wT"  # Name: Wise Transfer ID
+            probably_fraud = "fld92X6xgVRqDTVKL"  # Name: Probably Fraud
+            looks_good = "fld6dFfSqLAsvlLfo"  # Name: Looks Good
+            transaction_notes = "fldUpdNrvHOjYlFbr"  # Name: transaction_notes
+            roommate_form = "fld0gnKTQmabX9jxf"  # Name: Roommate Form
+            flights = "fldWmCIogsvQl3Nli"  # Name: Flights
+            finished_hours = "fldW9071QhP4LGiHn"  # Name: Finished Hours
+            on_island = "fldaGAebbnFaTEdm3"  # Name: On Island
+            owed_prizes = "fld1OQjRBbBrk64Z5"  # Name: Owed Prizes
+            slack_id_for_ping = "fldF85cNGdZZgJKG1"  # Name: slack id for ping
+            day_of_prizes_form_link = "fldU7ynnx5eQisyko"  # Name: Day-of prizes form link
+            additional_info_from_day_of_prizes_form_link = "fld0FWmBFHNspg43d"  # Name: Additional Info (from Day-of prizes form link)
+            received_prize_from_day_of_prizes_form_link = "fld4ncM1RAivXcUBM"  # Name: Received Prize (from Day-of prizes form link)
 
 
     class highway:
@@ -426,6 +485,7 @@ class AirtableIDs:
             hours_spent_panathenaic_games = "fldyCFRjGB7sGMMJi"  # Name: hours_spent_panathenaic_games
             hackatime_set_up_at = "fld1X9TIKhVgP0P4I"  # Name: hackatime_set_up_at
             orders = "fldxu4NA7YMtY9oHJ"  # Name: Orders
+            phone_number_from_orders = "fld1euXABRRXI92Fg"  # Name: phone_number (from Orders)
             force_refresh_ysws_projects = "fldRvL6FlJ7RDIwTn"  # Name: force_refresh_ysws_projects
             loops_athena_award_first_logged_in_at = "flducWTMuVh0xpXCP"  # Name: Loops - athenaAwardFirstLoggedInAt
             zapier_added_to_athena_mailing_list_at = "fldQJHbZozaH7MskV"  # Name: Zapier - Added to Athena mailing list at
@@ -435,6 +495,8 @@ class AirtableIDs:
             referred_users_registered_users_count = "fldl2x5dLU4pxox8N"  # Name: referred_users_registered_users_count
             referred_users_count = "fldKkUQ312lzdgpLD"  # Name: referred_users_count
             referred_users_registered_users_edition = "fld1Bl83LyowhNubP"  # Name: referred_users_registered_users_edition
+            last_name_from_ysws_project_submission = "fldD0Xq6rcjWdr9al"  # Name: Last Name (from ysws_project_submission)
+            first_name_from_ysws_project_submission = "fldVVqv3at0W3jGAu"  # Name: First Name (from ysws_project_submission)
             profile_picture = "fldxLDUvCXQCDxfnr"  # Name: profile_picture
             project_unique_names = "fldxlzRtJrUWuwyKY"  # Name: project_unique_names
             approved_projects = "fldfQp5eDL8IEeVwH"  # Name: approved_projects
@@ -443,6 +505,12 @@ class AirtableIDs:
             email_slack_invites_copy = "fldiDAliUsDB7EQV3"  # Name: Email Slack Invites copy
             email_slack_invites_copy = "fldxB0bFgfFQ7kO8O"  # Name: Email Slack Invites copy
             panathenaic_games = "fldElsHozezXtVsIa"  # Name: panathenaic games
+            ordered_travel_stipend_money = "fldixCVcSIAlbTmvp"  # Name: ordered_travel_stipend_money
+            approved_for_parthenon = "fldNsAL6B65xfd6LC"  # Name: approved for parthenon
+            notes = "fld5wMQYthcOVbX1W"  # Name: notes
+            birthday_from_ysws_project_submission = "fldUk2PeUPG8VvOEh"  # Name: Birthday (from ysws_project_submission)
+            age = "fldYAKM8AtS3pBGS0"  # Name: age
+            parthenon_invite_sent = "fldMV9GAB9mbCe3sW"  # Name: parthenon invite sent?
 
         class email_slack_invites:
             """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
@@ -584,6 +652,11 @@ class AirtableIDs:
             geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
             temp_approved_by_dev = "fldWXDUQOzOvP2n7W"  # Name: temp Approved by Dev
             archive_hash = "fldIxgUiHJ4XtWmF5"  # Name: Archive - Hash
+            ysws_notable_links = "fld0UipcnSnWGrG0H"  # Name: YSWS Notable Links
+            repo_star_count = "fldYhr34qkhdJ8qMo"  # Name: Repo - Star Count
+            repo_stats_last_updated_at = "fldKm8IcRKJKY5mat"  # Name: Repo - Stats Last Updated At
+            repo_language = "fldHseqUz3wQtu0Ul"  # Name: Repo - Language
+            repo_exists = "fldrDVqbGZJXLpd9G"  # Name: Repo - Exists?
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -639,6 +712,7 @@ class AirtableIDs:
 
             name = "fldlE95RqYyq8DJW4"  # Name: Name
             slack_url = "fldb79ToRvdcXeqze"  # Name: Slack URL
+            slack_id = "fldojyNhEYyuZSo35"  # Name: Slack ID
             hcb_budget_fund = "fldStVwvzbzx7Ambm"  # Name: HCB Budget Fund
             weighted_grants_this_month = "fldPfA6UkbmKoKPE5"  # Name: Weighted Grants This Month
             weighted_grants_2025 = "fldhG2hMtQ73KZ0qq"  # Name: Weighted Grants–2025
