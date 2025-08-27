@@ -595,7 +595,6 @@ EXAMPLE JSON FORMAT
         ],
         "reasoning": {"effort": "high", "summary": "auto"},
         "text": {"verbosity": "low"},   # keep prose short, budget for search
-        "max_output_tokens": 15000
     }
     
     # Make the API call using Responses API with streaming + MCP tools
