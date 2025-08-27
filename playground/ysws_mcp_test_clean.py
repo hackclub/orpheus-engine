@@ -156,8 +156,48 @@ def fetch_project_from_airtable(record_id: str, airtable_token: str) -> Dict[str
         raise ValueError(f"Failed to fetch project from Airtable: {e}")
 
 
-def write_results_to_airtable(project_links: List[dict], record_id: str, airtable_token: str, 
-                             prompt: str = "", reasoning_summary: str = "", full_output_json: str = "") -> List[str]:
+def fetch_existing_mentions(project_record_id: str, airtable_token: str) -> List[Dict[str, Any]]:
+    """Fetch existing mentions for a project from YSWS Project Mentions table."""
+    if not airtable_token or not project_record_id:
+        return []
+    
+    try:
+        # Initialize Airtable API
+        api = Api(airtable_token)
+        base_id = "app3A5kJwYqxMLOgh"
+        table_id = "tbl5SU7OcPeZMaDOs"  # YSWS Project Mentions table
+        table = api.table(base_id, table_id)
+        
+        # Get all records linked to this project
+        records = table.all(formula=f"{{YSWS Approved Project}} = '{project_record_id}'")
+        
+        existing_mentions = []
+        for record in records:
+            fields = record.get('fields', {})
+            mention_data = {
+                'url': fields.get('URL', ''),
+                'headline': fields.get('Headline', ''),
+                'source': fields.get('Source', ''),
+                'date': fields.get('Date', ''),
+                'engagement_count': fields.get('Engagement Count'),
+                'engagement_type': fields.get('Engagement Type', '')
+            }
+            if mention_data['url']:  # Only include if we have a URL
+                existing_mentions.append(mention_data)
+        
+        if existing_mentions:
+            print(f"📋 Found {len(existing_mentions)} existing mentions for this project")
+            for mention in existing_mentions[:3]:  # Show first 3 as preview
+                print(f"   🔗 {mention['source']}: {mention['headline'][:50]}...")
+        
+        return existing_mentions
+        
+    except Exception as e:
+        print(f"⚠️ Error fetching existing mentions: {e}")
+        return []
+
+
+def write_results_to_airtable(project_links: List[dict], record_id: str, airtable_token: str) -> List[str]:
     """Write project link results to Airtable table."""
     if not airtable_token:
         print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN provided, skipping Airtable write")
@@ -210,10 +250,7 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
                 "Mentions Hack Club?": link.get("mentions_hack_club", False),
                 "Is Hack Club URL?": link.get("is_hack_club_url", False),
                 "YSWS Approved Project": [record_id] if record_id else [],
-                "Full JSON": full_json,
-                "Full Prompt": prompt,
-                "Full Prompt Reasoning Summary": reasoning_summary,
-                "Full Prompt Output JSON": full_output_json
+                "Full JSON": full_json
             }
             records_to_create.append(record_data)
         
@@ -245,6 +282,7 @@ def write_search_record_to_airtable(
     prompt: str,
     token_usage: dict,
     total_cost_usd: float,
+    runtime_seconds: float,
     airtable_token: str
 ) -> None:
     """
@@ -261,6 +299,12 @@ def write_search_record_to_airtable(
         table_id = "tblfU7k0cgzysujpH"          # <- new table
         table = api.table(base_id, table_id)
 
+        # Format runtime as h:mm:ss - try different formats
+        hours = int(runtime_seconds // 3600)
+        minutes = int((runtime_seconds % 3600) // 60)
+        seconds = int(runtime_seconds % 60)
+        runtime_formatted = f"{hours:01d}:{minutes:02d}:{seconds:02d}"
+        
         record_data = {
             "Project": [project_record_id] if project_record_id else [],
             "Found Project Mentions": mention_ids,                  # link field
@@ -271,12 +315,14 @@ def write_search_record_to_airtable(
             "Non-Cached Input Tokens": token_usage.get("non_cached_tokens", 0),
             "Cached Input Tokens": token_usage.get("cached_tokens", 0),
             "Output Tokens": token_usage.get("output_tokens", 0),
+            "Runtime (h:mm:ss)": int(runtime_seconds),  # Try as integer seconds
             "Estimated Cost": total_cost_usd
         }
 
         created_record = table.create(record_data)
         print(f"✅ Search record written to Airtable: {created_record['id']}")
         print(f"💰 Estimated cost: ${total_cost_usd:.4f}")
+        print(f"⏱️ Total runtime: {runtime_formatted}")
 
     except Exception as e:
         print(f"❌ Error writing search record: {e}")
@@ -291,6 +337,9 @@ if __name__ == "__main__":
     
     RECORD_ID = sys.argv[1]
     print(f"🎯 Using record ID: {RECORD_ID}")
+    
+    # Track script start time for runtime measurement
+    script_start_time = time.time()
     
     # Setup
     load_dotenv()
@@ -309,6 +358,32 @@ if __name__ == "__main__":
     # Set up client
     client = OpenAI(api_key=API_KEY)
     
+    # Initialize output capture as a list to avoid scope issues
+    output_log = []
+    original_print = print
+    
+    def custom_print(*args, **kwargs):
+        """Print to stdout and capture for Full Output Log."""
+        # Print to stdout normally
+        original_print(*args, **kwargs)
+        
+        # Capture the output by converting args to string
+        if args:
+            # Convert all args to strings and join them with spaces
+            text_parts = [str(arg) for arg in args]
+            separator = kwargs.get('sep', ' ')
+            text_line = separator.join(text_parts)
+            
+            # Add newline unless end parameter specifies otherwise
+            if kwargs.get('end', '\n') == '\n':
+                text_line += '\n'
+            
+            # Append to our log
+            output_log.append(text_line)
+    
+    # Replace print with our custom function
+    print = custom_print
+
     # Fetch project data from Airtable
     print(f"📋 Fetching project data for record: {RECORD_ID}")
     try:
@@ -316,6 +391,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ {e}")
         exit(1)
+    
+    # Fetch existing mentions for this project
+    existing_mentions = fetch_existing_mentions(RECORD_ID, AIRTABLE_TOKEN)
     
     # Generate schema-based prompt components
     def generate_example_json_from_schema() -> str:
@@ -380,12 +458,21 @@ if __name__ == "__main__":
     example_json = generate_example_json_from_schema()
     pydantic_schema = OSINTResponse.model_json_schema()
     
+    # Format existing mentions for the prompt
+    existing_mentions_text = ""
+    if existing_mentions:
+        existing_mentions_text = "\n\n--------------------------------\nEXISTING MENTIONS (DO NOT RETURN THESE)\nWe already know about these mentions - find NEW ones:\n"
+        for mention in existing_mentions:
+            existing_mentions_text += f"- {mention['source']}: {mention['headline']} ({mention['url']})\n"
+        existing_mentions_text += "--------------------------------"
+    
     prompt_content = f"""
 You are an OSINT link‑discovery agent. Your job: find where a given project has been shared or discussed online and return a single JSON object that exactly matches the Pydantic schema at the end.
 
 Focus on **viral surface area** (Reddit, Hacker News, X/Twitter, YouTube, Bluesky, Mastodon, Product Hunt, forums, blogs, news, app stores, itch.io, AUR, Chrome Web Store, Firefox Add-ons, etc.) and **official social profiles (for the project, not for the author)** for follower counts. Exclude SEO scrapings and bot mirrors.
 
 Return **JSON only** (no prose, no markdown). Must validate against the attached schema. Make conservative calls; only include links clearly about **this** project.
+{existing_mentions_text}
 
 --------------------------------
 INPUTS (provided above by the caller)
@@ -616,7 +703,7 @@ EXAMPLE JSON FORMAT
             end_time = time.time()
             duration = end_time - start_time
             
-            # Extract usage information from the completed response event
+            # Extract usage information and complete output from the completed response event
             if hasattr(event, 'response') and hasattr(event.response, 'usage') and event.response.usage:
                 response_usage = event.response.usage
                 print(f"📊 Usage from completed event: {response_usage}")
@@ -648,6 +735,21 @@ EXAMPLE JSON FORMAT
                 print(f"💰 Estimated cost: ${total_cost:.4f}")
             else:
                 print("⚠️ No usage information found in completed event")
+            
+            # Extract complete final output from the response
+            if hasattr(event, 'response') and hasattr(event.response, 'output') and event.response.output:
+                # Get the complete output text from the response object
+                for output_item in event.response.output:
+                    if getattr(output_item, 'type', '') == 'message':
+                        content = getattr(output_item, 'content', [])
+                        for content_part in content:
+                            if getattr(content_part, 'type', '') == 'output_text':
+                                complete_text = getattr(content_part, 'text', '')
+                                if complete_text:
+                                    full_output_text = complete_text
+                                    print(f"✅ Extracted complete output ({len(complete_text)} chars)")
+                                    break
+                        break
             
             # Debug: Show full response output array for MCP results
             if hasattr(response, 'output') and response.output:
@@ -825,17 +927,8 @@ Please return ONLY the corrected JSON with the proper data structure that valida
                 except Exception as fix_error:
                     print(f"❌ Structure-corrected JSON still failed: {fix_error}")
     
-    # Create a basic execution log for record keeping
-    full_output_log = f"""Search executed at {datetime.now().isoformat()}
-Project: {PROJECT_INPUTS.get('record_id', '')}
-Live URL: {PROJECT_INPUTS.get('live_url', '')}
-Code URL: {PROJECT_INPUTS.get('code_url', '')}
-Author: {PROJECT_INPUTS.get('first_name', '')} {PROJECT_INPUTS.get('last_name', '')}
-Duration: {duration:.2f} seconds
-Model: gpt-5
-Final output length: {len(final_output) if final_output else 0} characters
-Structured response items: {len(structured_response.items) if structured_response else 0}
-"""
+    # Use the captured output log
+    full_output_log = ''.join(output_log)
     
     # Write to Airtable using structured data
     mention_ids = []
@@ -849,10 +942,7 @@ Structured response items: {len(structured_response.items) if structured_respons
                 mention_ids = write_results_to_airtable(
                     project_items,
                     PROJECT_INPUTS.get("record_id", ""),
-                    AIRTABLE_TOKEN,
-                    prompt=prompt_content,  # Use actual full prompt text
-                    reasoning_summary=reasoning_content,  # Use accumulated reasoning
-                    full_output_json=final_output
+                    AIRTABLE_TOKEN
                 )
             else:
                 print("ℹ️ No project links found in structured response")
@@ -872,10 +962,7 @@ Structured response items: {len(structured_response.items) if structured_respons
                 mention_ids = write_results_to_airtable(
                     project_links,
                     PROJECT_INPUTS.get("record_id", ""),
-                    AIRTABLE_TOKEN,
-                    prompt=prompt_content,  # Use actual full prompt text
-                    reasoning_summary=reasoning_content,  # Use accumulated reasoning
-                    full_output_json=final_output
+                    AIRTABLE_TOKEN
                 )
             else:
                 print("ℹ️ No project_links found in raw output")
@@ -887,6 +974,10 @@ Structured response items: {len(structured_response.items) if structured_respons
         print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN - skipping Airtable write")
         mention_ids = []
     
+    # Calculate total script runtime
+    script_end_time = time.time()
+    total_runtime_seconds = script_end_time - script_start_time
+    
     # Create search record to track this execution
     if AIRTABLE_TOKEN:
         write_search_record_to_airtable(
@@ -897,7 +988,10 @@ Structured response items: {len(structured_response.items) if structured_respons
             prompt=prompt_content,
             token_usage=usage,
             total_cost_usd=total_cost,
+            runtime_seconds=total_runtime_seconds,
             airtable_token=AIRTABLE_TOKEN
         )
     
+    # Restore original print function
+    print = original_print
     print(f"\n✅ Done at {datetime.now().isoformat()}")
