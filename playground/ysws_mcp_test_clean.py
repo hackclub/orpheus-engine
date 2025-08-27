@@ -25,8 +25,10 @@ import sys
 import time
 import requests
 import json
+import io
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
+from contextlib import redirect_stdout
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -155,15 +157,15 @@ def fetch_project_from_airtable(record_id: str, airtable_token: str) -> Dict[str
 
 
 def write_results_to_airtable(project_links: List[dict], record_id: str, airtable_token: str, 
-                             prompt: str = "", reasoning_summary: str = "", full_output_json: str = "") -> None:
+                             prompt: str = "", reasoning_summary: str = "", full_output_json: str = "") -> List[str]:
     """Write project link results to Airtable table."""
     if not airtable_token:
         print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN provided, skipping Airtable write")
-        return
+        return []
     
     if not project_links:
         print("ℹ️ No project links to write to Airtable")
-        return
+        return []
     
     try:
         # Initialize Airtable API
@@ -218,17 +220,66 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
         # Write to Airtable in batches (max 10 per batch)
         batch_size = 10
         total_created = 0
+        created_ids: List[str] = []
         
         for i in range(0, len(records_to_create), batch_size):
             batch = records_to_create[i:i + batch_size]
             created_records = table.batch_create(batch)
+            created_ids.extend([r["id"] for r in created_records])
             total_created += len(created_records)
             print(f"📝 Created {len(created_records)} Airtable records (batch {i//batch_size + 1})")
         
         print(f"✅ Successfully wrote {total_created} records to Airtable")
+        return created_ids
         
     except Exception as e:
         print(f"❌ Error writing to Airtable: {e}")
+        return []
+
+
+def write_search_record_to_airtable(
+    project_record_id: str,
+    mention_ids: List[str],
+    full_output_log: str,
+    output_json: str,
+    prompt: str,
+    token_usage: dict,
+    total_cost_usd: float,
+    airtable_token: str
+) -> None:
+    """
+    Create a "search run" record and link it to the YSWS project +
+    mention records.
+    """
+    if not airtable_token:
+        print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN provided – skipping search-record write")
+        return
+
+    try:
+        api = Api(airtable_token)
+        base_id = "app3A5kJwYqxMLOgh"
+        table_id = "tblfU7k0cgzysujpH"          # <- new table
+        table = api.table(base_id, table_id)
+
+        record_data = {
+            "Project": [project_record_id] if project_record_id else [],
+            "Found Project Mentions": mention_ids,                  # link field
+            "Output JSON": output_json,
+            "Full Output Log": full_output_log,
+            "Prompt": prompt,
+            "Model": "gpt-5",
+            "Non-Cached Input Tokens": token_usage.get("non_cached_tokens", 0),
+            "Cached Input Tokens": token_usage.get("cached_tokens", 0),
+            "Output Tokens": token_usage.get("output_tokens", 0),
+            "Estimated Cost": total_cost_usd
+        }
+
+        created_record = table.create(record_data)
+        print(f"✅ Search record written to Airtable: {created_record['id']}")
+        print(f"💰 Estimated cost: ${total_cost_usd:.4f}")
+
+    except Exception as e:
+        print(f"❌ Error writing search record: {e}")
 
 
 if __name__ == "__main__":
@@ -461,6 +512,9 @@ EXAMPLE JSON FORMAT
     }
     
     # Make the API call using Responses API with streaming + MCP tools
+    log_buffer = io.StringIO()
+    
+    # Capture execution output (but we'll also print to console for real-time feedback)
     print("💡 Using streaming with MCP tools")
     stream = client.responses.create(**base_params, stream=True)
     
@@ -473,6 +527,10 @@ EXAMPLE JSON FORMAT
     reasoning_content = ""  # Track reasoning content
     reasoning_started_printed = False  # Track if we printed reasoning header
     current_tool_name = "unknown"  # Track current tool being called
+    
+    # Initialize usage tracking variables
+    usage = {}
+    total_cost = 0.0
     
     for event in stream:
         event_type = getattr(event, 'type', 'unknown')
@@ -558,6 +616,39 @@ EXAMPLE JSON FORMAT
             end_time = time.time()
             duration = end_time - start_time
             
+            # Extract usage information from the completed response event
+            if hasattr(event, 'response') and hasattr(event.response, 'usage') and event.response.usage:
+                response_usage = event.response.usage
+                print(f"📊 Usage from completed event: {response_usage}")
+                
+                # Store usage for later use
+                input_tokens = getattr(response_usage, 'input_tokens', 0)
+                output_tokens = getattr(response_usage, 'output_tokens', 0)
+                cached_tokens = 0
+                
+                # Get cached token count from input_tokens_details
+                if hasattr(response_usage, 'input_tokens_details'):
+                    cached_tokens = getattr(response_usage.input_tokens_details, 'cached_tokens', 0)
+                
+                non_cached_tokens = input_tokens - cached_tokens
+                
+                usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cached_tokens": cached_tokens,
+                    "non_cached_tokens": non_cached_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                }
+                
+                # Calculate costs using GPT-5 pricing
+                non_cached_cost = non_cached_tokens * 1.25 / 1_000_000
+                cached_cost = cached_tokens * 0.125 / 1_000_000
+                output_cost = output_tokens * 10.0 / 1_000_000
+                total_cost = non_cached_cost + cached_cost + output_cost
+                print(f"💰 Estimated cost: ${total_cost:.4f}")
+            else:
+                print("⚠️ No usage information found in completed event")
+            
             # Debug: Show full response output array for MCP results
             if hasattr(response, 'output') and response.output:
                 print(f"\n🔍 Response output array ({len(response.output)} items):")
@@ -615,13 +706,7 @@ EXAMPLE JSON FORMAT
     print(f"\n📊 Final Summary:")
     print(f"⏱️ Duration: {duration:.2f} seconds")
     
-    # Show usage stats if available
-    if hasattr(response, 'usage'):
-        print(f"📊 Usage: {response.usage}")
-        if hasattr(response.usage, 'output_tokens_details'):
-            if hasattr(response.usage.output_tokens_details, 'reasoning_tokens'):
-                reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
-                print(f"🧠 Reasoning tokens used: {reasoning_tokens:,}")
+    # Token usage and cost information already extracted during response.completed event
     
     # Print reasoning summary if found
     if reasoning_summary:
@@ -740,7 +825,20 @@ Please return ONLY the corrected JSON with the proper data structure that valida
                 except Exception as fix_error:
                     print(f"❌ Structure-corrected JSON still failed: {fix_error}")
     
+    # Create a basic execution log for record keeping
+    full_output_log = f"""Search executed at {datetime.now().isoformat()}
+Project: {PROJECT_INPUTS.get('record_id', '')}
+Live URL: {PROJECT_INPUTS.get('live_url', '')}
+Code URL: {PROJECT_INPUTS.get('code_url', '')}
+Author: {PROJECT_INPUTS.get('first_name', '')} {PROJECT_INPUTS.get('last_name', '')}
+Duration: {duration:.2f} seconds
+Model: gpt-5
+Final output length: {len(final_output) if final_output else 0} characters
+Structured response items: {len(structured_response.items) if structured_response else 0}
+"""
+    
     # Write to Airtable using structured data
+    mention_ids = []
     if structured_response and AIRTABLE_TOKEN:
         print(f"\n💾 Writing structured results to Airtable...")
         try:
@@ -748,7 +846,7 @@ Please return ONLY the corrected JSON with the proper data structure that valida
             project_items = [item.model_dump() for item in structured_response.items]
             
             if project_items:
-                write_results_to_airtable(
+                mention_ids = write_results_to_airtable(
                     project_items,
                     PROJECT_INPUTS.get("record_id", ""),
                     AIRTABLE_TOKEN,
@@ -758,9 +856,11 @@ Please return ONLY the corrected JSON with the proper data structure that valida
                 )
             else:
                 print("ℹ️ No project links found in structured response")
+                mention_ids = []
                 
         except Exception as e:
             print(f"❌ Error processing structured Airtable write: {e}")
+            mention_ids = []
     elif final_output and AIRTABLE_TOKEN:
         # Fallback to old parsing method if structured parsing failed
         print(f"\n💾 Fallback: Writing raw results to Airtable...")
@@ -769,7 +869,7 @@ Please return ONLY the corrected JSON with the proper data structure that valida
             parsed_output = json.loads(final_output)
             project_links = parsed_output.get("project_links", [])
             if project_links:
-                write_results_to_airtable(
+                mention_ids = write_results_to_airtable(
                     project_links,
                     PROJECT_INPUTS.get("record_id", ""),
                     AIRTABLE_TOKEN,
@@ -779,9 +879,25 @@ Please return ONLY the corrected JSON with the proper data structure that valida
                 )
             else:
                 print("ℹ️ No project_links found in raw output")
+                mention_ids = []
         except Exception as e:
             print(f"❌ Error with fallback Airtable write: {e}")
+            mention_ids = []
     elif not AIRTABLE_TOKEN:
         print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN - skipping Airtable write")
+        mention_ids = []
+    
+    # Create search record to track this execution
+    if AIRTABLE_TOKEN:
+        write_search_record_to_airtable(
+            project_record_id=PROJECT_INPUTS.get("record_id", ""),
+            mention_ids=mention_ids,
+            full_output_log=full_output_log,
+            output_json=final_output or "",
+            prompt=prompt_content,
+            token_usage=usage,
+            total_cost_usd=total_cost,
+            airtable_token=AIRTABLE_TOKEN
+        )
     
     print(f"\n✅ Done at {datetime.now().isoformat()}")
