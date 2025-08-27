@@ -43,6 +43,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "openai>=1.75.0",
     "pydantic>=2.11.3",
+    "aiohttp>=3.11.16",
 ]
 
 [project.optional-dependencies]

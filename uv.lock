@@ -3891,6 +3891,7 @@ name = "orpheus-engine"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "connectorx", version = "0.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "connectorx", version = "0.4.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "dagster" },
@@ -3940,6 +3941,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.11.16" },
     { name = "connectorx", specifier = ">=0.3.3" },
     { name = "dagster", specifier = ">=1.10.10,<1.11.0" },
     { name = "dagster-aws", specifier = ">=0.26.10,<0.27.0" },

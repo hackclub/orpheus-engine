@@ -5,71 +5,153 @@ Project search using GPT-5 with Brightdata MCP server for web and Reddit data.
 Environment variables required:
 - OPENAI_API_KEY: Your OpenAI API key
 - BRIGHTDATA_API_TOKEN: Your Brightdata API token for MCP server access
-- AIRTABLE_PERSONAL_ACCESS_TOKEN: Your Airtable personal access token (optional)
+- AIRTABLE_PERSONAL_ACCESS_TOKEN: Your Airtable personal access token
+
+Usage:
+1. Set the RECORD_ID variable below to an actual Airtable record ID
+2. Run the script to automatically fetch project data and perform OSINT research
+3. Results will be saved back to Airtable with comprehensive link data
+
+The script fetches from table tblzWWGUYHVH7Zyqf these fields:
+- 'Playable URL' -> live_url
+- 'Code URL' -> code_url  
+- 'First Name' -> first_name
+- 'Last Name' -> last_name
+- 'Geocoded - Country' -> author_country
 """
 
 import os
+import sys
 import time
 import requests
 import json
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from pyairtable import Api
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # MCP server configuration
 MCP_SERVER_URL = "https://zachmcp.ngrok.io/mcp"
 
 
-# Pydantic models for structured response
+# Improved Pydantic models for structured response
 class Engagement(BaseModel):
-    upvotes: Optional[int] = None
-    comments: Optional[int] = None
-    views: Optional[int] = None
-    likes: Optional[int] = None
+    primary_label: Literal[
+        'upvotes','points','likes','reviews','stars','reactions','votes','users',
+        'views','comments','followers','claps','favorites','subscribers','downloads','installs','other'
+    ]
+    primary_value: int = Field(ge=0)
+    breakdown: Dict[str, int] = Field(default_factory=dict)
+    sampled_at_utc: str  # ISO 8601 UTC
 
 
-class ProjectLink(BaseModel):
-    title: str
-    canonical_url: str
-    platform: Optional[str] = None
-    date: Optional[str] = None  # YYYY-MM-DD
+class Actor(BaseModel):
+    handle: Optional[str] = None          # canonical handle if present
+    display_name: Optional[str] = None
+    role: Literal['author','team','official_account','third_party','unknown'] = 'unknown'
+    profile_url: Optional[str] = None
+    followers: Optional[int] = None
+
+
+class Item(BaseModel):
+    title: Optional[str] = None
+    url: str
+    canonical_url: Optional[str] = None
+    platform: str
+    kind: Literal['post','profile','article','app_listing','video','forum_thread','directory','other'] = 'post'
     lang: Optional[str] = None
-    match: Optional[str] = None  # direct_link|exact_phrase|author_reference
-    match_confidence: Optional[float] = None  # 1.0|0.8|0.6
+    published_at: Optional[str] = None      # YYYY-MM-DD (preferred; never empty after fallback)
+    observed_at_utc: str                    # ISO 8601 UTC (required)
+    date_source: Optional[Literal['platform_json','html_time','og_meta','microdata','archive','scraped_text','observed_at']] = None
+    date_confidence: Optional[Literal['high','medium','low']] = None
+
+    match_basis: Literal['direct_link','exact_phrase','author_reference','profile','listing','other']
+    match_confidence: float = Field(ge=0.0, le=1.0)
     evidence: Optional[str] = None
+
+    author: Optional[Actor] = None
     engagement: Optional[Engagement] = None
-    score: Optional[int] = None
-    mentions_hack_club: bool = False
-    hack_club_prominence: int = 0  # 0-100
-    author_handle: Optional[str] = None
-    author_name: Optional[str] = None
-    author_relationship: Optional[str] = None  # self_post|team_post|third_party
     external_id: Optional[str] = None
-    publish_date: Optional[str] = None  # YYYY-MM-DD
+
+    mentions_hack_club: Optional[bool] = False
+    hack_club_prominence: Optional[int] = 0  # 0-100
+    is_hack_club_url: Optional[bool] = False  # Whether this URL is published BY Hack Club
+
+    mirror_urls: List[str] = []
+    tags: List[str] = []
+
+
+class Summary(BaseModel):
+    platforms_present: Dict[str, int] = Field(default_factory=dict)  # platform -> item count
+    totals: Dict[str, int] = Field(default_factory=dict)             # e.g., total_upvotes, total_likes, total_comments
+    notes: Optional[str] = None
 
 
 class Meta(BaseModel):
-    now_utc: str  # YYYY-MM-DDTHH:MM:SSZ
-    live_url: str
-    code_url: str
+    now_utc: str
+    live_url: Optional[str] = None
+    code_url: Optional[str] = None
+    authors: List[Actor] = []
     search_complete: bool
+    query_budget: Dict[str, int] = Field(default_factory=dict)  # counts of queries/tool calls
+    excluded_domains: List[str] = []
+    stop_reason: Optional[str] = None
 
 
 class Diagnostics(BaseModel):
-    distinctive_terms: List[str] = []
-    authors_detected: List[str] = []
-    excluded_scopes: List[str] = []
+    notes: Optional[str] = None
+    attempts: Dict[str, Dict[str, Any]] = Field(default_factory=dict)     # per-platform attempt stats
+    date_report: Dict[str, Any] = Field(default_factory=dict)             # counts by date_source/confidence, missing
+    excluded: List[str] = []                                              # URLs/domains excluded
 
 
 class OSINTResponse(BaseModel):
     meta: Meta
+    items: List[Item]
+    summary: Summary
     diagnostics: Diagnostics
-    links: List[ProjectLink]
+
+
+def fetch_project_from_airtable(record_id: str, airtable_token: str) -> Dict[str, Any]:
+    """Fetch project details from Airtable."""
+    if not airtable_token:
+        raise ValueError("No AIRTABLE_PERSONAL_ACCESS_TOKEN provided")
+    
+    try:
+        # Initialize Airtable API
+        api = Api(airtable_token)
+        base_id = "app3A5kJwYqxMLOgh"
+        table_id = "tblzWWGUYHVH7Zyqf"
+        table = api.table(base_id, table_id)
+        
+        # Fetch the record
+        record = table.get(record_id)
+        fields = record.get('fields', {})
+        
+        # Extract the required fields
+        project_data = {
+            "live_url": fields.get('Playable URL', ''),
+            "code_url": fields.get('Code URL', ''),
+            "first_name": fields.get('First Name', ''),
+            "last_name": fields.get('Last Name', ''),
+            "author_country": fields.get('Geocoded - Country', ''),
+            "record_id": record_id
+        }
+        
+        print(f"✅ Fetched project data:")
+        print(f"   🔗 Live URL: {project_data['live_url']}")
+        print(f"   💻 Code URL: {project_data['code_url']}")
+        print(f"   👤 Author: {project_data['first_name']} {project_data['last_name']}")
+        print(f"   🌍 Country: {project_data['author_country']}")
+        
+        return project_data
+        
+    except Exception as e:
+        raise ValueError(f"Failed to fetch project from Airtable: {e}")
 
 
 def write_results_to_airtable(project_links: List[dict], record_id: str, airtable_token: str, 
@@ -97,13 +179,35 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
             # Format the full JSON with 4-space indentation
             full_json = json.dumps(link, indent=4, ensure_ascii=False)
             
+            # Prefer published_at; if missing, write the observed date's YYYY-MM-DD
+            date_val = link.get("published_at")
+            if not date_val and link.get("observed_at_utc"):
+                date_val = link["observed_at_utc"][:10]  # YYYY-MM-DD
+            
+            # Debug date extraction
+            print(f"🔍 Date extraction for {link.get('title', 'No title')[:30]}...")
+            print(f"   published_at: {link.get('published_at')}")
+            print(f"   observed_at_utc: {link.get('observed_at_utc')}")
+            print(f"   final date_val: {date_val}")
+            
+            # Try to map engagement data to the new Airtable fields
+            engagement_count = None
+            engagement_type = None
+            eng = link.get("engagement") or {}
+            if eng:
+                engagement_count = eng.get("primary_value")
+                engagement_type = eng.get("primary_label")
+            
             record_data = {
-                "Date": link.get("date") or link.get("publish_date"),  # YYYY-MM-DD
-                "Source": link.get("platform"),  # ex. Hacker News, Reddit
-                "Headline": link.get("title"),  # ex. Show HN: Base, an SQLite database editor for macOS
-                "URL": link.get("canonical_url") or link.get("url", ""),
-                "Upvotes": link.get("engagement", {}).get("upvotes") if link.get("engagement") else None,  # # of upvotes
-                "Mentioned Hack Club?": link.get("mentions_hack_club", False),  # true / false
+                "Date": date_val,
+                "Source": link.get("platform"),
+                "Headline": link.get("title"),
+                "URL": link.get("canonical_url") or link.get("url"),
+                "Engagement Count": engagement_count,
+                "Engagement Type": engagement_type,
+                "Mentions Hack Club?": link.get("mentions_hack_club", False),
+                "Is Hack Club URL?": link.get("is_hack_club_url", False),
+                "YSWS Approved Project": [record_id] if record_id else [],
                 "Full JSON": full_json,
                 "Full Prompt": prompt,
                 "Full Prompt Reasoning Summary": reasoning_summary,
@@ -128,6 +232,15 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
 
 
 if __name__ == "__main__":
+    # Check for command line arguments
+    if len(sys.argv) != 2:
+        print("❌ Usage: python ysws_mcp_test_clean.py <RECORD_ID>")
+        print("   Example: python ysws_mcp_test_clean.py rectC2FMjtHeP4Xy0")
+        sys.exit(1)
+    
+    RECORD_ID = sys.argv[1]
+    print(f"🎯 Using record ID: {RECORD_ID}")
+    
     # Setup
     load_dotenv()
     API_KEY = os.getenv("OPENAI_API_KEY")
@@ -145,17 +258,13 @@ if __name__ == "__main__":
     # Set up client
     client = OpenAI(api_key=API_KEY)
     
-    # ============================================================================
-    # CUSTOMIZE THIS SECTION FOR YOUR PROJECT
-    # ============================================================================
-    PROJECT_INPUTS = {
-        "live_url": "",
-        "code_url": "https://github.com/USERNAME/PROJECT",
-        "project_name": "Project Name", 
-        "author_name": "Author Name",
-        "record_id": "YOUR_RECORD_ID"  # Airtable record ID for this project
-    }
-    # ============================================================================
+    # Fetch project data from Airtable
+    print(f"📋 Fetching project data for record: {RECORD_ID}")
+    try:
+        PROJECT_INPUTS = fetch_project_from_airtable(RECORD_ID, AIRTABLE_TOKEN)
+    except Exception as e:
+        print(f"❌ {e}")
+        exit(1)
     
     # Generate schema-based prompt components
     def generate_example_json_from_schema() -> str:
@@ -165,39 +274,48 @@ if __name__ == "__main__":
                 now_utc="2025-08-25T12:00:00Z",
                 live_url=PROJECT_INPUTS['live_url'],
                 code_url=PROJECT_INPUTS['code_url'],
-                search_complete=True
+                authors=[Actor(handle="example_user", display_name="Example User", role="author")],
+                search_complete=True,
+                query_budget={"google": 10, "reddit": 5},
+                stop_reason="complete"
             ),
-            diagnostics=Diagnostics(
-                distinctive_terms=["term1", "term2"],
-                authors_detected=["Name (@handle)"],
-                excluded_scopes=["https://github.com/user/repo"]
-            ),
-            links=[
-                ProjectLink(
+            items=[
+                Item(
                     title="Example Title",
+                    url="https://example.com/post", 
                     canonical_url="https://example.com/post",
                     platform="Reddit",
-                    date="2025-08-25",
+                    kind="post",
                     lang="en",
-                    match="direct_link",
+                    published_at="2025-08-25",
+                    observed_at_utc="2025-08-25T12:00:00Z",
+                    date_source="platform_json",
+                    date_confidence="high",
+                    match_basis="direct_link",
                     match_confidence=1.0,
-                    evidence="short quote proving it's THIS project",
+                    evidence="Links to the project repository",
+                    author=Actor(handle="example_user", display_name="Example User", role="third_party"),
                     engagement=Engagement(
-                        upvotes=123,
-                        comments=45,
-                        views=1000,
-                        likes=67
+                        primary_label="upvotes",
+                        primary_value=123,
+                        breakdown={"upvotes": 123, "comments": 45},
+                        sampled_at_utc="2025-08-25T12:00:00Z"
                     ),
-                    score=85,
-                    mentions_hack_club=False,
-                    hack_club_prominence=0,
-                    author_handle="example_user",
-                    author_name="Example User",
-                    author_relationship="third_party",
-                    external_id="t3_abc123",
-                    publish_date="2025-08-25"
+                    external_id="123",
+                    mirror_urls=[],
+                    tags=["launch"]
                 )
-            ]
+            ],
+            summary=Summary(
+                platforms_present={"Hacker News": 1},
+                totals={"points": 120, "comments": 45},
+                notes=None
+            ),
+            diagnostics=Diagnostics(
+                notes="Found 3 platforms with mentions",
+                attempts={"reddit": {"queries_run": 5, "hits_seen": 3, "items_included": 1}},
+                date_report={"platform_json": 2, "html_time": 1, "missing": 0}
+            )
         )
         return example.model_dump_json(indent=2)
     
@@ -212,219 +330,112 @@ if __name__ == "__main__":
     pydantic_schema = OSINTResponse.model_json_schema()
     
     prompt_content = f"""
-You are an expert OSINT-style web researcher. Your job is to uncover EVERY public place a specific project has been shared or discussed online—from major platforms to tiny forums—while returning a clean, consistent JSON result that lets us recompute scores later without re-fetching any pages. Prioritize action: use tools immediately to surface links, limit internal reasoning to brief reflections, and avoid loops by capping iterations at 5 or when <3 new unique links are found in two consecutive iterations. **Exception:** even if the early-stop condition is met, perform one full AUTHOR SWEEP per known author on priority platforms (Reddit/X/YouTube).
+You are an OSINT link‑discovery agent. Your job: find where a given project has been shared or discussed online and return a single JSON object that exactly matches the Pydantic schema at the end.
 
-############################################
-# OBJECTIVE
-############################################
-Maximize recall: aggressively find valid links across all time periods, including major platforms (Reddit, Hacker News, Twitter/X, YouTube, YouTube Shorts, Stack Overflow, Mastodon/Fediverse, Bluesky, TikTok, Instagram), multilingual/regional sites, mirrors, archives, niche communities, bookmarking services, and cross-posts.
+Focus on **viral surface area** (Reddit, Hacker News, X/Twitter, YouTube, Bluesky, Mastodon, Product Hunt, forums, blogs, news, app stores, itch.io, AUR, Chrome Web Store, Firefox Add-ons, etc.) and **official social profiles (for the project, not for the author)** for follower counts. Exclude SEO scrapings and bot mirrors.
 
-PRIORITY PLATFORMS: Focus heavily on Reddit (all relevant subreddits), Hacker News, Twitter/X, and YouTube as these are primary viral sharing platforms.
+Return **JSON only** (no prose, no markdown). Must validate against the attached schema. Make conservative calls; only include links clearly about **this** project.
 
-Generate queries in multiple languages (translate key terms to the author's country language + Spanish, Japanese, Chinese, Russian, etc., based on global relevance). Pivot intelligently from fingerprints (phrases, filenames, author handles, repo name, slugs). Chain searches from discovered URLs, authors, or related links in evidence/snippets.
-
-Precision is critical: include ONLY links unambiguously referring to THIS exact project (e.g., exclude similar projects without matching fingerprints). When uncertain, exclude.
-
-############################################
-# CONSTRAINTS
-############################################
-- Treat YouTube vs YouTube Shorts separately (Shorts = URLs under /shorts/).
-- Return JSON ONLY (no prose/markdown), conforming to the schema at the end.
-- Use multiple search engines (Google **and** Bing) plus platform-native search (e.g., Reddit, YouTube, X) for each query family. Do not rely on a single engine.
-
-############################################
-# FINGERPRINT & DISCOVERY MINDSET
-############################################
-1) Deep fingerprint (from LIVE_URL and/or CODE_URL):
-- Capture title/H1, meta/og title & description, canonical links, author names/handles, distinctive phrases.
-- Build URL VARIANTS/FAMILY:
-  • For GitHub/GitLab/Code hosts: include root repo, sub-repos, and slug-family patterns:
-    - ROOT: https://github.com/<owner>/<slug>
-    - SUBS: any repos whose name **starts with** <slug> or contains <slug> as a token (case-insensitive), discovered from README, submodules, org listing, and links on repo pages (e.g., <slug>-pcb, <slug>-firmware, <slug>-app).
-    - OWNER-SCOPED: https://github.com/<owner>/*<slug>* (case-insensitive, tokenized).
-  • Generate http/https, www/no-www, trailing slash, and tracking-free variants.
-- Build SYNONYMS/MORPHOLOGY lists for project descriptors (store in diagnostics.distinctive_terms):
-  • Hyphenation/spacing: e‑ink | eink | "e ink"; e‑paper | epaper | "e paper".
-  • Category synonyms: DAP | "digital audio player" | "music player" (example) — generalize to the project domain.
-  • Progress verbs: review | WIP | prototype | **finished** | completed | update | "first prototype" | "show & tell" | "build log".
-  • Distinctive chips/parts/filenames/handles from README (ICs, SoCs, BOM parts, product nicknames).
-- Store in diagnostics: url_variants_used, distinctive_terms, authors_detected.
-- If LIVE_URL inaccessible, use CODE_URL, archives, mirrors, or discovered pages.
-
-2) Be aggressive and action-oriented:
-- Start broad, then pivot to niche/long-tail/multilingual.
-- Follow author profiles, cross-posts, linkbacks; chain from discovered URLs.
-- Use web search tools extensively—run multiple parallel searches (Google/Bing/native) with different strategies per iteration.
-
-3) Iterations & stopping:
-- Cap at 5 iterations OR when <3 new unique links are found in two consecutive iterations.
-- **Exception (MANDATORY):** run one full **AUTHOR SWEEP** per known author on Reddit, X, and YouTube even if stopping criteria are hit.
-
-############################################
-# PLATFORM-SPECIFIC SEARCH STRATEGIES
-############################################
-Reddit (first-class target):
-- Run ALL of the following in parallel for 3–5 query shapes each:
-  A) Google/Bing `site:reddit.com` queries using (repo-family URLs) OR (synonym phrases) with OR-expansion and quoted/unquoted variants.
-  B) **Reddit native search** (`https://www.reddit.com/search/?q=<query>&sort=new`) with combinations of:
-     • <project name OR repo slug OR owner/author handle>
-     • PLUS synonyms/morphology (e.g., e-ink/eink, DAP/digital audio player)
-     • PLUS progress verbs (finished/completed/prototype/update/review/WIP)
-  C) **Author Sweep (MANDATORY once author is known):**
-     • Enumerate `https://www.reddit.com/user/<handle>/submitted/.json?limit=100` (paginate if needed).
-     • Fuzzy match (≥0.7) on title/selftext against (project name, repo-family, synonyms, progress verbs).
-     • Include crossposts via `crosspost_parent_list` when present.
-- Subreddit expansion (seed list; adapt to domain): `PrintedCircuitBoard, KiCad, electronics, DIY, 3Dprinting, headphones, DigitalAudioPlayer, audiophile, ipod, eink, raspberry_pi, arduino, esp32` (and other topical neighbors).
-- Host variants fallback: also try `old.reddit.com` and `np.reddit.com` (search engines sometimes miss/lag).
-- Evidence extraction: use the permalink; capture title, author (u/...), body excerpt, and any direct repo links in OP/top comments.
-
-Hacker News:
-- `site:news.ycombinator.com` queries for live/code URLs, titles, author names/handles, and distinctive phrases.
-- Use HN item JSON for metadata when possible.
-
-Twitter/X:
-- Search for (repo-family URLs, project name, author handle, distinctive phrases).
-- Enumerate author timeline if handle is known; capture permalinks to tweets and any quoted retweets.
-
-YouTube:
-- Search video titles/descriptions for project name, synonyms, and distinctive terms.
-- Treat Shorts separately (`/shorts/`).
-- Enumerate channel uploads if the author is known.
-
-Other platforms (Stack Overflow/StackExchange, Mastodon/Fediverse, Bluesky, TikTok, Instagram, bookmarking sites like Hatena/Pinboard, regional forums):
-- Use `site:` operators + synonyms + progress verbs.
-- For author-known platforms, enumerate recent posts where possible.
-
-############################################
-# SEARCH QUERY EXAMPLES (DIVERSE RECIPES)
-############################################
-Direct:
-- "<project name>" | "<repo slug>" | "<owner>/<slug>" | "<live URL>"
-
-Author-focused:
-- "<author handle> <project>" | "<author handle> <synonym>" | "user:<author handle> <project>"
-
-Platform-specific:
-- Reddit (Google/Bing): `site:reddit.com ("<repo-slug>" OR "<owner>/*<slug>*" OR "<project name>") (e-ink OR eink OR "e paper") (DAP OR "digital audio player" OR "music player")`
-- Reddit (native): `"<repo-slug>"` OR `"<owner> <slug>"` OR `"u:<authorHandle> <synonym>"` combined with `(finished|completed|prototype|update|review|WIP)`
-- HN: `site:news.ycombinator.com <project name OR owner OR slug>`
-- X: `<project name>` OR `<slug>` OR `<owner>` OR distinctive phrases, plus URL variants.
-- YouTube: `<project name|slug|synonym> review | build | prototype | demo` and filter for `/shorts/` when needed.
-
-Problem/Use-case:
-- `"<problem the project solves>" discussion | reddit | alternatives | vs <similar tools>`
-
-Multilingual (examples):
-- Spanish/ja/zh/ru + author’s language: translate "<category term(s)>" + "<project name/slug>" + progress verbs.
-
-############################################
-# HANDLING INACCESSIBLE PAGES
-############################################
-If a page fails to load or content is gated:
-- Retry immediately via archives: query “wayback machine <URL>” or “archive <URL>” to fetch snapshots.
-- If archive fails, query “<URL> cached” or search snippets across engines.
-- If still blocked, pivot to related queries (e.g., "<project name> <site> discussion") or multilingual equivalents; extract from snippets if needed.
-- Document attempts in diagnostics.notes (e.g., "Page X failed; used Wayback for evidence"). Exhaust options before skipping.
-
-############################################
-# STRICT INCLUSION CRITERIA
-############################################
-Include only if ≥1 condition met (store evidence quote):
-(1) **Direct link** to LIVE_URL/CODE_URL **or any repo-family URL variant** → `match_confidence = 1.0`.
-(2) **Exact phrase match** to a distinctive, project-unique phrase → `match_confidence = 0.8`.
-(3) **Known author + contextual match**: same author handle AND (title/selftext contains ≥1 synonym AND ≥1 progress/descriptor OR falls within the project’s active date window) → `match_confidence = 0.6`.
-Reject <0.6 or if matches similar but different projects.
-
-############################################
-# SELF-SCOPE EXCLUSIONS (MANDATORY)
-############################################
-Exclude project's own pages/subpages:
-A) LIVE_SCOPE: Exclude origin matching LIVE_URL and paths starting with its path (or entire origin if root).
-B) CODE_SCOPE: For GitHub/etc., exclude repo root paths (e.g., `/username/reponame/*`); include platform blogs/explore.
-C) Mirrors/archives of excluded pages remain excluded (cite in evidence if useful).
-Store scopes in `diagnostics.exclusion_scopes`; include up to 10 excluded examples in `diagnostics.excluded_examples`.
-
-############################################
-# CANONICALIZATION, PERMALINKS, DEDUPE
-############################################
-- Required `canonical_url`: (1) rel="canonical", (2) og:url, (3) resolved URL (tracking stripped).
-- Prefer permalinks over listings; use `index_only` if no permalink.
-- Dedupe by `canonical_url`; track `mirror_urls` for duplicates/mirrors.
-
-############################################
-# PLATFORM CANONICAL NAME MAPPING
-############################################
-Use consistent `platform` values (e.g., Hacker News, Reddit, X, YouTube (video), YouTube (Shorts), Qiita, Zhihu, Hatena Bookmark, Major Tech Press, DEV Community, Hashnode, Medium, Substack, Personal Blog/Newsletter, Other). Set `platform_detected_from_domain`.
-
-############################################
-# METADATA, DATES, NUMERIC RULES
-############################################
-- `author_handle`: lowercase; `author_name`: as displayed; `author_relationship`: self_post | team_post | third_party.
-- `external_id`: platform ID if present.
-- Dates: `publish_date` as YYYY-MM-DD. Include `precision` fields; compute relatives from NOW_UTC. Set `source/raw`.
-- Engagement: normalized integers (parse “1.2k”). Raw in `score_breakdown.engagement_raw`. Set `observed_at/confidence/extraction_method`.
-- Required: `language` (e.g., "en", "ja", "es", "zh-cn").
-- `engagement_summary` (string|null) for raw notes (e.g., "115 points, 12 comments").
-
-############################################
-# SCORING
-############################################
-Provide `score_breakdown/score_inputs` for recomputation. Engagement normalization E ∈ [0,1]:
-- HN/Reddit/Lobsters: E = 0.7*log1p(upvote_count)/log1p(500) + 0.3*log1p(comment_count)/log1p(200)
-- Product Hunt: E = 0.8*log1p(upvote_count)/log1p(1000) + 0.2*log1p(comment_count)/log1p(300)
-- YouTube (video): E = 0.6*log1p(view_count)/log1p(1_000_000) + 0.2*log1p(like_count)/log1p(50_000) + 0.2*log1p(comment_count)/log1p(5_000)
-- YouTube (Shorts): E = 0.7*log1p(view_count)/log1p(5_000_000) + 0.2*log1p(like_count)/log1p(50_000) + 0.1*log1p(comment_count)/log1p(5_000)
-- Hatena/bookmarking: E = log1p(upvote_count)/log1p(500)
-- News/Blogs without counters: E = 0
-Platform authority W_platform: HN=1.00, Reddit=0.95, Product Hunt=0.90, YouTube(video)=0.85, YouTube(Shorts)=0.80, X=0.75, Bluesky=0.70, Lobsters=0.70, Hatena=0.65, Qiita=0.70, Zhihu=0.65, Major Tech Press=1.00, DEV Community=0.70, Hashnode=0.65, Medium=0.65, Substack=0.65, Personal Blog/Newsletter=0.55, Other=0.60
-Originality bonus O: +0.10 if original article/post/video; else 0 (include `originality_rationale`).
-Recency factor R: 1.00 if within 365 days of NOW_UTC; else 0.85.
-Final score S = round(100 * W_platform * R * (0.9*E + 0.1*O))
-Include `version/now_utc/platform_weight/E_components/R_base_date/O_applied`.
-
-############################################
-# HACK CLUB PROMINENCE
-############################################
-0 = not mentioned; 50 = minor (quote); 100 = prominent (quote in justification).
-
-############################################
-# CONSISTENCY GUARANTEES
-############################################
-- Enforce exclusions. Required fields non-null where specified.
-- Sort `project_links` by `link_score` DESC, then `publish_date` DESC (null last), then `canonical_url` ASC.
-- One per unique canonical; use mirrors for dupes.
-
-############################################
-# OUTPUT
-############################################
-Return JSON ONLY validating against schema. If no results, `project_links: []`, `search_complete: true`, explain in `diagnostics.notes`.
-
-############################################
-# INPUTS
-############################################
+--------------------------------
+INPUTS (provided above by the caller)
 - LIVE_URL: {PROJECT_INPUTS['live_url']}
 - CODE_URL: {PROJECT_INPUTS['code_url']}
+- AUTHOR: {PROJECT_INPUTS['first_name']} {PROJECT_INPUTS['last_name']}
+- AUTHOR_COUNTRY: {PROJECT_INPUTS['author_country']}
 - MAX_RESULTS: 400
 
-############################################
-# CRITICAL: PYDANTIC VALIDATION
-############################################
-Your response MUST be valid JSON that exactly matches this Pydantic schema. The output will be validated with Pydantic models - any deviation will cause validation failure.
+--------------------------------
+WHAT COUNTS AS A HIT
+Include an item if **any** is true (store a short `evidence` quote/phrase and set `match_basis`):
+1) **direct_link** – the page links the LIVE_URL/CODE_URL (or a clear repo‑family variant). `match_confidence=1.0`
+2) **exact_phrase** – a distinctive title/slogan/identifier unique to the project. `match_confidence≈0.8`
+3) **author_reference** – a known author/team account posts about the project. `match_confidence≈0.6`
+4) **profile** – official social profile of the project (for follower counts). `match_basis=profile`
 
-PYDANTIC SCHEMA (AUTHORITATIVE):
+--------------------------------
+EXCLUDE (hard)
+- Autogenerated directories / SEO mirrors (e.g., AlternativeTo, many "/free‑alternatives/" sites)
+- Bot repost accounts (e.g., "HN to Twitter bot" timelines)
+- The author asking general **implementation** questions (e.g., StackOverflow) without announcing or showcasing the project
+- Pure mirrors of your own site/repo (self‑scope pages); third‑party posts that link to you are allowed
+
+--------------------------------
+SEARCH PLAN (iterate up to 5 rounds or until <3 new unique items are found twice in a row)
+1) **Fingerprint** LIVE_URL/CODE_URL:
+   - Extract title/H1, og:title/description, canonical URL, owner/repo, project name, obvious synonyms/morphology (hyphenation/spaces/case), distinctive phrases, author/handle(s).
+   - Add author handles you discover during search to `meta.authors`.
+2) **Broad search** with Google **and** Bing queries mixing: project name, repo slug, owner/slug, LIVE_URL host, synonyms, "launch", "show", "WIP", "review", "prototype", etc.
+3) **Platform‑native** passes:
+   - Reddit: site queries + permalink `.json` + `/user/<handle>/submitted.json` + `/domain/<live-host>/new.json` and `/domain/<code-host>/new.json`.
+   - Hacker News: item page or JSON; capture points/comments.
+   - X/Twitter, YouTube, Bluesky, Mastodon: fetch permalinks and parse visible `<time datetime>`/embedded JSON for dates/engagement when possible.
+   - Product Hunt + App/Play Stores for listings (use reviews/ratings as engagement).
+   - AUR (Arch User Repository): AUR packages are valid project distributions - include them with vote counts.
+   - Chrome Web Store & Firefox Add-ons: Browser extensions are valid - get user counts, not review counts.
+   - Package managers (npm, PyPI, etc.): Valid distributions with download/install metrics.
+4) **Author sweep** (run once before stopping): search each known author/official handle on Reddit, X, YouTube for project posts.
+5) If a page is gated or fails to load, try an alternative path (old or mobile domains/AMP) or use snippet evidence; record this in `diagnostics.notes`.
+
+Use MCP web tools when available (search engine, platform‑specific fetchers). If a specialized tool fails, fall back to a generic page fetch.
+
+--------------------------------
+DATES (keep it simple & consistent)
+- `published_at` is **preferred** (YYYY‑MM‑DD), `observed_at_utc` is **required** (ISO UTC).
+- Choose the first available:
+  1) Platform JSON/LD (e.g., `created_utc`, `publishedAt`, `uploadDate`)
+  2) `<time datetime>` or `article:published_time`/`og:updated_time`
+  3) Archive earliest snapshot date for the **exact** canonical URL
+  4) As a last resort, set `published_at` to `observed_at_utc`'s date with `date_source="observed_at"` and `date_confidence="low"`
+- Record `date_source` and `date_confidence`. Never leave `published_at` blank—use the fallback.
+
+--------------------------------
+ENGAGEMENT (normalize)
+- Parse compact numerals ("1.2K", "3.4M") to integers. No strings.
+- Fill `engagement.primary_label`, `engagement.primary_value`, and a `breakdown` dict for all counts found (e.g., `{{"upvotes": 120, "comments": 34}}`).
+- `engagement.sampled_at_utc` is required.
+
+**Primary label guidance**:
+- Reddit: `upvotes`
+- Hacker News: `points`
+- X/Twitter: `likes` (also record `retweets`/`reposts` in `breakdown`)
+- YouTube: `views` (record `likes`, `comments` too in breakdown)
+- Chrome Web Store: `users` (record `rating` if available)
+- Firefox Add-ons: `users` (record `rating` if available)
+- AUR (Arch User Repository): `votes` (AUR packages are valid and should be included)
+- App/Play Store: `reviews` (record `rating` if available)
+- Profiles: `followers`
+
+--------------------------------
+HACK CLUB URL DETECTION
+For each item, determine:
+- **mentions_hack_club**: true/false if the content mentions Hack Club organization
+- **hack_club_prominence**: 0-100 score for how prominently Hack Club is mentioned
+- **is_hack_club_url**: true/false if this URL is published BY Hack Club (examples: summer.hackclub.com, highway.hackclub.com, *.hackclub.com, github.com/hackclub/*, hackclub.slack.com, etc.)
+
+--------------------------------
+CANONICALIZATION & DEDUPE
+- Use `rel=canonical` > `og:url` > resolved URL (strip tracking).  
+- Dedupe by `canonical_url` (keep the highest‑engagement instance). Record alternates in `mirror_urls`.
+
+--------------------------------
+DIAGNOSTICS & QUALITY CHECKS (required)
+- `diagnostics.attempts` per key platform with: `queries_run[]`, `native_used` (bool), `authors_enumerated` (int), `hits_seen` (int), `items_included` (int).
+- `diagnostics.date_report`: counts by `date_source` and `date_confidence`, and `missing` (should be 0).
+- If SERPs reveal a platform but no valid permalinks included, add `diagnostics.notes` explaining why (duplicates/ambiguous/removed).
+- `meta.stop_reason` = "max_rounds" | "stalled" | "budget" | "complete".
+
+--------------------------------
+OUTPUT
+- Return JSON ONLY that validates against the schema below.
+- If no results: `items: []`, `summary.totals` empty, `meta.search_complete=true`, with an explanatory note in diagnostics.
+
+--------------------------------
+PYDANTIC SCHEMA (AUTHORITATIVE)
 {json.dumps(pydantic_schema, indent=2)}
 
-EXAMPLE JSON FORMAT:
+--------------------------------
+EXAMPLE JSON FORMAT
 {example_json}
-
-VALIDATION REQUIREMENTS:
-- Output will be parsed with OSINTResponse(**your_json)
-- ALL field names must match the schema exactly (case-sensitive)
-- ALL data types must match (str, int, float, bool, list, dict)
-- Required fields cannot be null/missing
-- Return ONLY valid JSON - no markdown, no prose, no code blocks
-
-Return the JSON response matching this exact Pydantic schema.
 """
 
     # API parameters (MCP server tools with structured output)
@@ -492,6 +503,30 @@ Return the JSON response matching this exact Pydantic schema.
             tool_args = getattr(event, 'arguments', empty_args)
             print(f"\n🔧 {current_tool_name}: {tool_args}")
             
+        elif event_type == 'response.mcp_call.completed':
+            # MCP tool call completed - show the full response
+            print(f"\n📊 {current_tool_name} completed:")
+                
+        elif event_type == 'response.mcp_call.failed':
+            # MCP tool call failed - show the full error
+            print(f"\n❌ {current_tool_name} failed:")
+            
+            # Debug: show the full event object
+            print(f"   🔍 Raw event object: {event}")
+            print(f"   📋 Event dict: {event.__dict__ if hasattr(event, '__dict__') else 'No __dict__'}")
+            
+            # Try to access error through model methods if it's a Pydantic object
+            if hasattr(event, 'model_dump'):
+                event_data = event.model_dump()
+                print(f"   💥 Pydantic model data: {json.dumps(event_data, indent=2, default=str)}")
+            
+            # Try common error field names
+            for field_name in ['error', 'message', 'details', 'exception', 'error_message']:
+                if hasattr(event, field_name):
+                    field_value = getattr(event, field_name)
+                    if field_value is not None:
+                        print(f"   💥 Found in {field_name}: {json.dumps(field_value, indent=2, default=str) if isinstance(field_value, (dict, list)) else str(field_value)}")
+            
         elif event_type == 'response.output_item.added':
             item = getattr(event, 'item', None)
             if item:
@@ -522,6 +557,43 @@ Return the JSON response matching this exact Pydantic schema.
             response = event
             end_time = time.time()
             duration = end_time - start_time
+            
+            # Debug: Show full response output array for MCP results
+            if hasattr(response, 'output') and response.output:
+                print(f"\n🔍 Response output array ({len(response.output)} items):")
+                for i, item in enumerate(response.output):
+                    item_type = getattr(item, 'type', 'unknown')
+                    print(f"   Item {i+1}: type='{item_type}'")
+                    
+                    if item_type == 'mcp_call':
+                        # Show MCP call details
+                        tool_name = getattr(item, 'name', 'unknown')
+                        tool_result = getattr(item, 'result', None)
+                        if tool_result:
+                            print(f"   📊 MCP {tool_name} result:")
+                            if isinstance(tool_result, dict):
+                                result_str = json.dumps(tool_result, indent=4)
+                                if len(result_str) > 2000:
+                                    print(f"      {result_str[:2000]}\n      ... [truncated]")
+                                else:
+                                    print(f"      {result_str}")
+                            else:
+                                print(f"      {str(tool_result)}")
+                        else:
+                            print(f"   📊 MCP {tool_name}: No result data")
+                    
+                    elif item_type == 'message':
+                        # Show message content
+                        if hasattr(item, 'content'):
+                            print(f"   📝 Message content preview: {str(item.content)[:200]}...")
+                    
+                    else:
+                        # Show other item types
+                        if hasattr(item, 'model_dump'):
+                            item_data = item.model_dump()
+                            print(f"   📄 {item_type} data: {json.dumps(item_data, indent=2, default=str)}")
+            else:
+                print(f"\n🔍 No output array found in response")
             
         elif event_type == 'response.failed':
             print(f"\n❌ Response failed: {getattr(event, 'error', 'Unknown error')}")
@@ -581,12 +653,14 @@ Return the JSON response matching this exact Pydantic schema.
             
             # Show structured summary
             print(f"\n📊 Structured Summary:")
-            print(f"   🔗 Found {len(structured_response.links)} links")
+            print(f"   🔗 Found {len(structured_response.items)} items")
             print(f"   🏁 Search complete: {structured_response.meta.search_complete}")
-            print(f"   🔍 Distinctive terms: {', '.join(structured_response.diagnostics.distinctive_terms[:5])}")
-            if structured_response.links:
-                top_link = structured_response.links[0]
-                print(f"   ⭐ Top link: {top_link.title[:50]}... ({top_link.score} score)")
+            if structured_response.summary.platforms_present:
+                top_platform = max(structured_response.summary.platforms_present.items(), key=lambda kv: kv[1])[0]
+                print(f"   🗺️ Top platform by count: {top_platform}")
+            if structured_response.items:
+                first = structured_response.items[0]
+                print(f"   ⭐ Example item: {first.title[:60] if first.title else first.url}")
             
         except json.JSONDecodeError as json_error:
             print(f"⚠️ JSON parsing failed: {json_error}")
@@ -671,11 +745,11 @@ Please return ONLY the corrected JSON with the proper data structure that valida
         print(f"\n💾 Writing structured results to Airtable...")
         try:
             # Convert Pydantic models to dictionaries for Airtable
-            project_links = [link.model_dump() for link in structured_response.links]
+            project_items = [item.model_dump() for item in structured_response.items]
             
-            if project_links:
+            if project_items:
                 write_results_to_airtable(
-                    project_links,
+                    project_items,
                     PROJECT_INPUTS.get("record_id", ""),
                     AIRTABLE_TOKEN,
                     prompt=prompt_content,  # Use actual full prompt text
