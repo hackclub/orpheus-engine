@@ -81,7 +81,7 @@ class Item(BaseModel):
 
     mentions_hack_club: Optional[bool] = False
     hack_club_prominence: Optional[int] = 0  # 0-100
-    is_hack_club_url: Optional[bool] = False  # Whether this URL is published BY Hack Club
+    published_by_hack_club: Optional[bool] = False  # Whether this URL is published BY Hack Club
 
     mirror_urls: List[str] = []
     tags: List[str] = []
@@ -248,7 +248,7 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
                 "Engagement Count": engagement_count,
                 "Engagement Type": engagement_type,
                 "Mentions Hack Club?": link.get("mentions_hack_club", False),
-                "Is Hack Club URL?": link.get("is_hack_club_url", False),
+                "Published by Hack Club?": link.get("published_by_hack_club", False),
                 "YSWS Approved Project": [record_id] if record_id else [],
                 "Full JSON": full_json
             }
@@ -548,7 +548,7 @@ HACK CLUB URL DETECTION
 For each item, determine:
 - **mentions_hack_club**: true/false if the content mentions Hack Club organization
 - **hack_club_prominence**: 0-100 score for how prominently Hack Club is mentioned
-- **is_hack_club_url**: true/false if this URL is published BY Hack Club (examples: summer.hackclub.com, highway.hackclub.com, *.hackclub.com, github.com/hackclub/*, hackclub.slack.com, etc.)
+- **published_by_hack_club**: true/false if this URL is published BY Hack Club (examples: summer.hackclub.com, highway.hackclub.com, *.hackclub.com, github.com/hackclub/*, hackclub.slack.com, official Hack Club Instagram/Twitter posts, etc.)
 
 --------------------------------
 CANONICALIZATION & DEDUPE
