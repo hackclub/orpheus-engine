@@ -36,8 +36,9 @@ from pyairtable import Api
 from pydantic import BaseModel, Field
 
 
-# MCP server configuration
-MCP_SERVER_URL = "https://zachmcp.ngrok.io/mcp"
+# Configuration
+MCP_SERVER_URL = "https://better-brightdata-mcp.hackclub.com/mcp"
+MAX_ITEMS_PER_SEARCH = 15  # Maximum number of items to find per search
 
 
 # Improved Pydantic models for structured response
@@ -274,6 +275,40 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
         return []
 
 
+def update_project_repo_stars(project_record_id: str, last_search_at: str, airtable_token: str) -> None:
+    """Update project record to copy current repo star count and last search timestamp."""
+    if not airtable_token or not project_record_id:
+        return
+    
+    try:
+        # Initialize Airtable API
+        api = Api(airtable_token)
+        base_id = "app3A5kJwYqxMLOgh"
+        table_id = "tblzWWGUYHVH7Zyqf"  # YSWS Projects table
+        table = api.table(base_id, table_id)
+        
+        # Get current project record to read the repo star count
+        project_record = table.get(project_record_id)
+        current_stars = project_record.get('fields', {}).get('Repo - Star Count')
+        
+        # Update both repo stars and last search timestamp
+        update_data = {
+            'YSWS Project Mentions - Last Search At': last_search_at
+        }
+        
+        if current_stars is not None:
+            update_data['YSWS Project Mentions - Repo Stars At Last Search'] = current_stars
+            print(f"✅ Updated project record: Repo stars at last search = {current_stars}")
+        else:
+            print("⚠️ No 'Repo - Star Count' field found in project record")
+            
+        table.update(project_record_id, update_data)
+        print(f"✅ Updated project record: Last search at = {last_search_at}")
+            
+    except Exception as e:
+        print(f"❌ Error updating project repo stars: {e}")
+
+
 def write_search_record_to_airtable(
     project_record_id: str,
     mention_ids: List[str],
@@ -284,14 +319,14 @@ def write_search_record_to_airtable(
     total_cost_usd: float,
     runtime_seconds: float,
     airtable_token: str
-) -> None:
+) -> Optional[Dict[str, Any]]:
     """
     Create a "search run" record and link it to the YSWS project +
-    mention records.
+    mention records. Returns the created record.
     """
     if not airtable_token:
         print("⚠️ No AIRTABLE_PERSONAL_ACCESS_TOKEN provided – skipping search-record write")
-        return
+        return None
 
     try:
         api = Api(airtable_token)
@@ -323,9 +358,12 @@ def write_search_record_to_airtable(
         print(f"✅ Search record written to Airtable: {created_record['id']}")
         print(f"💰 Estimated cost: ${total_cost_usd:.4f}")
         print(f"⏱️ Total runtime: {runtime_formatted}")
+        
+        return created_record
 
     except Exception as e:
         print(f"❌ Error writing search record: {e}")
+        return None
 
 
 if __name__ == "__main__":
@@ -480,7 +518,7 @@ INPUTS (provided above by the caller)
 - CODE_URL: {PROJECT_INPUTS['code_url']}
 - AUTHOR: {PROJECT_INPUTS['first_name']} {PROJECT_INPUTS['last_name']}
 - AUTHOR_COUNTRY: {PROJECT_INPUTS['author_country']}
-- MAX_RESULTS: 400
+- MAX_RESULTS: {MAX_ITEMS_PER_SEARCH}
 
 --------------------------------
 WHAT COUNTS AS A HIT
@@ -498,7 +536,7 @@ EXCLUDE (hard)
 - Pure mirrors of your own site/repo (self‑scope pages); third‑party posts that link to you are allowed
 
 --------------------------------
-SEARCH PLAN (iterate up to 5 rounds or until <3 new unique items are found twice in a row)
+SEARCH PLAN (iterate up to 5 rounds or until <3 new unique items are found twice in a row, max {MAX_ITEMS_PER_SEARCH} total items)
 1) **Fingerprint** LIVE_URL/CODE_URL:
    - Extract title/H1, og:title/description, canonical URL, owner/repo, project name, obvious synonyms/morphology (hyphenation/spaces/case), distinctive phrases, author/handle(s).
    - Add author handles you discover during search to `meta.authors`.
@@ -565,6 +603,7 @@ DIAGNOSTICS & QUALITY CHECKS (required)
 --------------------------------
 OUTPUT
 - Return JSON ONLY that validates against the schema below.
+- **LIMIT: Maximum {MAX_ITEMS_PER_SEARCH} items** - prioritize highest engagement and most relevant matches.
 - If no results: `items: []`, `summary.totals` empty, `meta.search_complete=true`, with an explanatory note in diagnostics.
 
 --------------------------------
@@ -979,7 +1018,7 @@ Please return ONLY the corrected JSON with the proper data structure that valida
     
     # Create search record to track this execution
     if AIRTABLE_TOKEN:
-        write_search_record_to_airtable(
+        search_record = write_search_record_to_airtable(
             project_record_id=PROJECT_INPUTS.get("record_id", ""),
             mention_ids=mention_ids,
             full_output_log=full_output_log,
@@ -990,6 +1029,16 @@ Please return ONLY the corrected JSON with the proper data structure that valida
             runtime_seconds=total_runtime_seconds,
             airtable_token=AIRTABLE_TOKEN
         )
+        
+        # Update project with last search timestamp if search record was created successfully
+        if search_record:
+            search_created_at = search_record.get('createdTime', '')
+            if search_created_at:
+                update_project_repo_stars(
+                    PROJECT_INPUTS.get("record_id", ""),
+                    search_created_at,
+                    AIRTABLE_TOKEN
+                )
     
     # Restore original print function
     print = original_print
