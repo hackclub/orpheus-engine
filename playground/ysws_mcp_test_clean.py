@@ -569,6 +569,8 @@ ENGAGEMENT (normalize)
 - Parse compact numerals ("1.2K", "3.4M") to integers. No strings.
 - Fill `engagement.primary_label`, `engagement.primary_value`, and a `breakdown` dict for all counts found (e.g., `{{"upvotes": 120, "comments": 34}}`).
 - `engagement.sampled_at_utc` is required.
+- If the **main subject** of the URL is the project itself (title, main content, primary focus): Use the main URL's engagement metrics
+- If the **main subject** is something else, but the project is referenced in secondary content (comments, replies, mentions): Use the engagement metrics of that specific reference instead
 
 **Primary label guidance**:
 - Reddit: `upvotes`
