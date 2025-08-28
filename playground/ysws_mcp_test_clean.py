@@ -542,7 +542,7 @@ SEARCH PLAN (iterate up to 5 rounds or until <3 new unique items are found twice
    - Add author handles you discover during search to `meta.authors`.
 2) **Broad search** with Google **and** Bing queries mixing: project name, repo slug, owner/slug, LIVE_URL host, synonyms, "launch", "show", "WIP", "review", "prototype", etc.
 3) **Platform‑native** passes:
-   - Reddit: site queries + permalink `.json` + `/user/<handle>/submitted.json` + `/domain/<live-host>/new.json` and `/domain/<code-host>/new.json`.
+   - Reddit: site queries + permalink `.json` + `/user/<handle>/submitted.json` + `/domain/<live-host>/new.json` and `/domain/<code-host>/new.json`. If you have trouble getting page content due to clientside JavaScript, you can try https://old.reddit.com/.
    - Hacker News: item page or JSON; capture points/comments.
    - X/Twitter, YouTube, Bluesky, Mastodon: fetch permalinks and parse visible `<time datetime>`/embedded JSON for dates/engagement when possible.
    - Product Hunt + App/Play Stores for listings (use reviews/ratings as engagement).
