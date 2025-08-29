@@ -430,8 +430,8 @@ def write_search_record_to_airtable(
 if __name__ == "__main__":
     # Check for command line arguments
     if len(sys.argv) != 2:
-        print("❌ Usage: python ysws_mcp_test_clean.py <RECORD_ID>")
-        print("   Example: python ysws_mcp_test_clean.py rectC2FMjtHeP4Xy0")
+        print("❌ Usage: python ysws_project_mention_search.py <RECORD_ID>")
+        print("   Example: python ysws_project_mention_search.py rectC2FMjtHeP4Xy0")
         sys.exit(1)
     
     RECORD_ID = sys.argv[1]
@@ -446,14 +446,20 @@ if __name__ == "__main__":
     BRIGHTDATA_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN")
     AIRTABLE_TOKEN = os.getenv("AIRTABLE_PERSONAL_ACCESS_TOKEN")
     ARCHIVE_API_KEY = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
-    
+
+    missing_envs = []
     if not API_KEY:
-        raise SystemExit("❌ OPENAI_API_KEY not found in .env")
-    
+        missing_envs.append("OPENAI_API_KEY")
     if not BRIGHTDATA_TOKEN:
-        print("⚠️ BRIGHTDATA_API_TOKEN not found - MCP server access will not work")
-    else:
-        print("✅ Brightdata API token found")
+        missing_envs.append("BRIGHTDATA_API_TOKEN")
+    if not AIRTABLE_TOKEN:
+        missing_envs.append("AIRTABLE_PERSONAL_ACCESS_TOKEN")
+    if not ARCHIVE_API_KEY:
+        missing_envs.append("ARCHIVE_HACKCLUB_COM_API_KEY")
+
+    if missing_envs:
+        missing_list = ", ".join(missing_envs)
+        raise SystemExit(f"❌ Required environment variables not found in .env: {missing_list}")
     
     # Set up client
     client = OpenAI(api_key=API_KEY)
