@@ -2178,7 +2178,7 @@ def approved_projects_mention_search_batch(
     
     # Get the script path relative to the current working directory
     import os
-    script_path = os.path.join(os.getcwd(), "playground", "ysws_project_mention_search.py")
+    script_path = os.path.join(os.getcwd(), "scripts", "ysws_project_mention_search.py")
     
     if not os.path.exists(script_path):
         log.error(f"Mention search script not found at: {script_path}")

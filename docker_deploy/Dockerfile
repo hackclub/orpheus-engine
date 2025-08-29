@@ -20,6 +20,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY orpheus_engine ./orpheus_engine
 COPY orpheus_engine_dbt ./orpheus_engine_dbt
+COPY scripts ./scripts
 
 # Install Python dependencies FIRST
 RUN uv sync
