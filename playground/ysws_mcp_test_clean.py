@@ -198,6 +198,37 @@ def fetch_existing_mentions(project_record_id: str, airtable_token: str) -> List
         return []
 
 
+def archive_url(url: str, archive_api_key: str) -> Optional[str]:
+    """Archive a URL using archive.hackclub.com and return the archived URL."""
+    if not archive_api_key:
+        print(f"⚠️ No archive API key - skipping archival of {url}")
+        return None
+    
+    try:
+        response = requests.post(
+            "https://archive.hackclub.com/api/v1/archive",
+            headers={
+                "Authorization": f"Bearer {archive_api_key}",
+                "Content-Type": "application/json"
+            },
+            json={"url": url},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            archive_data = response.json()
+            archive_url = archive_data.get("url")
+            print(f"✅ Archived {url} -> {archive_url}")
+            return archive_url
+        else:
+            print(f"❌ Archive failed for {url}: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Archive error for {url}: {e}")
+        return None
+
+
 def write_results_to_airtable(project_links: List[dict], record_id: str, airtable_token: str) -> List[str]:
     """Write project link results to Airtable table."""
     if not airtable_token:
@@ -268,6 +299,36 @@ def write_results_to_airtable(project_links: List[dict], record_id: str, airtabl
             print(f"📝 Created {len(created_records)} Airtable records (batch {i//batch_size + 1})")
         
         print(f"✅ Successfully wrote {total_created} records to Airtable")
+        
+        # Archive URLs and update records with Archive URL field
+        archive_api_key = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
+        if archive_api_key and created_ids:
+            print(f"\n🗄️ Archiving {len(created_ids)} URLs...")
+            
+            for i, (created_id, link) in enumerate(zip(created_ids, project_links)):
+                url_to_archive = link.get("canonical_url") or link.get("url")
+                if url_to_archive:
+                    print(f"📦 Archiving {i+1}/{len(created_ids)}: {url_to_archive}")
+                    archived_url = archive_url(url_to_archive, archive_api_key)
+                    
+                    if archived_url:
+                        # Update the record with the archived URL
+                        try:
+                            table.update(created_id, {"Archive URL": archived_url})
+                            print(f"✅ Updated record {created_id} with archived URL")
+                        except Exception as e:
+                            print(f"❌ Failed to update record {created_id} with archived URL: {e}")
+                    
+                    # Small delay to be respectful to the archive service
+                    time.sleep(1)
+            
+            print(f"✅ Completed archiving process")
+        else:
+            if not archive_api_key:
+                print("⚠️ No ARCHIVE_HACKCLUB_COM_API_KEY found - skipping archival")
+            else:
+                print("ℹ️ No records created - skipping archival")
+        
         return created_ids
         
     except Exception as e:
@@ -384,6 +445,7 @@ if __name__ == "__main__":
     API_KEY = os.getenv("OPENAI_API_KEY")
     BRIGHTDATA_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN")
     AIRTABLE_TOKEN = os.getenv("AIRTABLE_PERSONAL_ACCESS_TOKEN")
+    ARCHIVE_API_KEY = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
     
     if not API_KEY:
         raise SystemExit("❌ OPENAI_API_KEY not found in .env")
@@ -540,6 +602,7 @@ SEARCH PLAN (iterate up to 5 rounds or until <3 new unique items are found twice
 1) **Fingerprint** LIVE_URL/CODE_URL:
    - Extract title/H1, og:title/description, canonical URL, owner/repo, project name, obvious synonyms/morphology (hyphenation/spaces/case), distinctive phrases, author/handle(s).
    - Add author handles you discover during search to `meta.authors`.
+   - Sometimes a given project is an individual component of a larger project. Fingerprint and look for the individual component, not the parent project (ex. library in a monorepo, or game in a game gallery)
 2) **Broad search** with Google **and** Bing queries mixing: project name, repo slug, owner/slug, LIVE_URL host, synonyms, "launch", "show", "WIP", "review", "prototype", etc.
 3) **Platform‑native** passes:
    - Reddit: site queries + permalink `.json` + `/user/<handle>/submitted.json` + `/domain/<live-host>/new.json` and `/domain/<code-host>/new.json`. If you have trouble getting page content due to clientside JavaScript, you can try https://old.reddit.com/.
@@ -581,6 +644,7 @@ ENGAGEMENT (normalize)
 - Firefox Add-ons: `users` (record `rating` if available)
 - AUR (Arch User Repository): `votes` (AUR packages are valid and should be included)
 - App/Play Store: `reviews` (record `rating` if available)
+- Discord server: `users` (# of server members)
 - Profiles: `followers`
 
 --------------------------------
