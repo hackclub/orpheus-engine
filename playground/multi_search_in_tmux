@@ -1,0 +1,40 @@
+sess="ysws_$(date +%Y%m%d_%H%M%S)"
+cmd="uv run ysws_project_mention_search.py"
+
+tmux new-session -d -s "$sess" -n win1
+tmux set-window-option -g remain-on-exit on
+tmux set-window-option -t "$sess:1" remain-on-exit on
+
+win=1
+pane=0
+
+while IFS= read -r id || [[ -n "$id" ]]; do
+  [[ -z "$id" || "$id" == \#* ]] && continue
+  tmux select-window -t "$sess:$win"
+  if (( pane == 0 )); then
+    tmux send-keys -t "$sess:$win" "$cmd $id" C-m
+    pane=1
+  elif (( pane == 1 )); then
+    tmux split-window -h -p 50 -t "$sess:$win"
+    tmux send-keys -t "$sess:$win" "$cmd $id" C-m
+    pane=2
+  elif (( pane == 2 )); then
+    tmux select-pane -L -t "$sess:$win"
+    tmux split-window -v -p 50 -t "$sess:$win"
+    tmux send-keys -t "$sess:$win" "$cmd $id" C-m
+    pane=3
+  else
+    tmux select-pane -R -t "$sess:$win"
+    tmux split-window -v -p 50 -t "$sess:$win"
+    tmux send-keys -t "$sess:$win" "$cmd $id" C-m
+    pane=4
+  fi
+  if (( pane == 4 )); then
+    (( win++ ))
+    tmux new-window -t "$sess" -n "win$win"
+    pane=0
+  fi
+done < record_ids.txt
+
+[[ -z "$TMUX" ]] && tmux attach -t "$sess" || echo "Created tmux session: $sess"
+

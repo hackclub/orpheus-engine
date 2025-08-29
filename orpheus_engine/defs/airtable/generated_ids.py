@@ -416,11 +416,18 @@ class AirtableIDs:
             flights = "fldWmCIogsvQl3Nli"  # Name: Flights
             finished_hours = "fldW9071QhP4LGiHn"  # Name: Finished Hours
             on_island = "fldaGAebbnFaTEdm3"  # Name: On Island
-            owed_prizes = "fld1OQjRBbBrk64Z5"  # Name: Owed Prizes
+            orph_plushies = "fld1OQjRBbBrk64Z5"  # Name: Orph Plushies
             slack_id_for_ping = "fldF85cNGdZZgJKG1"  # Name: slack id for ping
             day_of_prizes_form_link = "fldU7ynnx5eQisyko"  # Name: Day-of prizes form link
             additional_info_from_day_of_prizes_form_link = "fld0FWmBFHNspg43d"  # Name: Additional Info (from Day-of prizes form link)
             received_prize_from_day_of_prizes_form_link = "fld4ncM1RAivXcUBM"  # Name: Received Prize (from Day-of prizes form link)
+            num_prizes_owed = "fldUs2ZOYkgBr0Ppc"  # Name: Num Prizes Owed
+            num_prizes_fulfilled = "fldKB1HZsjR4AzsQn"  # Name: Num Prizes Fulfilled
+            num_prizes_need_fulfillment = "fldIAQQb4XHM4tQ0j"  # Name: Num Prizes Need Fulfillment
+            reviewer = "fldn7ByAZGU5CNRqx"  # Name: Reviewer
+            owed_hoodie = "fldjUcpCXYjNTDEIK"  # Name: Owed Hoodie
+            fudge_owed = "fldcPUwS883Gw7j6T"  # Name: Fudge Owed
+            hoodie_size = "fldujtJEQv8jJpfcj"  # Name: Hoodie Size
 
 
     class highway:
@@ -652,11 +659,25 @@ class AirtableIDs:
             geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
             temp_approved_by_dev = "fldWXDUQOzOvP2n7W"  # Name: temp Approved by Dev
             archive_hash = "fldIxgUiHJ4XtWmF5"  # Name: Archive - Hash
-            ysws_notable_links = "fld0UipcnSnWGrG0H"  # Name: YSWS Notable Links
+            project_mentions_links = "fld0UipcnSnWGrG0H"  # Name: Project Mentions - Links
             repo_star_count = "fldYhr34qkhdJ8qMo"  # Name: Repo - Star Count
             repo_stats_last_updated_at = "fldKm8IcRKJKY5mat"  # Name: Repo - Stats Last Updated At
             repo_language = "fldHseqUz3wQtu0Ul"  # Name: Repo - Language
             repo_exists = "fldrDVqbGZJXLpd9G"  # Name: Repo - Exists?
+            ysws_project_mentions_searches = "fldtDxmAsUu6FB8bu"  # Name: YSWS Project Mentions - Searches
+            ysws_project_mentions_search_count = "fldQqO4G8xEHN64yh"  # Name: YSWS Project Mentions - Search Count
+            ysws_project_mentions_last_search_links_found = "fldYxaMoN8RemVRbG"  # Name: YSWS Project Mentions - Last Search, # Links Found
+            ysws_project_mentions_estimated_search_cost = "fldDMOqywU1ytG5JO"  # Name: YSWS Project Mentions - Estimated Search Cost
+            ysws_project_mentions_5_links_on_last_search = "fldbAEGX0vsbdhXrZ"  # Name: YSWS Project Mentions - ≥5 Links on Last Search?
+            ysws_project_mentions_no_searches_and_5_repo_stars = "fld6uNVuMSJ0f20Xt"  # Name: YSWS Project Mentions - No Searches And ≥5 Repo Stars
+            ysws_project_mentions_repo_stars_at_last_search = "fldJ49PEMPDTT8MqH"  # Name: YSWS Project Mentions - Repo Stars At Last Search
+            ysws_project_mentions_last_search_at = "fld9XaVArOhSMN1ZX"  # Name: YSWS Project Mentions - Last Search At
+            ysws_project_mentions_5_repo_stars_since_last_search_and_72_hours_passed = "fld8DDjp1jZtM1Psh"  # Name: YSWS Project Mentions - ≥5 Repo Stars Since Last Search And 72 Hours Passed
+            ysws_project_mentions_project_wants_search = "fldooCX18uLnxpcAp"  # Name: YSWS Project Mentions - Project Wants Search?
+            ysws_project_mentions_reddit_upvotes = "fldIeUwZRLnUPfRSU"  # Name: YSWS Project Mentions - Reddit Upvotes
+            ysws_project_mentions_hacker_news_points = "fld9owikn8oFm3yWZ"  # Name: YSWS Project Mentions - Hacker News Points
+            ysws_project_mentions_links_found = "fldXr6S0NaprCe1Os"  # Name: YSWS Project Mentions - # Links Found
+            ysws_project_mentions_1_search_but_2_searches = "fldwGVU8rqVt6ZvaF"  # Name: YSWS Project Mentions - ≥1 Search, But <2 Searches?
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""

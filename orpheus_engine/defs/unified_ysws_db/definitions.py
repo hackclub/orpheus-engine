@@ -2084,6 +2084,276 @@ def ysws_programs_update_status(
     )
 
 
+@asset(
+    group_name="unified_ysws_db_processing",
+    description="Runs parallel YSWS mention searches on projects requesting search",
+    required_resource_keys={"airtable"},
+    compute_kind="parallel_execution",
+    deps=[AssetKey(["approved_projects_update_status"])],
+)
+def approved_projects_mention_search_batch(
+    context: AssetExecutionContext,
+) -> Output[pl.DataFrame]:
+    """
+    Re-queries approved projects from Airtable (to get fresh formula values after updates),
+    finds projects wanting mention search, and runs parallel mention search processes.
+    
+    Returns:
+        DataFrame with search execution results and status
+    """
+    log = context.log
+    airtable: AirtableResource = context.resources.airtable
+    
+    # Re-query approved projects from Airtable to get fresh formula calculations
+    log.info("Re-querying approved projects from Airtable to get fresh formula values")
+    projects_df = airtable.get_all_records_as_polars(
+        context=context,
+        base_key="unified_ysws_db",
+        table_key="approved_projects",
+    )
+    
+    # Get field IDs
+    wants_search_field = AirtableIDs.unified_ysws_db.approved_projects.ysws_project_mentions_project_wants_search
+    approved_at_field = AirtableIDs.unified_ysws_db.approved_projects.approved_at
+    
+    # Check if required fields exist
+    if wants_search_field not in projects_df.columns:
+        log.warning(f"Field '{wants_search_field}' not found in approved_projects")
+        return Output(
+            pl.DataFrame(schema={"id": pl.Utf8, "status": pl.Utf8, "error": pl.Utf8}),
+            metadata={"candidates_found": 0, "reason": "Missing wants_search field"}
+        )
+    
+    if approved_at_field not in projects_df.columns:
+        log.warning(f"Field '{approved_at_field}' not found in approved_projects")
+        return Output(
+            pl.DataFrame(schema={"id": pl.Utf8, "status": pl.Utf8, "error": pl.Utf8}),
+            metadata={"candidates_found": 0, "reason": "Missing approved_at field"}
+        )
+    
+    # Filter for projects wanting search, sort by approved_at descending, limit 40
+    candidates_df = projects_df.filter(
+        (pl.col(wants_search_field) == True) |
+        (pl.col(wants_search_field) == "true") |
+        (pl.col(wants_search_field) == 1)
+    ).sort(
+        pl.col(approved_at_field), descending=True
+    ).head(40).select([
+        pl.col("id"),
+        pl.col(approved_at_field)
+    ])
+    
+    log.info(f"Found {candidates_df.height} projects requesting mention search (max 40)")
+    
+    # Print the selected candidates for visibility
+    if candidates_df.height > 0:
+        log.info("Selected candidates for mention search:")
+        for i, row in enumerate(candidates_df.iter_rows(named=True)):
+            log.info(f"  {i+1}. ID: {row['id']}, Approved At: {row.get(approved_at_field, 'N/A')}")
+    else:
+        log.info("No candidates found - checking why...")
+        
+        # Debug: Show sample of the wants_search field values
+        if wants_search_field in projects_df.columns:
+            sample_values = projects_df.select([
+                pl.col("id"),
+                pl.col(wants_search_field)
+            ]).head(5)
+            log.info(f"Sample wants_search field values: {sample_values.to_dicts()}")
+            
+            # Count unique values in wants_search field
+            value_counts = projects_df.group_by(wants_search_field).count().sort("count", descending=True)
+            log.info(f"Value distribution in wants_search field: {value_counts.to_dicts()}")
+        else:
+            log.warning(f"wants_search field '{wants_search_field}' not found in projects_df columns")
+    
+    if candidates_df.height == 0:
+        return Output(
+            pl.DataFrame(schema={"id": pl.Utf8, "status": pl.Utf8, "error": pl.Utf8}),
+            metadata={"candidates_found": 0, "searches_completed": 0, "searches_failed": 0}
+        )
+    
+    # Run parallel mention searches
+    log.info(f"Starting parallel mention searches for {candidates_df.height} projects")
+    
+    # Get the script path relative to the current working directory
+    import os
+    script_path = os.path.join(os.getcwd(), "playground", "ysws_project_mention_search.py")
+    
+    if not os.path.exists(script_path):
+        log.error(f"Mention search script not found at: {script_path}")
+        return Output(
+            pl.DataFrame(schema={"id": pl.Utf8, "status": pl.Utf8, "error": pl.Utf8}),
+            metadata={"candidates_found": candidates_df.height, "error": "Script not found"}
+        )
+    
+    # Run searches in parallel using asyncio
+    results = asyncio.run(_run_parallel_mention_searches(
+        candidates_df["id"].to_list(),
+        script_path,
+        log
+    ))
+    
+    # Convert results to DataFrame
+    results_df = pl.DataFrame(results)
+    
+    # Count successes and failures
+    successful_count = results_df.filter(pl.col("status") == "success").height
+    failed_count = results_df.filter(pl.col("status") == "failed").height
+    
+    log.info(f"Mention search batch completed. Successful: {successful_count}, Failed: {failed_count}")
+    
+    # Generate preview metadata
+    if results_df.height > 0:
+        try:
+            preview_metadata = MetadataValue.md(results_df.head(10).to_pandas().to_markdown(index=False))
+        except Exception:
+            preview_metadata = MetadataValue.text(str(results_df.head(10)))
+    else:
+        preview_metadata = MetadataValue.text("No search results")
+    
+    return Output(
+        results_df,
+        metadata={
+            "candidates_found": candidates_df.height,
+            "searches_completed": successful_count,
+            "searches_failed": failed_count,
+            "success_rate": round((successful_count / max(candidates_df.height, 1)) * 100, 2),
+            "preview": preview_metadata
+        }
+    )
+
+
+async def _run_parallel_mention_searches(record_ids: list, script_path: str, logger) -> list:
+    """
+    Run mention search script in parallel for multiple record IDs using asyncio.
+    Similar pattern to _fetch_github_stars_async_all but for subprocess execution.
+    
+    Args:
+        record_ids: List of Airtable record IDs to process
+        script_path: Path to the mention search Python script  
+        logger: Logger for progress updates
+        
+    Returns:
+        List of results from all subprocess executions
+    """
+    import asyncio
+    import time
+    
+    results = []
+    
+    # Process all records in parallel (no chunking for maximum concurrency)
+    chunk_size = len(record_ids)  # Process all at once
+    
+    async def _run_single_search(record_id: str) -> dict:
+        """Run mention search for a single record ID with real-time output streaming."""
+        try:
+            logger.info(f"🚀 Starting search for record {record_id}")
+            
+            # Create subprocess to run the script
+            process = await asyncio.create_subprocess_exec(
+                "uv", "run", "python", script_path, record_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=os.getcwd()
+            )
+            
+            async def stream_output(stream, prefix):
+                """Stream output from subprocess to logger in real-time."""
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    line_text = line.decode('utf-8').rstrip()
+                    if line_text:  # Only log non-empty lines
+                        logger.info(f"[{record_id}] {line_text}")
+            
+            # Start streaming tasks for stdout and stderr
+            stdout_task = asyncio.create_task(stream_output(process.stdout, "OUT"))
+            stderr_task = asyncio.create_task(stream_output(process.stderr, "ERR"))
+            
+            # Wait for completion with timeout (increased to 15 minutes for 12-minute runs)
+            try:
+                await asyncio.wait_for(
+                    process.wait(),
+                    timeout=900  # 15 minute timeout per search (12 min + buffer)
+                )
+                
+                # Cancel streaming tasks
+                stdout_task.cancel()
+                stderr_task.cancel()
+                
+                if process.returncode == 0:
+                    logger.info(f"✅ Search completed successfully for record {record_id}")
+                    return {
+                        "id": record_id,
+                        "status": "success",
+                        "return_code": process.returncode,
+                        "error": None
+                    }
+                else:
+                    logger.warning(f"❌ Search failed for record {record_id} with return code {process.returncode}")
+                    return {
+                        "id": record_id,
+                        "status": "failed", 
+                        "return_code": process.returncode,
+                        "error": f"Process exited with code {process.returncode}"
+                    }
+                    
+            except asyncio.TimeoutError:
+                # Kill the process if it times out
+                logger.warning(f"⏰ Search timed out for record {record_id} after 15 minutes")
+                process.kill()
+                await process.wait()
+                stdout_task.cancel()
+                stderr_task.cancel()
+                return {
+                    "id": record_id,
+                    "status": "failed",
+                    "return_code": -1,
+                    "error": "Process timed out after 15 minutes"
+                }
+                
+        except Exception as e:
+            logger.error(f"💥 Exception running search for record {record_id}: {e}")
+            return {
+                "id": record_id,
+                "status": "failed",
+                "return_code": -1,
+                "error": f"Exception: {str(e)}"
+            }
+    
+    # Process in chunks with delays to manage system load
+    for i in range(0, len(record_ids), chunk_size):
+        chunk = record_ids[i:i + chunk_size]
+        chunk_start_time = time.time()
+        
+        logger.info(f"🔄 Starting all {len(chunk)} searches in parallel")
+        
+        # Create tasks for this chunk
+        tasks = [_run_single_search(record_id) for record_id in chunk]
+        
+        # Execute chunk in parallel  
+        chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results and handle exceptions
+        for result in chunk_results:
+            if isinstance(result, Exception):
+                logger.error(f"Task exception: {result}")
+                results.append({
+                    "id": "unknown",
+                    "status": "failed",
+                    "return_code": -1,
+                    "error": str(result)
+                })
+            else:
+                results.append(result)
+        
+        # No delay needed since we're processing everything in one chunk
+    
+    return results
+
+
 # Define the assets for this module
 defs = Definitions(
     assets=[
@@ -2095,6 +2365,7 @@ defs = Definitions(
         approved_projects_repo_stats,
         approved_projects_prepared_for_update,
         approved_projects_update_status,
+        approved_projects_mention_search_batch,
         ysws_programs_sign_up_stats_candidates,
         ysws_programs_sign_up_stats,
         ysws_programs_hcb_candidates,
