@@ -289,24 +289,29 @@ def _fetch_github_stars_parallel_wrapper(projects_data: list, gh_proxy_api_key: 
 def _extract_github_repo_url(code_url: str) -> str:
     """
     Extract GitHub repository URL from various GitHub URL formats.
-    Skips pull request URLs as they are not valid candidates for star counting.
+    Skips pull request URLs and blob URLs (file-specific URLs) as they are not valid candidates for star counting.
     
     Args:
         code_url: URL that may contain a GitHub repository reference
         
     Returns:
-        Base GitHub repository URL (e.g., 'https://github.com/owner/repo') or empty string if not a GitHub URL or is a pull request
+        Base GitHub repository URL (e.g., 'https://github.com/owner/repo') or empty string if not a GitHub URL or is a pull request/blob
         
     Examples:
         https://github.com/zachlatta/sshtron -> https://github.com/zachlatta/sshtron
         https://github.com/zachlatta/sshtron/pull/123 -> "" (skipped)
         https://github.com/zachlatta/sshtron/tree/main -> https://github.com/zachlatta/sshtron
+        https://github.com/hackclub/bakebuild/blob/main/cutters/panda.step -> "" (skipped)
     """
     if not code_url:
         return ""
     
     # Skip pull request URLs
     if '/pull/' in code_url or '/pulls' in code_url:
+        return ""
+    
+    # Skip blob URLs (file-specific URLs)
+    if '/blob/' in code_url:
         return ""
     
     # Pattern to match GitHub URLs and extract owner/repo
