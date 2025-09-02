@@ -442,7 +442,8 @@ if __name__ == "__main__":
     
     # Setup
     load_dotenv()
-    API_KEY = os.getenv("OPENAI_API_KEY")
+    # API_KEY = os.getenv("OPENAI_API_KEY")
+    API_KEY = os.getenv("OPENAI_API_KEY_LOANER")
     BRIGHTDATA_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN")
     AIRTABLE_TOKEN = os.getenv("AIRTABLE_PERSONAL_ACCESS_TOKEN")
     ARCHIVE_API_KEY = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
