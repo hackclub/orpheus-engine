@@ -31,3 +31,10 @@ sources:
       - name: user_seen_at_histories
         description: "HCB user session windows (period_start_at/period_end_at)."
         meta: { dagster: { asset_key: ['hcb_user_seen_at_histories'] } }
+
+  - name: slack
+    schema: slack
+    tables:
+      - name: member_analytics_csv
+        description: "Slack member analytics data from CSV export."
+        meta: { dagster: { asset_key: ['slack_member_analytics_csv'] } }

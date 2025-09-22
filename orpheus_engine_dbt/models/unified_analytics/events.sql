@@ -111,9 +111,64 @@ hcb_seen_events AS (
       AND DATE(ush.period_start_at) >= '2024-01-01'
       AND DATE(ush.period_start_at) <= CURRENT_DATE + INTERVAL '1 day'
     GROUP BY DATE(ush.period_start_at), u.email
+),
+
+/* -------------------- Slack "seen" events -------------------- */
+
+slack_parsed AS (
+  SELECT
+    s."User ID" AS user_id,
+    CASE
+      WHEN btrim(s."Last active (UTC)") = '' THEN NULL
+      ELSE to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY')
+    END AS event_date,
+    NULLIF(btrim(s.email), '') AS s_email
+  FROM {{ source('slack', 'member_analytics_csv') }} s
+),
+
+-- Prefer Loops email (joined by slack_id), tie-break with updated_at DESC
+slack_joined_people AS (
+  SELECT
+    p.slack_id,
+    NULLIF(btrim(p.email), '') AS p_email,
+    p.updated_at
+  FROM {{ source('loops', 'audience') }} p
+),
+
+slack_ranked AS (
+  SELECT
+    p.event_date,
+    COALESCE(j.p_email, p.s_email) AS email,
+    'slackSeenAt' AS event,
+    'slack' AS event_type,
+    'slack' AS source_system,
+    p.user_id,
+    row_number() OVER (
+      PARTITION BY p.user_id, p.event_date
+      ORDER BY
+        (j.p_email IS NULL),           -- prefer a joined email over CSV email
+        j.updated_at DESC NULLS LAST   -- tie-breaker if available
+    ) AS rn
+  FROM slack_parsed p
+  LEFT JOIN slack_joined_people j
+    ON j.slack_id = p.user_id
+  WHERE p.event_date IS NOT NULL
+),
+
+slack_events AS (
+  SELECT
+    event_date::date AS event_date,
+    email,
+    'slackSeenAt' AS event,
+    'slack' AS event_type,
+    'slack' AS source_system
+  FROM slack_ranked
+  WHERE rn = 1
+    AND event_date >= '2024-01-01'
+    AND event_date <= CURRENT_DATE + INTERVAL '1 day'
 )
 
--- Union all events
+-- -------------------- Union all events --------------------
 SELECT
     event_date::date AS event_date,
     LOWER(email) AS email,
@@ -151,5 +206,15 @@ SELECT
     event_type,
     source_system
 FROM hcb_seen_events
+
+UNION ALL
+
+SELECT
+    event_date::date AS event_date,
+    LOWER(email) AS email,
+    event,
+    event_type,
+    source_system
+FROM slack_events
 
 ORDER BY email, event_date DESC, event
