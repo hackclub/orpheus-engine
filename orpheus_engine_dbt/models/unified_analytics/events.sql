@@ -9,7 +9,7 @@ WITH loops_events AS (
     SELECT *
     FROM {{ source('loops', 'audience') }}
     WHERE user_group = 'Hack Clubber'
-    AND subscribed = true
+      AND subscribed = true
 ),
 
 -- Extract date-based events from loops audience data
@@ -36,13 +36,13 @@ loops_unpivoted AS (
     WHERE
         -- Match date or datetime patterns
         e.value ~ '^\d{4}-\d{2}-\d{2}'
-        -- Filter out null dates
+        -- Filter out null/blank dates
         AND e.value IS NOT NULL
-        AND e.value != ''
+        AND e.value <> ''
         -- Filter out columns that start with 'calculated'
         AND e.key NOT LIKE 'calculated%'
         -- Filter out specific unwanted events
-        AND e.key != 'high_seas_last_synced_from_airtable'
+        AND e.key <> 'high_seas_last_synced_from_airtable'
 ),
 
 -- Clean loops events
@@ -55,8 +55,8 @@ loops_final AS (
         'loops' AS source_system
     FROM loops_unpivoted
     WHERE event_date IS NOT NULL
-        AND event_date >= '2024-01-01'  -- Filter events older than Jan 1, 2024
-        AND event_date <= CURRENT_DATE + INTERVAL '1 day'  -- Filter future events, allow 1 day for timezone differences
+      AND event_date >= '2024-01-01'  -- Filter events older than Jan 1, 2024
+      AND event_date <= CURRENT_DATE + INTERVAL '1 day'  -- Allow 1 day for TZ differences
 ),
 
 -- Hackatime activity events aggregated by day
@@ -69,10 +69,10 @@ hackatime_events AS (
         'hackatime' AS source_system
     FROM {{ ref('hourly_project_activity') }}
     WHERE hackatime_first_email IS NOT NULL
-        AND activity_time IS NOT NULL
-        AND hackatime_hours > 0
-        AND DATE(activity_time) >= '2024-01-01'  -- Filter events older than Jan 1, 2024
-        AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'  -- Filter future events, allow 1 day for timezone differences
+      AND activity_time IS NOT NULL
+      AND hackatime_hours > 0
+      AND DATE(activity_time) >= '2024-01-01'
+      AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'
     GROUP BY DATE(activity_time), hackatime_first_email
 ),
 
@@ -86,11 +86,31 @@ hackatime_legacy_events AS (
         'hackatimeLegacy' AS source_system
     FROM {{ ref('hackatime_legacy_hourly_project_activity') }}
     WHERE hackatime_first_email IS NOT NULL
-        AND activity_time IS NOT NULL
-        AND hackatime_hours > 0
-        AND DATE(activity_time) >= '2024-01-01'  -- Filter events older than Jan 1, 2024
-        AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'  -- Filter future events, allow 1 day for timezone differences
+      AND activity_time IS NOT NULL
+      AND hackatime_hours > 0
+      AND DATE(activity_time) >= '2024-01-01'
+      AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'
     GROUP BY DATE(activity_time), hackatime_first_email
+),
+
+-- HCB seen events (teenagers only), aggregated by day
+hcb_seen_events AS (
+    SELECT
+        DATE(ush.period_start_at) AS event_date,
+        u.email AS email,
+        'hcbSeenAt' AS event,
+        'hcb' AS event_type,
+        'hcb' AS source_system
+    FROM {{ source('hcb', 'user_seen_at_histories') }} ush
+    JOIN {{ source('hcb', 'users') }} u
+      ON u.id = ush.user_id
+    WHERE u.teenager = true                              -- teenagers only
+      AND u.email IS NOT NULL
+      AND u.email <> ''
+      AND ush.period_start_at IS NOT NULL
+      AND DATE(ush.period_start_at) >= '2024-01-01'
+      AND DATE(ush.period_start_at) <= CURRENT_DATE + INTERVAL '1 day'
+    GROUP BY DATE(ush.period_start_at), u.email
 )
 
 -- Union all events
@@ -121,5 +141,15 @@ SELECT
     event_type,
     source_system
 FROM hackatime_legacy_events
+
+UNION ALL
+
+SELECT
+    event_date::date AS event_date,
+    LOWER(email) AS email,
+    event,
+    event_type,
+    source_system
+FROM hcb_seen_events
 
 ORDER BY email, event_date DESC, event

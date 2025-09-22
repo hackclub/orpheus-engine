@@ -1,30 +1,33 @@
 version: 2
 
 sources:
-  - name: hackatime_raw # A logical name for the source system/schema in the warehouse
-    # database: # Optional: Defaults to the database in your profile
-    schema: hackatime # The schema where Sling lands the data in your WAREHOUSE_DB
+  - name: hackatime_raw
+    schema: hackatime
     tables:
-      - name: heartbeats # The raw table name created by Sling
+      - name: heartbeats
         description: "Raw heartbeat data replicated from the Hackatime production database by Sling."
-        meta:
-          dagster:
-            asset_key: ['hackatime_warehouse_mirror']
-  
-  - name: hackatime_legacy_raw # A logical name for the legacy hackatime source
-    schema: hackatime_legacy # The schema where Sling lands the legacy data in your WAREHOUSE_DB
+        meta: { dagster: { asset_key: ['hackatime_warehouse_mirror'] } }
+
+  - name: hackatime_legacy_raw
+    schema: hackatime_legacy
     tables:
-      - name: heartbeats # The raw table name created by Sling
+      - name: heartbeats
         description: "Raw heartbeat data replicated from the Hackatime Legacy database by Sling."
-        meta:
-          dagster:
-            asset_key: ['hackatime_legacy_warehouse_mirror']
-            
-  - name: loops # A logical name for the loops source
-    schema: loops # The schema where loops data is stored
+        meta: { dagster: { asset_key: ['hackatime_legacy_warehouse_mirror'] } }
+
+  - name: loops
+    schema: loops
     tables:
-      - name: audience # The loops audience table
+      - name: audience
         description: "Loops audience data loaded into warehouse via DLT"
-        meta:
-          dagster:
-            asset_key: ['loops_audience']
+        meta: { dagster: { asset_key: ['loops_audience'] } }
+
+  - name: hcb
+    schema: hcb
+    tables:
+      - name: users
+        description: "HCB users table (warehouse mirror)."
+        meta: { dagster: { asset_key: ['hcb_users'] } }
+      - name: user_seen_at_histories
+        description: "HCB user session windows (period_start_at/period_end_at)."
+        meta: { dagster: { asset_key: ['hcb_user_seen_at_histories'] } }
