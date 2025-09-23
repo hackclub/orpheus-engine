@@ -3,8 +3,6 @@
     materialized='table'
 ) }}
 
--- Unified events table for monthly active user calculations across Hack Club platforms
-
 WITH loops_events AS (
     SELECT *
     FROM {{ source('loops', 'audience') }}
@@ -12,40 +10,35 @@ WITH loops_events AS (
       AND subscribed = true
 ),
 
--- Extract date-based events from loops audience data
+-- Extract datetime (prefer precise timestamp if present; otherwise midnight UTC)
 loops_unpivoted AS (
     SELECT
         le.email,
         e.key AS column_name,
-        -- Extract date from the value (handles both date and datetime formats)
         CASE
-            WHEN e.value ~ '^\d{4}-\d{2}-\d{2}'
-            THEN (substring(e.value::text FROM '^\d{4}-\d{2}-\d{2}'))::date
+            -- ISO-like datetime (accepts space or 'T', optional seconds/ms, optional Z/offset)
+            WHEN e.value ~ '^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$'
+              THEN (e.value)::timestamptz
+            -- Date only -> midnight UTC
+            WHEN e.value ~ '^\d{4}-\d{2}-\d{2}$'
+              THEN ((e.value)::date)::timestamp AT TIME ZONE 'UTC'
         END AS event_date,
-        -- Convert column name to camelCase
+        -- camelCase event name
         lower(left(replace(initcap(replace(e.key,'_',' ')),' ',''),1)) ||
         substr(replace(initcap(replace(e.key,'_',' ')),' ',''),2) AS event,
-        -- Determine event_type based on whether it ends with 'ApprovedAt'
-        CASE
-            WHEN e.key LIKE '%_approved_at'
-            THEN 'ship'
-            ELSE 'loops'
-        END AS event_type
+        CASE WHEN e.key LIKE '%_approved_at' THEN 'ship' ELSE 'loops' END AS event_type
     FROM loops_events le,
          LATERAL jsonb_each_text(to_jsonb(le) - 'birthday') AS e(key, value)
-    WHERE
-        -- Match date or datetime patterns
-        e.value ~ '^\d{4}-\d{2}-\d{2}'
-        -- Filter out null/blank dates
-        AND e.value IS NOT NULL
-        AND e.value <> ''
-        -- Filter out columns that start with 'calculated'
-        AND e.key NOT LIKE 'calculated%'
-        -- Filter out specific unwanted events
-        AND e.key <> 'high_seas_last_synced_from_airtable'
+    WHERE e.value IS NOT NULL
+      AND e.value <> ''
+      AND (
+            e.value ~ '^\d{4}-\d{2}-\d{2}$'
+         OR e.value ~ '^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}'
+      )
+      AND e.key NOT LIKE 'calculated%'
+      AND e.key <> 'high_seas_last_synced_from_airtable'
 ),
 
--- Clean loops events
 loops_final AS (
     SELECT
         event_date,
@@ -55,14 +48,15 @@ loops_final AS (
         'loops' AS source_system
     FROM loops_unpivoted
     WHERE event_date IS NOT NULL
-      AND event_date >= '2024-01-01'  -- Filter events older than Jan 1, 2024
-      AND event_date <= CURRENT_DATE + INTERVAL '1 day'  -- Allow 1 day for TZ differences
+      AND event_date::date >= DATE '2024-01-01'
+      AND event_date::date <= (CURRENT_DATE + INTERVAL '1 day')
+      AND event <> 'createdAt'
 ),
 
--- Hackatime activity events aggregated by day
+/* -------------------- Hackatime (preserve hourly timestamps; multiple per day) -------------------- */
 hackatime_events AS (
     SELECT
-        DATE(activity_time) AS event_date,
+        (activity_time AT TIME ZONE 'UTC') AS event_date,
         hackatime_first_email AS email,
         'hackatimeActivity' AS event,
         'hackatime' AS event_type,
@@ -71,15 +65,14 @@ hackatime_events AS (
     WHERE hackatime_first_email IS NOT NULL
       AND activity_time IS NOT NULL
       AND hackatime_hours > 0
-      AND DATE(activity_time) >= '2024-01-01'
-      AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'
-    GROUP BY DATE(activity_time), hackatime_first_email
+      AND activity_time::date >= DATE '2024-01-01'
+      AND activity_time::date <= (CURRENT_DATE + INTERVAL '1 day')
 ),
 
--- Hackatime Legacy activity events aggregated by day
+/* -------------------- Hackatime Legacy (preserve hourly timestamps; multiple per day) -------------------- */
 hackatime_legacy_events AS (
     SELECT
-        DATE(activity_time) AS event_date,
+        (activity_time AT TIME ZONE 'UTC') AS event_date,
         hackatime_first_email AS email,
         'hackatimeLegacyActivity' AS event,
         'hackatime_legacy' AS event_type,
@@ -88,51 +81,59 @@ hackatime_legacy_events AS (
     WHERE hackatime_first_email IS NOT NULL
       AND activity_time IS NOT NULL
       AND hackatime_hours > 0
-      AND DATE(activity_time) >= '2024-01-01'
-      AND DATE(activity_time) <= CURRENT_DATE + INTERVAL '1 day'
-    GROUP BY DATE(activity_time), hackatime_first_email
+      AND activity_time::date >= DATE '2024-01-01'
+      AND activity_time::date <= (CURRENT_DATE + INTERVAL '1 day')
 ),
 
--- HCB seen events (teenagers only), aggregated by day
+/* -------------------- HCB seen (preserve original timestamp) -------------------- */
 hcb_seen_events AS (
     SELECT
-        DATE(ush.period_start_at) AS event_date,
+        (ush.period_start_at AT TIME ZONE 'UTC') AS event_date,
         u.email AS email,
         'hcbSeenAt' AS event,
         'hcb' AS event_type,
         'hcb' AS source_system
-    FROM {{ source('hcb', 'user_seen_at_histories') }} ush
-    JOIN {{ source('hcb', 'users') }} u
+    FROM {{ source('hcb', 'user_seen_at_histories') }} AS ush
+    JOIN {{ source('hcb', 'users') }} AS u
       ON u.id = ush.user_id
-    WHERE u.teenager = true                              -- teenagers only
+    WHERE u.teenager = true
       AND u.email IS NOT NULL
       AND u.email <> ''
       AND ush.period_start_at IS NOT NULL
-      AND DATE(ush.period_start_at) >= '2024-01-01'
-      AND DATE(ush.period_start_at) <= CURRENT_DATE + INTERVAL '1 day'
-    GROUP BY DATE(ush.period_start_at), u.email
+      AND ush.period_start_at::date >= DATE '2024-01-01'
+      AND ush.period_start_at::date <= (CURRENT_DATE + INTERVAL '1 day')
 ),
 
 /* -------------------- Slack "seen" events -------------------- */
-
 slack_parsed AS (
   SELECT
     s."User ID" AS user_id,
+    /* Try to preserve full timestamp if the CSV includes one; fall back to date-only at midnight UTC */
     CASE
+      -- e.g., "Jun 16, 2025 13:45" or with seconds; add more formats as your export provides
+      WHEN btrim(s."Last active (UTC)") ~ '^[A-Za-z]{3} \d{1,2}, \d{4}(\s+\d{1,2}:\d{2}(:\d{2})?)?$'
+        THEN
+          COALESCE(
+            -- Try with HH24:MI:SS
+            to_timestamp(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI:SS') AT TIME ZONE 'UTC',
+            -- Try with HH24:MI
+            to_timestamp(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI') AT TIME ZONE 'UTC',
+            -- Fallback to date-only at midnight
+            (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC'
+          )
       WHEN btrim(s."Last active (UTC)") = '' THEN NULL
-      ELSE to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY')
+      ELSE (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC'
     END AS event_date,
     NULLIF(btrim(s.email), '') AS s_email
-  FROM {{ source('slack', 'member_analytics_csv') }} s
+  FROM {{ source('slack', 'member_analytics_csv') }} AS s
 ),
 
--- Prefer Loops email (joined by slack_id), tie-break with updated_at DESC
 slack_joined_people AS (
   SELECT
     p.slack_id,
     NULLIF(btrim(p.email), '') AS p_email,
     p.updated_at
-  FROM {{ source('loops', 'audience') }} p
+  FROM {{ source('loops', 'audience') }} AS p
 ),
 
 slack_ranked AS (
@@ -146,75 +147,36 @@ slack_ranked AS (
     row_number() OVER (
       PARTITION BY p.user_id, p.event_date
       ORDER BY
-        (j.p_email IS NULL),           -- prefer a joined email over CSV email
-        j.updated_at DESC NULLS LAST   -- tie-breaker if available
+        (j.p_email IS NULL),
+        j.updated_at DESC NULLS LAST
     ) AS rn
-  FROM slack_parsed p
-  LEFT JOIN slack_joined_people j
+  FROM slack_parsed AS p
+  LEFT JOIN slack_joined_people AS j
     ON j.slack_id = p.user_id
   WHERE p.event_date IS NOT NULL
 ),
 
 slack_events AS (
   SELECT
-    event_date::date AS event_date,
+    event_date,
     email,
     'slackSeenAt' AS event,
     'slack' AS event_type,
     'slack' AS source_system
   FROM slack_ranked
   WHERE rn = 1
-    AND event_date >= '2024-01-01'
-    AND event_date <= CURRENT_DATE + INTERVAL '1 day'
+    AND event_date::date >= DATE '2024-01-01'
+    AND event_date::date <= (CURRENT_DATE + INTERVAL '1 day')
 )
 
 -- -------------------- Union all events --------------------
-SELECT
-    event_date::date AS event_date,
-    LOWER(email) AS email,
-    event,
-    event_type,
-    source_system
-FROM loops_final
-
+SELECT event_date, lower(email) AS email, event, event_type, source_system FROM loops_final
 UNION ALL
-
-SELECT
-    event_date::date AS event_date,
-    LOWER(email) AS email,
-    event,
-    event_type,
-    source_system
-FROM hackatime_events
-
+SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hackatime_events
 UNION ALL
-
-SELECT
-    event_date::date AS event_date,
-    LOWER(email) AS email,
-    event,
-    event_type,
-    source_system
-FROM hackatime_legacy_events
-
+SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hackatime_legacy_events
 UNION ALL
-
-SELECT
-    event_date::date AS event_date,
-    LOWER(email) AS email,
-    event,
-    event_type,
-    source_system
-FROM hcb_seen_events
-
+SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hcb_seen_events
 UNION ALL
-
-SELECT
-    event_date::date AS event_date,
-    LOWER(email) AS email,
-    event,
-    event_type,
-    source_system
-FROM slack_events
-
+SELECT event_date, lower(email) AS email, event, event_type, source_system FROM slack_events
 ORDER BY email, event_date DESC, event
