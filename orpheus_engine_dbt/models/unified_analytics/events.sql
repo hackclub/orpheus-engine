@@ -108,21 +108,20 @@ hcb_seen_events AS (
 slack_parsed AS (
   SELECT
     s."User ID" AS user_id,
-    /* Try to preserve full timestamp if the CSV includes one; fall back to date-only at midnight UTC */
+    /* Always set slackSeenAt to 11:59 PM for the day */
     CASE
-      -- e.g., "Jun 16, 2025 13:45" or with seconds; add more formats as your export provides
       WHEN btrim(s."Last active (UTC)") ~ '^[A-Za-z]{3} \d{1,2}, \d{4}(\s+\d{1,2}:\d{2}(:\d{2})?)?$'
         THEN
           COALESCE(
             -- Try with HH24:MI:SS
-            to_timestamp(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI:SS') AT TIME ZONE 'UTC',
+            (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI:SS'))::timestamp AT TIME ZONE 'UTC' + INTERVAL '23 hours 59 minutes',
             -- Try with HH24:MI
-            to_timestamp(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI') AT TIME ZONE 'UTC',
-            -- Fallback to date-only at midnight
-            (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC'
+            (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY HH24:MI'))::timestamp AT TIME ZONE 'UTC' + INTERVAL '23 hours 59 minutes',
+            -- Fallback to date-only at 11:59 PM
+            (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC' + INTERVAL '23 hours 59 minutes'
           )
       WHEN btrim(s."Last active (UTC)") = '' THEN NULL
-      ELSE (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC'
+      ELSE (to_date(btrim(s."Last active (UTC)"), 'Mon DD, YYYY'))::timestamp AT TIME ZONE 'UTC' + INTERVAL '23 hours 59 minutes'
     END AS event_date,
     NULLIF(btrim(s.email), '') AS s_email
   FROM {{ source('slack', 'member_analytics_csv') }} AS s
