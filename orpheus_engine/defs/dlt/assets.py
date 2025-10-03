@@ -141,6 +141,43 @@ def create_airtable_sync_assets(
                 # Assert no duplicates
                 assert len(renamed_df.columns) == len(set(renamed_df.columns)), "Duplicate column names still present!"
                 
+                # Convert date/datetime strings to proper datetime types using Polars' parser
+                context.log.info("Attempting to convert string columns to datetime types")
+                
+                # Sample size for type detection (balance between accuracy and performance)
+                SAMPLE_SIZE = 100
+                
+                for col in renamed_df.columns:
+                    if renamed_df[col].dtype == pl.Utf8:
+                        # Sample first N non-null rows to check if this is a date column (performant for large datasets)
+                        sample = renamed_df[col].drop_nulls().head(SAMPLE_SIZE)
+                        
+                        if sample.len() == 0:
+                            # No data to test, skip
+                            continue
+                        
+                        # Try to parse sample as datetime using Polars' built-in parser
+                        try:
+                            sample_converted = sample.str.to_datetime(strict=False)
+                            sample_converted_non_null = sample_converted.drop_nulls().len()
+                            
+                            # If ≥90% of sample values parsed successfully, convert the entire column
+                            if sample_converted_non_null >= sample.len() * 0.9:
+                                # Convert the full column
+                                renamed_df = renamed_df.with_columns(
+                                    pl.col(col).str.to_datetime(strict=False).alias(col)
+                                )
+                                context.log.info(
+                                    f"Converted column '{col}' from string to datetime "
+                                    f"(sample: {sample_converted_non_null}/{sample.len()} parsed successfully, "
+                                    f"total rows: {renamed_df.height})"
+                                )
+                            else:
+                                context.log.debug(f"Column '{col}' does not appear to be a date/datetime column")
+                        except Exception as e:
+                            # Polars couldn't parse it as datetime, keep as string
+                            context.log.debug(f"Could not convert '{col}' to datetime: {e}")
+                
                 # Sanitize string columns to remove/escape problematic characters
                 context.log.info("Sanitizing string columns to remove problematic characters for SQL")
                 for col in renamed_df.columns:
