@@ -30,6 +30,9 @@ from ..analytics.definitions import format_airtable_date
 from ..dlt.assets import create_airtable_sync_assets
 from ..airtable.definitions import create_airtable_assets
 
+# Alias for convenience
+UnifiedYSWS = AirtableIDs.unified_ysws_projects_db
+
 
 def _extract_geocode_details(geocode_result: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -52,10 +55,10 @@ def _extract_geocode_details(geocode_result: Dict[str, Any]) -> Dict[str, Any]:
         country_code = geocode_result.get('country_code', '')
         
         return {
-            AirtableIDs.unified_ysws_db.approved_projects.geocoded_latitude: float(lat),
-            AirtableIDs.unified_ysws_db.approved_projects.geocoded_longitude: float(lng),
-            AirtableIDs.unified_ysws_db.approved_projects.geocoded_country: country_name,
-            AirtableIDs.unified_ysws_db.approved_projects.geocoded_country_code: country_code,
+            UnifiedYSWS.approved_projects.geocoded_latitude: float(lat),
+            UnifiedYSWS.approved_projects.geocoded_longitude: float(lng),
+            UnifiedYSWS.approved_projects.geocoded_country: country_name,
+            UnifiedYSWS.approved_projects.geocoded_country_code: country_code,
         }
     except (ValueError, TypeError, KeyError) as e:
         return None
@@ -67,12 +70,12 @@ def _build_address_string(row: Dict[str, Any]) -> str:
     Ensures identical formatting to Loops for maximum geocoding cache hits.
     """
     field_ids = {
-        "address_line_1": AirtableIDs.unified_ysws_db.approved_projects.address_line_1,
-        "address_line_2": AirtableIDs.unified_ysws_db.approved_projects.address_line_2,
-        "city": AirtableIDs.unified_ysws_db.approved_projects.city,
-        "state_province": AirtableIDs.unified_ysws_db.approved_projects.state_province,
-        "zip_postal_code": AirtableIDs.unified_ysws_db.approved_projects.zip_postal_code,
-        "country": AirtableIDs.unified_ysws_db.approved_projects.country,
+        "address_line_1": UnifiedYSWS.approved_projects.address_line_1,
+        "address_line_2": UnifiedYSWS.approved_projects.address_line_2,
+        "city": UnifiedYSWS.approved_projects.city,
+        "state_province": UnifiedYSWS.approved_projects.state_province,
+        "zip_postal_code": UnifiedYSWS.approved_projects.zip_postal_code,
+        "country": UnifiedYSWS.approved_projects.country,
     }
     return build_address_string_from_airtable_row(row, field_ids)
 
@@ -363,7 +366,7 @@ def _convert_to_lower_camel_case(name: str) -> str:
     group_name="unified_ysws_db_processing",
     description="Prepares approved projects that have GitHub URLs in code_url field for star count retrieval",
     compute_kind="data_preparation",
-    deps=[AssetKey(["airtable", "unified_ysws_db", "approved_projects"])],
+    deps=[AssetKey(["airtable", "unified_ysws_projects_db", "approved_projects"])],
     required_resource_keys={"airtable"},
 )
 def approved_projects_repo_stats_candidates(
@@ -381,18 +384,18 @@ def approved_projects_repo_stats_candidates(
     # Get the approved_projects data from airtable
     projects_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="approved_projects",
     )
     
     log.info(f"Processing {projects_df.height} approved projects for GitHub URL detection")
     
     # Get the field IDs
-    code_url_field_id = AirtableIDs.unified_ysws_db.approved_projects.code_url
-    stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
-    updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
-    language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
-    exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+    code_url_field_id = UnifiedYSWS.approved_projects.code_url
+    stars_field_id = UnifiedYSWS.approved_projects.repo_star_count
+    updated_at_field_id = UnifiedYSWS.approved_projects.repo_stats_last_updated_at
+    language_field_id = UnifiedYSWS.approved_projects.repo_language
+    exists_field_id = UnifiedYSWS.approved_projects.repo_exists
     
     if code_url_field_id not in projects_df.columns:
         log.warning(f"Code URL field {code_url_field_id} not found in projects data")
@@ -481,10 +484,10 @@ def approved_projects_repo_stats(
     
     if input_df.height == 0:
         log.info("No GitHub URL candidates to process.")
-        stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
-        updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
-        language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
-        exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+        stars_field_id = UnifiedYSWS.approved_projects.repo_star_count
+        updated_at_field_id = UnifiedYSWS.approved_projects.repo_stats_last_updated_at
+        language_field_id = UnifiedYSWS.approved_projects.repo_language
+        exists_field_id = UnifiedYSWS.approved_projects.repo_exists
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
@@ -553,10 +556,10 @@ def approved_projects_repo_stats(
     results = github_results + non_github_results
     
     # Process results and create Airtable records
-    stars_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_star_count
-    updated_at_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_stats_last_updated_at
-    language_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_language
-    exists_field_id = AirtableIDs.unified_ysws_db.approved_projects.repo_exists
+    stars_field_id = UnifiedYSWS.approved_projects.repo_star_count
+    updated_at_field_id = UnifiedYSWS.approved_projects.repo_stats_last_updated_at
+    language_field_id = UnifiedYSWS.approved_projects.repo_language
+    exists_field_id = UnifiedYSWS.approved_projects.repo_exists
     
     all_records = []
     num_repo_exists_success = 0
@@ -632,7 +635,7 @@ def approved_projects_repo_stats(
     group_name="unified_ysws_db_processing",
     description="Prepares YSWS programs data for signup analysis by converting names to loops engagement prefixes",
     compute_kind="data_preparation",
-    deps=[AssetKey(["airtable", "unified_ysws_db", "ysws_programs"])],
+    deps=[AssetKey(["airtable", "unified_ysws_projects_db", "ysws_programs"])],
     required_resource_keys={"airtable"},
 )
 def ysws_programs_sign_up_stats_candidates(
@@ -650,15 +653,15 @@ def ysws_programs_sign_up_stats_candidates(
     # Get the ysws_programs data from airtable
     programs_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="ysws_programs",
     )
     
     log.info(f"Processing {programs_df.height} YSWS programs")
     
     # Get the field IDs
-    name_field_id = AirtableIDs.unified_ysws_db.ysws_programs.name
-    override_field_id = AirtableIDs.unified_ysws_db.ysws_programs.sign_up_stats_override_prefix
+    name_field_id = UnifiedYSWS.ysws_programs.name
+    override_field_id = UnifiedYSWS.ysws_programs.sign_up_stats_override_prefix
     
     if name_field_id not in programs_df.columns:
         log.error(f"Name field {name_field_id} not found in programs data")
@@ -732,7 +735,7 @@ def ysws_programs_sign_up_stats_candidates(
     group_name="unified_ysws_db_processing",
     description="Prepares YSWS programs with HCB data by extracting HCB IDs from URLs",
     compute_kind="data_preparation",
-    deps=[AssetKey(["airtable", "unified_ysws_db", "ysws_programs"])],
+    deps=[AssetKey(["airtable", "unified_ysws_projects_db", "ysws_programs"])],
     required_resource_keys={"airtable"},
 )
 def ysws_programs_hcb_candidates(
@@ -750,14 +753,14 @@ def ysws_programs_hcb_candidates(
     # Get the ysws_programs data from airtable
     programs_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="ysws_programs",
     )
     
     log.info(f"Processing {programs_df.height} YSWS programs for HCB data")
     
     # Get the HCB field ID
-    hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+    hcb_field_id = UnifiedYSWS.ysws_programs.hcb
     
     if hcb_field_id not in programs_df.columns:
         log.warning(f"HCB field {hcb_field_id} not found in programs data")
@@ -833,8 +836,8 @@ def ysws_programs_hcb_stats(
     
     if input_df.height == 0:
         log.info("No HCB candidates to process.")
-        total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-        hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+        total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+        hcb_field_id = UnifiedYSWS.ysws_programs.hcb
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
@@ -857,8 +860,8 @@ def ysws_programs_hcb_stats(
         if not hcb_id:
             log.warning(f"No HCB ID for program {program_id}")
             # Create error record
-            total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
             all_records.append({
                 "id": program_id,
                 total_spent_field_id: None,
@@ -888,8 +891,8 @@ def ysws_programs_hcb_stats(
                 
                 log.warning(f"HCB API returned {response.status_code} for {hcb_id}: {response.text}")
                 # Create error record
-                total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-                hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+                total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+                hcb_field_id = UnifiedYSWS.ysws_programs.hcb
                 all_records.append({
                     "id": program_id,
                     total_spent_field_id: None,
@@ -909,8 +912,8 @@ def ysws_programs_hcb_stats(
             total_spent_dollars = (total_raised - balance_cents) / 100.0
             
             # Get Airtable field IDs
-            total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
             
             # Add successful record
             all_records.append({
@@ -924,8 +927,8 @@ def ysws_programs_hcb_stats(
         except requests.exceptions.RequestException as e:
             log.error(f"Request failed for HCB ID {hcb_id}: {e}")
             # Create error record
-            total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
             all_records.append({
                 "id": program_id,
                 total_spent_field_id: None,
@@ -935,8 +938,8 @@ def ysws_programs_hcb_stats(
         except (KeyError, ValueError, TypeError) as e:
             log.error(f"Error parsing HCB data for {hcb_id}: {e}")
             # Create error record
-            total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
             all_records.append({
                 "id": program_id,
                 total_spent_field_id: None,
@@ -946,8 +949,8 @@ def ysws_programs_hcb_stats(
         except Exception as e:
             log.error(f"Unexpected error processing HCB ID {hcb_id}: {e}")
             # Create error record
-            total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
             all_records.append({
                 "id": program_id,
                 total_spent_field_id: None,
@@ -956,8 +959,8 @@ def ysws_programs_hcb_stats(
             failed_count += 1
     
     # Create output DataFrame
-    total_spent_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_spent_from_hcb_fund
-    hcb_field_id = AirtableIDs.unified_ysws_db.ysws_programs.hcb
+    total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+    hcb_field_id = UnifiedYSWS.ysws_programs.hcb
     
     if all_records:
         output_df = pl.DataFrame(all_records)
@@ -1038,7 +1041,7 @@ def _get_signup_analysis_data(search_terms: List[str]) -> pl.DataFrame:
     group_name="unified_ysws_db_processing",
     description="Identifies approved projects that need geocoding based on address hash comparison and missing coordinates.",
     compute_kind="address_analysis",
-    deps=[AssetKey(["airtable", "unified_ysws_db", "approved_projects"])],
+    deps=[AssetKey(["airtable", "unified_ysws_projects_db", "approved_projects"])],
     required_resource_keys={"airtable"},
 )
 def approved_projects_geocoding_candidates(
@@ -1054,22 +1057,22 @@ def approved_projects_geocoding_candidates(
     # Get the approved projects data from airtable
     input_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="approved_projects",
     )
     
     log.info(f"Processing {input_df.height} approved projects for geocoding candidates using vectorized operations")
     
     # Use field IDs as variables for cleaner code
-    addr1_col = AirtableIDs.unified_ysws_db.approved_projects.address_line_1
-    addr2_col = AirtableIDs.unified_ysws_db.approved_projects.address_line_2
-    city_col = AirtableIDs.unified_ysws_db.approved_projects.city
-    state_col = AirtableIDs.unified_ysws_db.approved_projects.state_province
-    zip_col = AirtableIDs.unified_ysws_db.approved_projects.zip_postal_code
-    country_col = AirtableIDs.unified_ysws_db.approved_projects.country
-    hash_col = AirtableIDs.unified_ysws_db.approved_projects.geocoded_address_hash
-    lat_col = AirtableIDs.unified_ysws_db.approved_projects.geocoded_latitude
-    lng_col = AirtableIDs.unified_ysws_db.approved_projects.geocoded_longitude
+    addr1_col = UnifiedYSWS.approved_projects.address_line_1
+    addr2_col = UnifiedYSWS.approved_projects.address_line_2
+    city_col = UnifiedYSWS.approved_projects.city
+    state_col = UnifiedYSWS.approved_projects.state_province
+    zip_col = UnifiedYSWS.approved_projects.zip_postal_code
+    country_col = UnifiedYSWS.approved_projects.country
+    hash_col = UnifiedYSWS.approved_projects.geocoded_address_hash
+    lat_col = UnifiedYSWS.approved_projects.geocoded_latitude
+    lng_col = UnifiedYSWS.approved_projects.geocoded_longitude
     
     # Check if required address fields exist
     required_fields = [addr1_col, city_col]
@@ -1170,7 +1173,7 @@ def approved_projects_geocoding_candidates(
     group_name="unified_ysws_db_processing",
     description="Identifies approved projects needing URL archiving",
     compute_kind="data_preparation",
-    deps=[AssetKey(["airtable", "unified_ysws_db", "approved_projects"])],
+    deps=[AssetKey(["airtable", "unified_ysws_projects_db", "approved_projects"])],
     required_resource_keys={"airtable"},
 )
 def approved_projects_archive_candidates(
@@ -1186,16 +1189,16 @@ def approved_projects_archive_candidates(
     log.info("Fetching approved projects from Airtable")
     input_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="approved_projects",
     )
     log.info(f"Retrieved {input_df.height} approved projects from Airtable")
     
     # Field IDs
-    code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
-    playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
-    archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
-    approved_at_col = AirtableIDs.unified_ysws_db.approved_projects.approved_at
+    code_url_col = UnifiedYSWS.approved_projects.code_url
+    playable_url_col = UnifiedYSWS.approved_projects.playable_url
+    archive_hash_col = UnifiedYSWS.approved_projects.archive_hash
+    approved_at_col = UnifiedYSWS.approved_projects.approved_at
     
     # Calculate archive hash and cutoff date (1 week ago)
     eastern = pytz.timezone('US/Eastern')
@@ -1206,8 +1209,8 @@ def approved_projects_archive_candidates(
     log.info("Calculating archive hashes and filtering candidates")
     
     # Get archive URL field IDs for hash calculation
-    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
-    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
+    archive_code_url_col = UnifiedYSWS.approved_projects.archive_code_url
+    archive_live_url_col = UnifiedYSWS.approved_projects.archive_live_url
     
     candidates = input_df.with_columns([
         pl.col(code_url_col).fill_null("").alias("code_url_clean"),
@@ -1269,10 +1272,10 @@ def approved_projects_archived(
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_code_url: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_live_url: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.archive_hash: pl.Utf8,
+                UnifiedYSWS.approved_projects.archive_code_url: pl.Utf8,
+                UnifiedYSWS.approved_projects.archive_live_url: pl.Utf8,
+                UnifiedYSWS.approved_projects.archive_archived_at: pl.Utf8,
+                UnifiedYSWS.approved_projects.archive_hash: pl.Utf8,
             }),
             metadata={"num_processed": 0, "num_successful": 0, "num_failed": 0}
         )
@@ -1280,12 +1283,12 @@ def approved_projects_archived(
     log.info(f"Starting archive processing for {input_df.height} projects")
     
     # Field IDs
-    code_url_col = AirtableIDs.unified_ysws_db.approved_projects.code_url
-    playable_url_col = AirtableIDs.unified_ysws_db.approved_projects.playable_url
-    archive_code_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_code_url
-    archive_live_url_col = AirtableIDs.unified_ysws_db.approved_projects.archive_live_url
-    archive_archived_at_col = AirtableIDs.unified_ysws_db.approved_projects.archive_archived_at
-    archive_hash_col = AirtableIDs.unified_ysws_db.approved_projects.archive_hash
+    code_url_col = UnifiedYSWS.approved_projects.code_url
+    playable_url_col = UnifiedYSWS.approved_projects.playable_url
+    archive_code_url_col = UnifiedYSWS.approved_projects.archive_code_url
+    archive_live_url_col = UnifiedYSWS.approved_projects.archive_live_url
+    archive_archived_at_col = UnifiedYSWS.approved_projects.archive_archived_at
+    archive_hash_col = UnifiedYSWS.approved_projects.archive_hash
     
     # Archive API setup
     archive_api_key = os.getenv("ARCHIVE_HACKCLUB_COM_API_KEY")
@@ -1437,11 +1440,11 @@ def approved_projects_geocoded(
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.geocoded_latitude: pl.Float64,
-                AirtableIDs.unified_ysws_db.approved_projects.geocoded_longitude: pl.Float64,
-                AirtableIDs.unified_ysws_db.approved_projects.geocoded_country: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.geocoded_country_code: pl.Utf8,
-                AirtableIDs.unified_ysws_db.approved_projects.geocoded_address_hash: pl.Utf8,
+                UnifiedYSWS.approved_projects.geocoded_latitude: pl.Float64,
+                UnifiedYSWS.approved_projects.geocoded_longitude: pl.Float64,
+                UnifiedYSWS.approved_projects.geocoded_country: pl.Utf8,
+                UnifiedYSWS.approved_projects.geocoded_country_code: pl.Utf8,
+                UnifiedYSWS.approved_projects.geocoded_address_hash: pl.Utf8,
             }),
             metadata={"num_candidates": 0, "num_geocoded": 0, "num_errors": 0}
         )
@@ -1483,7 +1486,7 @@ def approved_projects_geocoded(
                 output_record = {
                     "id": record_id,
                     **extracted_details,
-                    AirtableIDs.unified_ysws_db.approved_projects.geocoded_address_hash: calculated_hash
+                    UnifiedYSWS.approved_projects.geocoded_address_hash: calculated_hash
                 }
                 newly_geocoded_records.append(output_record)
                 log.info(f"Successfully geocoded record {record_id} ({geocoded_count})")
@@ -1503,11 +1506,11 @@ def approved_projects_geocoded(
     # Create output DataFrame
     output_schema = {
         "id": pl.Utf8,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_latitude: pl.Float64,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_longitude: pl.Float64,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_country: pl.Utf8,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_country_code: pl.Utf8,
-        AirtableIDs.unified_ysws_db.approved_projects.geocoded_address_hash: pl.Utf8,
+        UnifiedYSWS.approved_projects.geocoded_latitude: pl.Float64,
+        UnifiedYSWS.approved_projects.geocoded_longitude: pl.Float64,
+        UnifiedYSWS.approved_projects.geocoded_country: pl.Utf8,
+        UnifiedYSWS.approved_projects.geocoded_country_code: pl.Utf8,
+        UnifiedYSWS.approved_projects.geocoded_address_hash: pl.Utf8,
     }
     
     if newly_geocoded_records:
@@ -1751,7 +1754,7 @@ def approved_projects_update_status(
     # Perform batch update
     result = airtable.batch_update_records(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="approved_projects",
         records=records_to_update,
     )
@@ -1817,8 +1820,8 @@ def ysws_programs_sign_up_stats(
         log.info(f"Sign-up data preview: {signup_data.to_dicts()}")
         
         # Get Airtable field IDs
-        total_signups_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_sign_ups
-        total_signups_new_field_id = AirtableIDs.unified_ysws_db.ysws_programs.total_sign_ups_new_to_hack_club
+        total_signups_field_id = UnifiedYSWS.ysws_programs.total_sign_ups
+        total_signups_new_field_id = UnifiedYSWS.ysws_programs.total_sign_ups_new_to_hack_club
         
         # Merge programs data with signup data
         merged_data = programs_data.join(
@@ -2062,7 +2065,7 @@ def ysws_programs_update_status(
     # Perform batch update
     result = airtable.batch_update_records(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="ysws_programs",
         records=records_to_update,
     )
@@ -2120,13 +2123,13 @@ def approved_projects_mention_search_batch(
     log.info("Re-querying approved projects from Airtable to get fresh formula values")
     projects_df = airtable.get_all_records_as_polars(
         context=context,
-        base_key="unified_ysws_db",
+        base_key="unified_ysws_projects_db",
         table_key="approved_projects",
     )
     
     # Get field IDs
-    wants_search_field = AirtableIDs.unified_ysws_db.approved_projects.ysws_project_mentions_project_wants_search
-    approved_at_field = AirtableIDs.unified_ysws_db.approved_projects.approved_at
+    wants_search_field = UnifiedYSWS.approved_projects.ysws_project_mentions_project_wants_search
+    approved_at_field = UnifiedYSWS.approved_projects.approved_at
     
     # Check if required fields exist
     if wants_search_field not in projects_df.columns:
@@ -2393,7 +2396,7 @@ def unified_ysws_db_processing_done(
 
 # Create refreshed Airtable source assets that re-query after processing
 ysws_refresh_airtable_assets = create_airtable_assets(
-    base_name="unified_ysws_db",
+    base_name="unified_ysws_projects_db",
     tables=[
         "approved_projects", 
         "ysws_programs", 
@@ -2410,7 +2413,7 @@ ysws_refresh_airtable_assets = create_airtable_assets(
 
 # Create DLT warehouse assets that use the refreshed Airtable sources
 ysws_warehouse_refresh_assets = create_airtable_sync_assets(
-    base_name="unified_ysws_db",
+    base_name="unified_ysws",
     tables=[
         "approved_projects", 
         "ysws_programs", 
@@ -2422,7 +2425,9 @@ ysws_warehouse_refresh_assets = create_airtable_sync_assets(
         "ysws_spot_check_sessions"
     ],
     description="Loads refreshed YSWS data into warehouse after all processing is complete",
-    source_suffix="_refresh"  # Use the refreshed Airtable sources
+    source_suffix="_refresh",  # Use the refreshed Airtable sources
+    warehouse_dataset_name="airtable_unified_ysws_projects_db",  # Custom warehouse schema name
+    source_base_name="unified_ysws_projects_db"  # Source assets are in unified_ysws_projects_db base
 )
 
 

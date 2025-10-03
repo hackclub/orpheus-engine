@@ -601,8 +601,8 @@ class AirtableIDs:
             slack_id = "fldTrCGiaOMAVED5o"  # Name: slack_id
 
 
-    class unified_ysws_db:
-        """IDs for Base 'unified_ysws_db' (ID: app3A5kJwYqxMLOgh)"""
+    class unified_ysws_projects_db:
+        """IDs for Base 'unified_ysws_projects_db' (ID: app3A5kJwYqxMLOgh)"""
         BASE_ID = "app3A5kJwYqxMLOgh"
 
         class approved_projects:
