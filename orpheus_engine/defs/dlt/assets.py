@@ -24,7 +24,8 @@ def warehouse_coolify_destination() -> postgres:
 def create_airtable_sync_assets(
     base_name: str,
     tables: list[str],
-    description: str = None
+    description: str = None,
+    source_suffix: str = ""
 ):
     """
     Creates DLT assets for syncing multiple Airtable tables to the warehouse.
@@ -33,6 +34,7 @@ def create_airtable_sync_assets(
         base_name: The name of the Airtable base (e.g., 'neighborhood')
         tables: List of table names to sync (e.g., ['neighbors', 'projects'])
         description: Optional custom description for the assets
+        source_suffix: Optional suffix for source asset names (e.g., '_refresh')
     """
     assets_list = []  # Renamed from 'assets' to avoid potential module name conflict
     
@@ -46,7 +48,7 @@ def create_airtable_sync_assets(
                 group_name=f"dlt_airtable_{base_name}",
                 description=description or f"Loads {base_name}.{specific_table_name} data into the warehouse.airtable_{base_name} schema.",
                 ins={
-                    specific_table_name: AssetIn(key_prefix=["airtable", base_name])
+                    f"{specific_table_name}{source_suffix}": AssetIn(key_prefix=["airtable", base_name])
                 }
             )
             def sync_asset(context: AssetExecutionContext, **kwargs):
@@ -55,8 +57,9 @@ def create_airtable_sync_assets(
                 dataset_name = f"airtable_{base_name}"
                 table_name_warehouse = specific_table_name
 
-                # Get the input DataFrame
-                df = kwargs[specific_table_name]
+                # Get the input DataFrame (use the suffixed key)
+                input_key = f"{specific_table_name}{source_suffix}"
+                df = kwargs[input_key]
 
                 # Get field mappings from generated_ids
                 base_class = getattr(AirtableIDs, base_name) 

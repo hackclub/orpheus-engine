@@ -7,6 +7,7 @@ from dagster import (
     AssetExecutionContext,
     Output,
     MetadataValue,
+    AssetKey,
 )
 
 # Import the resource and config models
@@ -110,6 +111,21 @@ airtable_config = AirtableServiceConfig(
                 ),
                 "ysws_authors": AirtableTableConfig(
                     table_id="tblRf1BQs5H8298gW"
+                ),
+                "nps": AirtableTableConfig(
+                    table_id="tblQpkS0I9V2ixBD0"
+                ),
+                "ysws_project_mentions": AirtableTableConfig(
+                    table_id="tbl5SU7OcPeZMaDOs"
+                ),
+                "ysws_project_mention_searches": AirtableTableConfig(
+                    table_id="tblfU7k0cgzysujpH"
+                ),
+                "ysws_spot_checks": AirtableTableConfig(
+                    table_id="tbltWKtnaXRVJDEo3"
+                ),
+                "ysws_spot_check_sessions": AirtableTableConfig(
+                    table_id="tblJCBhT1pYJcrQjV"
                 )
             }
         )
@@ -202,6 +218,101 @@ def _create_airtable_asset(base_key: str, table_key: str):
 
     dynamic_airtable_asset.__name__ = asset_function_name
     return dynamic_airtable_asset
+
+
+def create_airtable_assets(
+    base_name: str,
+    tables: list[str],
+    deps: list = None,
+    suffix: str = ""
+):
+    """
+    Creates Airtable source assets for specific tables with optional dependencies and suffix.
+    
+    Args:
+        base_name: The name of the Airtable base (e.g., 'unified_ysws_db')
+        tables: List of table names to create assets for
+        deps: Optional list of AssetKeys or asset dependencies
+        suffix: Optional suffix to add to asset names (e.g., '_refresh')
+    """
+    assets_list = []
+    
+    for table_name in tables:
+        def create_airtable_asset_for_table(specific_table_name):
+            """Factory function that creates an Airtable asset for a specific table"""
+            
+            sanitized_base_name = sanitize_name(base_name)
+            sanitized_table_name = sanitize_name(specific_table_name)
+            asset_function_name = f"airtable_{base_name}_{specific_table_name}{suffix}"
+            
+            # Get Base and Table IDs from config
+            try:
+                base_id_for_log = airtable_config.bases[base_name].base_id
+                table_id_for_log = airtable_config.bases[base_name].tables[specific_table_name].table_id
+            except KeyError:
+                base_id_for_log = "UNKNOWN (config error)"
+                table_id_for_log = "UNKNOWN (config error)"
+            
+            @asset(
+                name=f"{specific_table_name}{suffix}",
+                key_prefix=["airtable", base_name],
+                group_name=f"airtable_{sanitized_base_name}{suffix}",
+                description=f"Refreshed Airtable data from '{specific_table_name}' in base '{base_name}' after processing.",
+                compute_kind="airtable",
+                deps=deps or []
+            )
+            def dynamic_refresh_airtable_asset(
+                context: AssetExecutionContext, airtable: AirtableResource
+            ) -> Output[pl.DataFrame]:
+                """Dynamically generated refresh Airtable asset."""
+                
+                context.log.info(f"Re-querying Airtable for fresh data from base '{base_name}' (ID: {base_id_for_log}), table '{specific_table_name}' (ID: {table_id_for_log})...")
+                
+                try:
+                    df = airtable.get_all_records_as_polars(
+                        context=context,
+                        base_key=base_name,
+                        table_key=specific_table_name,
+                    )
+                    
+                    context.log.info(f"Successfully fetched {df.height} records with {df.width} columns (refreshed).")
+                    
+                    # Generate metadata
+                    preview_limit = 5
+                    if df.height > 0:
+                        preview_df = df.head(preview_limit)
+                        try:
+                            preview_metadata = MetadataValue.md(preview_df.to_pandas().to_markdown(index=False))
+                        except Exception:
+                            preview_metadata = MetadataValue.text(str(preview_df))
+                    else:
+                        preview_metadata = MetadataValue.text("DataFrame is empty.")
+                    
+                    metadata = {
+                        "base_key": MetadataValue.text(base_name),
+                        "table_key": MetadataValue.text(specific_table_name),
+                        "base_id": MetadataValue.text(base_id_for_log),
+                        "table_id": MetadataValue.text(table_id_for_log),
+                        "num_records": MetadataValue.int(df.height),
+                        "num_columns": MetadataValue.int(df.width),
+                        "refresh_type": MetadataValue.text("post_processing_refresh"),
+                        "preview": preview_metadata,
+                    }
+                    
+                    return Output(value=df, metadata=metadata)
+                    
+                except Exception as e:
+                    context.log.error(f"Failed to fetch refreshed data from Airtable ({base_name}.{specific_table_name}): {e}", exc_info=True)
+                    raise
+            
+            dynamic_refresh_airtable_asset.__name__ = asset_function_name
+            return dynamic_refresh_airtable_asset
+        
+        # Create the asset function for this specific table
+        asset_function = create_airtable_asset_for_table(table_name)
+        assets_list.append(asset_function)
+    
+    return assets_list
 
 # Generate all assets by iterating through the config
 all_airtable_assets = []

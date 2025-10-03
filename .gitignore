@@ -13,3 +13,5 @@ __pycache__
 dbt.log
 
 prompt.txt
+
+.dlt_pipelines/

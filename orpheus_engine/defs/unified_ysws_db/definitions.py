@@ -27,6 +27,8 @@ from ..geocoder.resources import GeocoderResource, GeocodingError
 from ..airtable.generated_ids import AirtableIDs
 from ..shared.address_utils import build_address_string_from_airtable_row
 from ..analytics.definitions import format_airtable_date
+from ..dlt.assets import create_airtable_sync_assets
+from ..airtable.definitions import create_airtable_assets
 
 
 def _extract_geocode_details(geocode_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -2364,6 +2366,66 @@ async def _run_parallel_mention_searches(record_ids: list, script_path: str, log
     return results
 
 
+@asset(
+    group_name="unified_ysws_db_processing",
+    description="Stub asset that marks completion of all YSWS processing",
+    compute_kind="marker",
+)
+def unified_ysws_db_processing_done(
+    context: AssetExecutionContext,
+    approved_projects_mention_search_batch: pl.DataFrame,
+    ysws_programs_update_status: None,
+) -> Output[None]:
+    """
+    Marker asset that indicates all YSWS processing is complete.
+    Warehouse refresh assets depend on this to ensure they run after all processing.
+    """
+    context.log.info("All YSWS processing completed successfully")
+    
+    return Output(
+        None,
+        metadata={
+            "approved_projects_searches": approved_projects_mention_search_batch.height,
+            "processing_status": "completed"
+        }
+    )
+
+
+# Create refreshed Airtable source assets that re-query after processing
+ysws_refresh_airtable_assets = create_airtable_assets(
+    base_name="unified_ysws_db",
+    tables=[
+        "approved_projects", 
+        "ysws_programs", 
+        "ysws_authors",
+        "nps",
+        "ysws_project_mentions",
+        "ysws_project_mention_searches", 
+        "ysws_spot_checks",
+        "ysws_spot_check_sessions"
+    ],
+    deps=[AssetKey(["unified_ysws_db_processing_done"])],
+    suffix="_refresh"
+)
+
+# Create DLT warehouse assets that use the refreshed Airtable sources
+ysws_warehouse_refresh_assets = create_airtable_sync_assets(
+    base_name="unified_ysws_db",
+    tables=[
+        "approved_projects", 
+        "ysws_programs", 
+        "ysws_authors",
+        "nps",
+        "ysws_project_mentions",
+        "ysws_project_mention_searches", 
+        "ysws_spot_checks",
+        "ysws_spot_check_sessions"
+    ],
+    description="Loads refreshed YSWS data into warehouse after all processing is complete",
+    source_suffix="_refresh"  # Use the refreshed Airtable sources
+)
+
+
 # Define the assets for this module
 defs = Definitions(
     assets=[
@@ -2382,5 +2444,6 @@ defs = Definitions(
         ysws_programs_hcb_stats,
         ysws_programs_prepared_for_update,
         ysws_programs_update_status,
-    ],
+        unified_ysws_db_processing_done,
+    ] + ysws_refresh_airtable_assets + ysws_warehouse_refresh_assets,
 )

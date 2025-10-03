@@ -502,6 +502,8 @@ class AirtableIDs:
             referred_users_registered_users_count = "fldl2x5dLU4pxox8N"  # Name: referred_users_registered_users_count
             referred_users_count = "fldKkUQ312lzdgpLD"  # Name: referred_users_count
             referred_users_registered_users_edition = "fld1Bl83LyowhNubP"  # Name: referred_users_registered_users_edition
+            birthday_from_ysws_project_submission = "fldUk2PeUPG8VvOEh"  # Name: Birthday (from ysws_project_submission)
+            age = "fldYAKM8AtS3pBGS0"  # Name: age
             last_name_from_ysws_project_submission = "fldD0Xq6rcjWdr9al"  # Name: Last Name (from ysws_project_submission)
             first_name_from_ysws_project_submission = "fldVVqv3at0W3jGAu"  # Name: First Name (from ysws_project_submission)
             profile_picture = "fldxLDUvCXQCDxfnr"  # Name: profile_picture
@@ -515,9 +517,8 @@ class AirtableIDs:
             ordered_travel_stipend_money = "fldixCVcSIAlbTmvp"  # Name: ordered_travel_stipend_money
             approved_for_parthenon = "fldNsAL6B65xfd6LC"  # Name: approved for parthenon
             notes = "fld5wMQYthcOVbX1W"  # Name: notes
-            birthday_from_ysws_project_submission = "fldUk2PeUPG8VvOEh"  # Name: Birthday (from ysws_project_submission)
-            age = "fldYAKM8AtS3pBGS0"  # Name: age
-            parthenon_invite_sent = "fldMV9GAB9mbCe3sW"  # Name: parthenon invite sent?
+            send_parthenon_invite = "fldMV9GAB9mbCe3sW"  # Name: send parthenon invite
+            prize_suggestions = "fldrKBwk6JDCfA9HI"  # Name: Prize Suggestions
 
         class email_slack_invites:
             """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
@@ -573,6 +574,7 @@ class AirtableIDs:
 
             record_id = "fldcwoCVYQ9P3GdKv"  # Name: record_id
             unique_name = "fld8A7FjUiOI5Ho8M"  # Name: unique_name
+            unique_name_email = "fldrwowgSdETRYNtV"  # Name: unique_name_email
             project_name = "fld6vGpatATHH7rn8"  # Name: project_name
             project_name_override = "fldCodpGWr0hiGisg"  # Name: project_name_override
             guided_ysws = "fld16dhOG3s49vzq5"  # Name: guided_ysws
@@ -584,7 +586,7 @@ class AirtableIDs:
             status = "fld8mVhD1hOom2i9i"  # Name: status
             order = "fld9YhS7dp9fWVzoo"  # Name: order
             registered_user = "fldbWcHEPieWbwaaQ"  # Name: registered_user
-            stringified_email = "flddvqww48TLt7JKs"  # Name: stringified_email
+            email = "flddvqww48TLt7JKs"  # Name: email
             form_submitted_project = "fldis1ignLpvSF5LK"  # Name: form_submitted_project
             screenshot_from_form_submitted_project = "fld60qq9Vu1DJh32S"  # Name: Screenshot (from form_submitted_project)
             code_url = "fldBDPByuRJgVWyjw"  # Name: code_url
@@ -642,13 +644,9 @@ class AirtableIDs:
             ysws_default_hours_per_grant = "fldszX7e87sog5S3y"  # Name: YSWS–Default Hours Per Grant
             ysws_name = "fldVa0pJbIqczqwVM"  # Name: YSWS–Name
             ysws_current_owners = "fldoP6VwW6PtWdFf2"  # Name: YSWS–Current Owners
-            author_countries = "fld3hDC0UZw8wTYxt"  # Name: Author countries
-            unique_countries = "fldIVshZfUOo5ezZm"  # Name: Unique countries
             archive_live_url = "fld23yYoziYecDwLu"  # Name: Archive - Live URL
             archive_code_url = "fld1Xfgpcjiilk6cS"  # Name: Archive - Code URL
             archive_archived_at = "fldBuUAbjyPGuMlv6"  # Name: Archive - Archived At
-            archive_trigger_rearchive = "fldrRoGY2AftSp2eD"  # Name: Archive - Trigger Rearchive
-            archive_trigger_rearchive_2 = "fldhB3unFat8QMeOd"  # Name: Archive - Trigger Rearchive 2
             hack_clubber = "fldPzArB9uPrnjRWw"  # Name: Hack Clubber
             hack_clubber_geocoded_country = "fldDyo57k4POiIlO4"  # Name: Hack Clubber–Geocoded Country
             ysws_spot_checks = "fldm0HMxgc3oQsDNs"  # Name: YSWS Spot Checks
@@ -657,7 +655,6 @@ class AirtableIDs:
             geocoded_latitude = "fldoHZxN7wdYxYpr6"  # Name: Geocoded - Latitude
             geocoded_longitude = "fldNdgSKp7JStAm6h"  # Name: Geocoded - Longitude
             geocoded_address_hash = "fldUoOUQ7s2jgHWLa"  # Name: Geocoded - Address Hash
-            temp_approved_by_dev = "fldWXDUQOzOvP2n7W"  # Name: temp Approved by Dev
             archive_hash = "fldIxgUiHJ4XtWmF5"  # Name: Archive - Hash
             project_mentions_links = "fld0UipcnSnWGrG0H"  # Name: Project Mentions - Links
             repo_star_count = "fldYhr34qkhdJ8qMo"  # Name: Repo - Star Count
@@ -669,7 +666,7 @@ class AirtableIDs:
             ysws_project_mentions_last_search_links_found = "fldYxaMoN8RemVRbG"  # Name: YSWS Project Mentions - Last Search, # Links Found
             ysws_project_mentions_estimated_search_cost = "fldDMOqywU1ytG5JO"  # Name: YSWS Project Mentions - Estimated Search Cost
             ysws_project_mentions_5_links_on_last_search = "fldbAEGX0vsbdhXrZ"  # Name: YSWS Project Mentions - ≥5 Links on Last Search?
-            ysws_project_mentions_no_searches_and_5_repo_stars = "fld6uNVuMSJ0f20Xt"  # Name: YSWS Project Mentions - No Searches And ≥5 Repo Stars
+            ysws_project_mentions_no_searches_and_20_repo_stars = "fld6uNVuMSJ0f20Xt"  # Name: YSWS Project Mentions - No Searches And ≥20 Repo Stars
             ysws_project_mentions_repo_stars_at_last_search = "fldJ49PEMPDTT8MqH"  # Name: YSWS Project Mentions - Repo Stars At Last Search
             ysws_project_mentions_last_search_at = "fld9XaVArOhSMN1ZX"  # Name: YSWS Project Mentions - Last Search At
             ysws_project_mentions_5_repo_stars_since_last_search_and_72_hours_passed = "fld8DDjp1jZtM1Psh"  # Name: YSWS Project Mentions - ≥5 Repo Stars Since Last Search And 72 Hours Passed
@@ -678,6 +675,12 @@ class AirtableIDs:
             ysws_project_mentions_hacker_news_points = "fld9owikn8oFm3yWZ"  # Name: YSWS Project Mentions - Hacker News Points
             ysws_project_mentions_links_found = "fldXr6S0NaprCe1Os"  # Name: YSWS Project Mentions - # Links Found
             ysws_project_mentions_1_search_but_2_searches = "fldwGVU8rqVt6ZvaF"  # Name: YSWS Project Mentions - ≥1 Search, But <2 Searches?
+            ysws_project_mentions_total_engagement_count = "fldIpjT3j51aj5rs6"  # Name: YSWS Project Mentions - Total Engagement Count
+            ysws_project_mentions_search_count_copy = "fld0tiao8RJzjPk5e"  # Name: YSWS Project Mentions - Search Count copy
+            ysws_project_mentions_weighted_points = "fldxynj95VVOg0t3k"  # Name: YSWS Project Mentions - Weighted Points
+            ysws_project_mentions_top_link = "fldM6SIIXbnkWY3hk"  # Name: YSWS Project Mentions - Top Link
+            state = "flduHp6cOwETXTRnr"  # Name: State 
+            county_centralizing = "fldu7bexqqfq3KoZ0"  # Name: County - Centralizing
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -726,6 +729,8 @@ class AirtableIDs:
             first_grant = "fldsAQSZiyZNPe3t6"  # Name: First grant
             last_grant = "fldM5xEaX53aPHgT4"  # Name: Last grant
             months = "fldCwUHh5LNOjEUaL"  # Name: Months
+            ysws_project_mentions_total_weighted_points = "flddUBwt0AveKXJnQ"  # Name: YSWS Project Mentions - Total Weighted Points
+            temp_bounty_per_grant = "fldz7tTLnxrg3F3sq"  # Name: temp - Bounty per grant
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
@@ -750,6 +755,105 @@ class AirtableIDs:
             weighted_grants_total = "fldllCyssGiFPi5mS"  # Name: Weighted Grants–Total
             attributed_grants = "fldM4SHI9hXry0pPC"  # Name: Attributed Grants
             weights_grants_mar_2025_copy = "fldkpZAqxuLJnu9do"  # Name: Weights Grants–Mar 2025 copy
+            weighted_grants_excluding_shared = "fld4p6J1NvBlAK2J1"  # Name: Weighted Grants (excluding shared)
+            usd_for_weighted_grants = "fldemaqXRN95KSs8S"  # Name: USD for Weighted Grants
+
+        class nps:
+            """IDs for Table 'nps' (ID: tblQpkS0I9V2ixBD0)"""
+            TABLE_ID = "tblQpkS0I9V2ixBD0"
+
+            on_a_scale_from_1_10_how_likely_are_you_to_recommend_this_ysws_to_a_friend = "fldWbHGO7UQUkYtYu"  # Name: On a scale from 1-10, how likely are you to recommend this YSWS to a friend?
+            ysws = "fldzNjiMkRtN2V7Y0"  # Name: YSWS
+            email_optional_for_prize = "fldylKfsw54T6Quvf"  # Name: Email (optional, for prize)
+            what_are_we_doing_well = "fldmmrs0b33yjhrCP"  # Name: What are we doing well?
+            how_can_we_improve = "fldcl0lviiqpaFfGZ"  # Name: How can we improve?
+            how_many_hours_do_you_estimate_you_spent_on_your_project = "fldmlrjb5GnMZrl4Q"  # Name: How many hours do you estimate you spent on your project?
+            custom_fields = "fldISC6kkMwvS67bD"  # Name: Custom Fields
+            record_created_at = "fldAVEMxQbXCe7dnU"  # Name: Record Created At
+            nps_category = "fldnAF7XOL4FjZQSj"  # Name: NPS Category
+            prize_winner = "fldxFR7tBNzQBMpFT"  # Name: Prize Winner?
+            override_created_at = "fldXSYurztepXkeCc"  # Name: Override Created At
+            created_at = "fldr50yArbZc0w3YL"  # Name: Created At
+
+        class ysws_project_mentions:
+            """IDs for Table 'ysws_project_mentions' (ID: tbl5SU7OcPeZMaDOs)"""
+            TABLE_ID = "tbl5SU7OcPeZMaDOs"
+
+            id = "fldizbzyosiUHlaf5"  # Name: ID
+            ysws_approved_project = "fldWCs3fjJ6Tnw10T"  # Name: YSWS Approved Project
+            project_url = "fldRqywkrPXW3wtpA"  # Name: Project URL
+            date = "fldEIIGc5hs9EQmmb"  # Name: Date
+            source = "fldeNhLPVabss8YAq"  # Name: Source
+            headline = "flds6DCPxUVqNSBqH"  # Name: Headline
+            url = "fldew9uAD9qtGruhE"  # Name: URL
+            archive_url = "fldlB2GQfdpVb70Mm"  # Name: Archive URL
+            engagement_count = "fldYAciVBuduGXROY"  # Name: Engagement Count
+            engagement_type = "fldY9PDQGKoXpqJTz"  # Name: Engagement Type
+            mentions_hack_club = "fldHqMUIH4Ep8YiAc"  # Name: Mentions Hack Club?
+            published_by_hack_club = "fld42Wo1xHrraPCI0"  # Name: Published by Hack Club?
+            full_json = "fldBj7MzoOGi9nq8p"  # Name: Full JSON
+            link_found_at = "fld4gm2Xez4mBoiK3"  # Name: Link Found At
+            ysws_project_mention_searches = "fldN6tSGcdHKBGaME"  # Name: YSWS Project Mention Searches
+            ysws_from_ysws_approved_project = "fldJPnugEv9PwdzA4"  # Name: YSWS (from YSWS Approved Project)
+            weighted_engagement_points = "fldUAPNuojwY2sFd6"  # Name: Weighted Engagement Points
+            record_id = "fldLMXyX9yAQLups7"  # Name: Record ID
+
+        class ysws_project_mention_searches:
+            """IDs for Table 'ysws_project_mention_searches' (ID: tblfU7k0cgzysujpH)"""
+            TABLE_ID = "tblfU7k0cgzysujpH"
+
+            id = "fldY7j6t3UxmEThlN"  # Name: ID
+            created_at = "fldJwCqbm4lSx4Ucw"  # Name: Created At
+            project = "fldgFAh5zUBHlTuia"  # Name: Project
+            code_url = "flde9I9mNZKvYX0GE"  # Name: Code URL
+            found_project_mentions = "fldYseJ4gHgnpmj3v"  # Name: Found Project Mentions
+            links_found = "fldACN2e7BR5eJpVB"  # Name: # Links Found
+            output_json = "fldNDXvfes4mM0Ela"  # Name: Output JSON
+            full_output_log = "fldGSqjPjBrBTZ9mU"  # Name: Full Output Log
+            prompt = "fld9VSGBsp8EGDtH3"  # Name: Prompt
+            model = "fldkkknv2j8H7w6gm"  # Name: Model
+            runtime_h_mm_ss = "fldfypNKOUnOMfNyH"  # Name: Runtime (h:mm:ss)
+            non_cached_input_tokens = "fldCUHDrd6r2EKQGh"  # Name: Non-Cached Input Tokens
+            cached_input_tokens = "fldiGAB6gdyVSpEBF"  # Name: Cached Input Tokens
+            output_tokens = "fldue08EOkmkiViOz"  # Name: Output Tokens
+            estimated_cost = "fldPY7wVai7FUZuBr"  # Name: Estimated Cost
+            estimated_non_cached_input_cost_gpt_5 = "fldm3r9OZKnQumdpc"  # Name: Estimated Non-Cached Input Cost (GPT-5)
+            estimated_cached_input_cost_gpt_5 = "fldrVFkuHIuL1LkQF"  # Name: Estimated Cached Input Cost (GPT-5)
+            estimated_output_cost_gpt_5 = "fldbTyDX3a1KtqXvt"  # Name: Estimated Output Cost (GPT-5)
+
+        class ysws_spot_checks:
+            """IDs for Table 'ysws_spot_checks' (ID: tbltWKtnaXRVJDEo3)"""
+            TABLE_ID = "tbltWKtnaXRVJDEo3"
+
+            name = "fldklFByqYPGhL0Lt"  # Name: Name
+            project = "fld8L5aLfa95FfqRE"  # Name: Project
+            ysws = "fldxWGwk7aV0Nnsn2"  # Name: YSWS
+            assessment = "fldHje5936m66CNQX"  # Name: Assessment
+            notes_for_ysws_authors = "fldBx3JM2ucdppfD2"  # Name: Notes For YSWS Authors
+            reviewer_name = "fldXvvanOukkGItAo"  # Name: Reviewer Name
+            time_spent_on_review_mm_ss = "fldglMzxS6yQHJIZ4"  # Name: Time Spent On Review (MM:SS)
+            duration_start_time = "fld4r0t7YiRSgKc42"  # Name: Duration - Start Time
+            duration_end_time = "fld6gtQqSmho4FHRJ"  # Name: Duration - End Time
+            reviewer_email = "fldt0CZmyLwdRawcw"  # Name: Reviewer Email
+            reviewer_slack_id = "fldtMnod5KQMBlA5S"  # Name: Reviewer Slack ID
+            reviewer_avatar_url = "fldF9dYCPtXle4fiK"  # Name: Reviewer Avatar URL
+            created_at = "fldqVswJVCJbp1Nmd"  # Name: Created At
+            spot_check_session = "fldNZse2GeyPDnWqm"  # Name: Spot Check Session
+
+        class ysws_spot_check_sessions:
+            """IDs for Table 'ysws_spot_check_sessions' (ID: tblJCBhT1pYJcrQjV)"""
+            TABLE_ID = "tblJCBhT1pYJcrQjV"
+
+            name = "fldfcOPz083Cmcoct"  # Name: Name
+            filters = "fldRkBkXmeleXm42h"  # Name: Filters
+            sampling_strategy = "fldJcbSZQimehm5BC"  # Name: Sampling Strategy
+            creator_name = "fldWujo41rCLMQoAL"  # Name: Creator Name
+            creator_slack_id = "fldjmhk2s0GjLAEvX"  # Name: Creator Slack ID
+            creator_email = "fldtYXhgT0XW68ZJ9"  # Name: Creator Email
+            creator_avatar_url = "fld65sbZqOcNtdOAZ"  # Name: Creator Avatar URL
+            start_time = "fld8r59hCI2ApspVh"  # Name: Start Time
+            end_time = "fldFNstKhvejUgdrb"  # Name: End Time
+            ysws_spot_checks = "fld2OIOCpgU2MMtxT"  # Name: YSWS Spot Checks
 
 
 # fmt: on
