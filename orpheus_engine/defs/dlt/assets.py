@@ -149,47 +149,60 @@ def create_airtable_sync_assets(
                 
                 for col in renamed_df.columns:
                     if renamed_df[col].dtype == pl.Utf8:
-                        # Sample first N non-null rows to check if this is a date/datetime column
-                        sample = renamed_df[col].drop_nulls().head(SAMPLE_SIZE)
+                        # Sample first N rows to check if this is a date/datetime column
+                        sample = renamed_df[col].head(SAMPLE_SIZE)
+                        sample_non_null = sample.drop_nulls()
                         
-                        if sample.len() == 0:
+                        if sample_non_null.len() == 0:
                             # No data to test, skip
                             continue
                         
-                        # Try to parse sample as datetime first
+                        # Try to parse sample as datetime first (on non-null values)
                         try:
-                            sample_converted = sample.str.to_datetime(strict=False)
+                            sample_converted = sample_non_null.str.to_datetime(strict=False)
                             sample_converted_non_null = sample_converted.drop_nulls().len()
                             
-                            # If ≥90% of sample values parsed successfully, this is a date/datetime column
-                            if sample_converted_non_null >= sample.len() * 0.9:
-                                # Check if values contain time components (hours, minutes, seconds)
-                                # Sample a few values to determine if this is a date or datetime field
-                                sample_values = sample.head(10).to_list()
-                                has_time = False
-                                for val in sample_values:
-                                    if val and ('T' in val or ':' in val or ' ' in val and len(val) > 10):
-                                        has_time = True
-                                        break
+                            # If ≥90% of non-null sample values parsed successfully, this is a date/datetime column
+                            if sample_converted_non_null >= sample_non_null.len() * 0.9:
+                                # Check if this is a date-only field or has meaningful time components
+                                # Sample the first 10 non-null values to determine
+                                sample_values = sample_non_null.head(10).to_list()
+                                has_meaningful_time = False
                                 
-                                if has_time:
-                                    # Contains time component - use datetime (TIMESTAMP in PostgreSQL)
+                                for val in sample_values:
+                                    if not val:
+                                        continue
+                                    
+                                    # Check if string contains time indicators
+                                    if 'T' in val or ':' in val or (' ' in val and len(val) > 10):
+                                        # Has time format, but check if it's always midnight (00:00:00)
+                                        # which indicates it's actually a date field from Airtable
+                                        if '00:00:00' not in val:
+                                            # Has non-zero time component
+                                            has_meaningful_time = True
+                                            break
+                                        # else: it's 00:00:00, so it's likely a date field
+                                    # else: no time component at all (just YYYY-MM-DD)
+                                
+                                if has_meaningful_time:
+                                    # Contains non-midnight time component - use datetime (TIMESTAMP in PostgreSQL)
                                     renamed_df = renamed_df.with_columns(
                                         pl.col(col).str.to_datetime(strict=False).alias(col)
                                     )
                                     context.log.info(
                                         f"Converted column '{col}' to DATETIME/TIMESTAMP "
-                                        f"(sample: {sample_converted_non_null}/{sample.len()} values, "
+                                        f"(sample: {sample_converted_non_null}/{sample_non_null.len()} values, "
                                         f"total rows: {renamed_df.height})"
                                     )
                                 else:
-                                    # Date only (no time component) - use date (DATE in PostgreSQL)
+                                    # Date only or all times are midnight - use date (DATE in PostgreSQL)
+                                    # First parse as datetime, then cast to date to drop time component
                                     renamed_df = renamed_df.with_columns(
-                                        pl.col(col).str.to_date(strict=False).alias(col)
+                                        pl.col(col).str.to_datetime(strict=False).cast(pl.Date).alias(col)
                                     )
                                     context.log.info(
                                         f"Converted column '{col}' to DATE "
-                                        f"(sample: {sample_converted_non_null}/{sample.len()} values, "
+                                        f"(sample: {sample_converted_non_null}/{sample_non_null.len()} values, "
                                         f"total rows: {renamed_df.height})"
                                     )
                             else:
