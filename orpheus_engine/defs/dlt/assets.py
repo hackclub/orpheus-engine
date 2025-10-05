@@ -141,42 +141,62 @@ def create_airtable_sync_assets(
                 # Assert no duplicates
                 assert len(renamed_df.columns) == len(set(renamed_df.columns)), "Duplicate column names still present!"
                 
-                # Convert date/datetime strings to proper datetime types using Polars' parser
-                context.log.info("Attempting to convert string columns to datetime types")
+                # Convert date/datetime strings to proper date or datetime types using Polars' parser
+                context.log.info("Attempting to convert string columns to date/datetime types")
                 
                 # Sample size for type detection (balance between accuracy and performance)
                 SAMPLE_SIZE = 100
                 
                 for col in renamed_df.columns:
                     if renamed_df[col].dtype == pl.Utf8:
-                        # Sample first N non-null rows to check if this is a date column (performant for large datasets)
+                        # Sample first N non-null rows to check if this is a date/datetime column
                         sample = renamed_df[col].drop_nulls().head(SAMPLE_SIZE)
                         
                         if sample.len() == 0:
                             # No data to test, skip
                             continue
                         
-                        # Try to parse sample as datetime using Polars' built-in parser
+                        # Try to parse sample as datetime first
                         try:
                             sample_converted = sample.str.to_datetime(strict=False)
                             sample_converted_non_null = sample_converted.drop_nulls().len()
                             
-                            # If ≥90% of sample values parsed successfully, convert the entire column
+                            # If ≥90% of sample values parsed successfully, this is a date/datetime column
                             if sample_converted_non_null >= sample.len() * 0.9:
-                                # Convert the full column
-                                renamed_df = renamed_df.with_columns(
-                                    pl.col(col).str.to_datetime(strict=False).alias(col)
-                                )
-                                context.log.info(
-                                    f"Converted column '{col}' from string to datetime "
-                                    f"(sample: {sample_converted_non_null}/{sample.len()} parsed successfully, "
-                                    f"total rows: {renamed_df.height})"
-                                )
+                                # Check if values contain time components (hours, minutes, seconds)
+                                # Sample a few values to determine if this is a date or datetime field
+                                sample_values = sample.head(10).to_list()
+                                has_time = False
+                                for val in sample_values:
+                                    if val and ('T' in val or ':' in val or ' ' in val and len(val) > 10):
+                                        has_time = True
+                                        break
+                                
+                                if has_time:
+                                    # Contains time component - use datetime (TIMESTAMP in PostgreSQL)
+                                    renamed_df = renamed_df.with_columns(
+                                        pl.col(col).str.to_datetime(strict=False).alias(col)
+                                    )
+                                    context.log.info(
+                                        f"Converted column '{col}' to DATETIME/TIMESTAMP "
+                                        f"(sample: {sample_converted_non_null}/{sample.len()} values, "
+                                        f"total rows: {renamed_df.height})"
+                                    )
+                                else:
+                                    # Date only (no time component) - use date (DATE in PostgreSQL)
+                                    renamed_df = renamed_df.with_columns(
+                                        pl.col(col).str.to_date(strict=False).alias(col)
+                                    )
+                                    context.log.info(
+                                        f"Converted column '{col}' to DATE "
+                                        f"(sample: {sample_converted_non_null}/{sample.len()} values, "
+                                        f"total rows: {renamed_df.height})"
+                                    )
                             else:
                                 context.log.debug(f"Column '{col}' does not appear to be a date/datetime column")
                         except Exception as e:
                             # Polars couldn't parse it as datetime, keep as string
-                            context.log.debug(f"Could not convert '{col}' to datetime: {e}")
+                            context.log.debug(f"Could not convert '{col}' to date/datetime: {e}")
                 
                 # Sanitize string columns to remove/escape problematic characters
                 context.log.info("Sanitizing string columns to remove problematic characters for SQL")
@@ -236,13 +256,16 @@ def create_airtable_sync_assets(
                         pipelines_dir=".dlt_pipelines"
                     )
 
+                # Convert to dict iterator - DLT will create child tables for nested structures
+                # Use insert_values format (PostgreSQL doesn't support parquet directly)
                 data_iterator = renamed_df.iter_rows(named=True)
                 try:
                     load_info = pipeline.run(
                         data=data_iterator,
                         table_name=table_name_warehouse,
                         write_disposition="replace",
-                        primary_key="id"
+                        primary_key="id",
+                        loader_file_format="insert_values"  # Supports nested structures and datetime
                     )
 
                     context.log.info(f"DLT pipeline run finished successfully for table '{specific_table_name}'.")
@@ -272,7 +295,8 @@ def create_airtable_sync_assets(
                             data=data_iterator,
                             table_name=table_name_warehouse,
                             write_disposition="replace",
-                            primary_key="id"
+                            primary_key="id",
+                            loader_file_format="insert_values"
                         )
                         
                         context.log.info(f"DLT pipeline retry succeeded after schema creation race condition.")
@@ -309,13 +333,14 @@ def create_airtable_sync_assets(
                             pipelines_dir=".dlt_pipelines"
                         )
                         
-                        # Regenerate iterator (old one was consumed)
+                        # Reload data with insert_values format
                         data_iterator = renamed_df.iter_rows(named=True)
                         load_info = pipeline.run(
                             data=data_iterator,
                             table_name=table_name_warehouse,
                             write_disposition="replace",
-                            primary_key="id"
+                            primary_key="id",
+                            loader_file_format="insert_values"
                         )
                         
                         context.log.info(f"DLT pipeline retry succeeded after clearing corrupted state.")
@@ -400,14 +425,15 @@ def loops_audience(
     )
 
     # Run the pipeline, passing the data received from the upstream asset.
-    # Convert Polars DataFrame to an iterator of dicts for DLT
+    # Convert Polars DataFrame to dict iterator - DLT will handle nested structures
     data_iterator = loops_processed_audience.iter_rows(named=True)
     try:
         load_info = pipeline.run(
-            data=data_iterator, # <-- Use the iterator from the DataFrame
+            data=data_iterator,
             table_name=table_name,
             write_disposition="replace", # Options: "append", "replace", "merge"
-            primary_key="email" # Specify primary key for potential merging or indexing
+            primary_key="email", # Specify primary key for potential merging or indexing
+            loader_file_format="insert_values"  # Supports nested structures and datetime
         )
 
         context.log.info(f"DLT pipeline run finished successfully.")
@@ -459,14 +485,15 @@ def analytics_hack_clubbers_warehouse(
         progress="log"
     )
 
-    # Convert Polars DataFrame to an iterator of dicts for DLT
+    # Convert Polars DataFrame to dict iterator - DLT will handle nested structures
     data_iterator = analytics_hack_clubbers.iter_rows(named=True)
     try:
         load_info = pipeline.run(
             data=data_iterator,
             table_name=table_name,
             write_disposition="replace",
-            primary_key="email"  # Assuming email is the primary key
+            primary_key="email",  # Assuming email is the primary key
+            loader_file_format="insert_values"  # Supports nested structures and datetime
         )
 
         context.log.info(f"DLT pipeline run finished successfully.")

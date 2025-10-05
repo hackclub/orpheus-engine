@@ -474,6 +474,8 @@ class AirtableIDs:
             self_reported_partners_from_email_slack_invites = "fldBsOjnM2x6nd9nP"  # Name: self_reported_partners (from Email Slack Invites)
             self_reported_partners_onboarding = "fldYtMpblMK26c6Ns"  # Name: self_reported_partners_onboarding
             points = "fld782uY9yKgq3qcN"  # Name: points
+            points_but_short = "fldVhLwKwK3N5Sk5t"  # Name: points_but_short
+            send_progress_bump = "fldFItjnxpoC2VKUJ"  # Name: send_progress_bump
             total_time_approved_projects = "fldFJqzcq3PhqhGz0"  # Name: total_time_approved_projects
             artifacts = "fldxx7cJTdiKZ0fDz"  # Name: artifacts
             hackathon_codes = "fldtdzeYRpQMmaMu5"  # Name: hackathon_codes
