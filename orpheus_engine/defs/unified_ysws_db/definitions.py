@@ -2373,11 +2373,11 @@ async def _run_parallel_mention_searches(record_ids: list, script_path: str, log
     group_name="unified_ysws_db_processing",
     description="Stub asset that marks completion of all YSWS processing",
     compute_kind="marker",
+    deps=[AssetKey(["ysws_programs_update_status"])],
 )
 def unified_ysws_db_processing_done(
     context: AssetExecutionContext,
     approved_projects_mention_search_batch: pl.DataFrame,
-    ysws_programs_update_status: None,
 ) -> Output[None]:
     """
     Marker asset that indicates all YSWS processing is complete.
