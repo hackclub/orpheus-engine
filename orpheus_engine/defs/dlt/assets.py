@@ -189,10 +189,40 @@ def create_airtable_sync_assets(
                                     renamed_df = renamed_df.with_columns(
                                         pl.col(col).str.to_datetime(strict=False).alias(col)
                                     )
+                                    
+                                    # Validate that years are within valid range (1-9999)
+                                    # Count invalid dates before nullifying them
+                                    invalid_count = renamed_df.filter(
+                                        pl.col(col).is_not_null() & 
+                                        ((pl.col(col).dt.year() < 1) | (pl.col(col).dt.year() > 9999))
+                                    ).height
+                                    
+                                    if invalid_count > 0:
+                                        # Get sample years for logging (avoid materializing invalid dates)
+                                        invalid_years = renamed_df.filter(
+                                            pl.col(col).is_not_null() & 
+                                            ((pl.col(col).dt.year() < 1) | (pl.col(col).dt.year() > 9999))
+                                        ).select(pl.col(col).dt.year().alias('year')).head(5)
+                                        context.log.warning(
+                                            f"Column '{col}': Found {invalid_count} invalid datetime values with out-of-range years. "
+                                            f"Sample invalid years: {invalid_years['year'].to_list()}. These will be set to null."
+                                        )
+                                    
+                                    # Replace out-of-range dates with null
+                                    renamed_df = renamed_df.with_columns(
+                                        pl.when(
+                                            pl.col(col).is_null() | 
+                                            ((pl.col(col).dt.year() >= 1) & (pl.col(col).dt.year() <= 9999))
+                                        )
+                                        .then(pl.col(col))
+                                        .otherwise(None)
+                                        .alias(col)
+                                    )
+                                    
                                     context.log.info(
                                         f"Converted column '{col}' to DATETIME/TIMESTAMP "
                                         f"(sample: {sample_converted_non_null}/{sample_non_null.len()} values, "
-                                        f"total rows: {renamed_df.height})"
+                                        f"total rows: {renamed_df.height}, invalid dates nullified: {invalid_count})"
                                     )
                                 else:
                                     # Date only or all times are midnight - use date (DATE in PostgreSQL)
@@ -200,10 +230,40 @@ def create_airtable_sync_assets(
                                     renamed_df = renamed_df.with_columns(
                                         pl.col(col).str.to_datetime(strict=False).cast(pl.Date).alias(col)
                                     )
+                                    
+                                    # Validate that years are within valid range (1-9999)
+                                    # Count invalid dates before nullifying them
+                                    invalid_count = renamed_df.filter(
+                                        pl.col(col).is_not_null() & 
+                                        ((pl.col(col).dt.year() < 1) | (pl.col(col).dt.year() > 9999))
+                                    ).height
+                                    
+                                    if invalid_count > 0:
+                                        # Get sample years for logging (avoid materializing invalid dates)
+                                        invalid_years = renamed_df.filter(
+                                            pl.col(col).is_not_null() & 
+                                            ((pl.col(col).dt.year() < 1) | (pl.col(col).dt.year() > 9999))
+                                        ).select(pl.col(col).dt.year().alias('year')).head(5)
+                                        context.log.warning(
+                                            f"Column '{col}': Found {invalid_count} invalid date values with out-of-range years. "
+                                            f"Sample invalid years: {invalid_years['year'].to_list()}. These will be set to null."
+                                        )
+                                    
+                                    # Replace out-of-range dates with null
+                                    renamed_df = renamed_df.with_columns(
+                                        pl.when(
+                                            pl.col(col).is_null() | 
+                                            ((pl.col(col).dt.year() >= 1) & (pl.col(col).dt.year() <= 9999))
+                                        )
+                                        .then(pl.col(col))
+                                        .otherwise(None)
+                                        .alias(col)
+                                    )
+                                    
                                     context.log.info(
                                         f"Converted column '{col}' to DATE "
                                         f"(sample: {sample_converted_non_null}/{sample_non_null.len()} values, "
-                                        f"total rows: {renamed_df.height})"
+                                        f"total rows: {renamed_df.height}, invalid dates nullified: {invalid_count})"
                                     )
                             else:
                                 context.log.debug(f"Column '{col}' does not appear to be a date/datetime column")
