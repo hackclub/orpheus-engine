@@ -20,23 +20,23 @@ materialize_unified_ysws_job = dg.define_asset_job(
     name="materialize_unified_ysws_job",
     selection=(
         # Airtable refresh assets (with key_prefix path syntax)
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/approved_projects_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_programs_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_authors_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/nps_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_project_mentions_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_project_mention_searches_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_spot_checks_refresh") |
-        dg.AssetSelection.keys("airtable/unified_ysws_projects_db/ysws_spot_check_sessions_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/approved_projects_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_programs_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_authors_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/nps_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_project_mentions_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_project_mention_searches_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_spot_checks_refresh") |
+        dg.AssetSelection.assets("airtable/unified_ysws_projects_db/ysws_spot_check_sessions_refresh") |
         # Warehouse assets (no key_prefix)
-        dg.AssetSelection.keys("unified_ysws_approved_projects_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_programs_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_authors_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_nps_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_project_mentions_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_project_mention_searches_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_spot_checks_warehouse") |
-        dg.AssetSelection.keys("unified_ysws_ysws_spot_check_sessions_warehouse")
+        dg.AssetSelection.assets("unified_ysws_approved_projects_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_programs_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_authors_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_nps_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_project_mentions_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_project_mention_searches_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_spot_checks_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_spot_check_sessions_warehouse")
     ),
 )
 
