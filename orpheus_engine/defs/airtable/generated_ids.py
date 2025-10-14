@@ -428,6 +428,19 @@ class AirtableIDs:
             owed_hoodie = "fldjUcpCXYjNTDEIK"  # Name: Owed Hoodie
             fudge_owed = "fldcPUwS883Gw7j6T"  # Name: Fudge Owed
             hoodie_size = "fldujtJEQv8jJpfcj"  # Name: Hoodie Size
+            address_link = "fldFgh4REYrsvM69V"  # Name: Address Link
+            address_from_address_link = "fldTrUwp5jJNRYQDc"  # Name: Address (from Address Link)
+            phone_number_from_address_link = "fldSdhF54wlMel864"  # Name: Phone Number (from Address Link)
+            last_name_from_address_link = "fldZCC7M0P5R8kIUP"  # Name: Last Name (from Address Link)
+            first_name_from_address_link = "fldrovhDjL5UZsgre"  # Name: First Name (from Address Link)
+            num_fudge_owed = "fld0ijImMILhXw80C"  # Name: Num Fudge Owed
+            fudge_flavor = "fldKsDvMcsaD1R7YA"  # Name: Fudge Flavor
+            country_from_address_link = "fldqeAFh754VROx2W"  # Name: Country (from Address Link)
+            zip_code_from_address_link = "fld9A9YrLX5lxFqVc"  # Name: Zip Code (from Address Link)
+            state_from_address_link = "fldAwZVpaRmEb17jq"  # Name: State (from Address Link)
+            city_from_address_link = "fldfyPj4sHzg3UN3t"  # Name: City (from Address Link)
+            address_line_2_from_address_link = "fldX0ZvNo6ITCB16N"  # Name: Address Line 2 (from Address Link)
+            address_line_1_from_addresses = "fldrRSnPtwee0ge1n"  # Name: Address Line 1 (from Addresses)
 
 
     class highway:
@@ -732,7 +745,13 @@ class AirtableIDs:
             last_grant = "fldM5xEaX53aPHgT4"  # Name: Last grant
             months = "fldCwUHh5LNOjEUaL"  # Name: Months
             ysws_project_mentions_total_weighted_points = "flddUBwt0AveKXJnQ"  # Name: YSWS Project Mentions - Total Weighted Points
-            temp_bounty_per_grant = "fldz7tTLnxrg3F3sq"  # Name: temp - Bounty per grant
+            override_budget_per_hour = "fldFdTJq2qYYFMKkP"  # Name: Override budget per hour
+            budget_per_hour = "fldv0Bw7QhFNh1dSS"  # Name: Budget per hour
+            prior_payouts = "fldqRxVUYHDaEjoCr"  # Name: Prior Payouts
+            enable_payouts = "fldWsNxP1xyVtCKpw"  # Name: Enable payouts
+            unique_shippers = "fld9c4tNzNYkZPYAP"  # Name: # Unique Shippers
+            nps_needs_more_feedback = "fldoZgzdBXxT4WZJV"  # Name: NPS–Needs More Feedback?
+            total_sign_ups_likely_missing_loops_events = "fldQedY9tfUy704jK"  # Name: Total Sign-Ups–Likely Missing Loops Events?
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
@@ -759,6 +778,7 @@ class AirtableIDs:
             weights_grants_mar_2025_copy = "fldkpZAqxuLJnu9do"  # Name: Weights Grants–Mar 2025 copy
             weighted_grants_excluding_shared = "fld4p6J1NvBlAK2J1"  # Name: Weighted Grants (excluding shared)
             usd_for_weighted_grants = "fldemaqXRN95KSs8S"  # Name: USD for Weighted Grants
+            temp_total_payouts = "fldA8WqGqXnUhZKGc"  # Name: temp - total payouts
 
         class nps:
             """IDs for Table 'nps' (ID: tblQpkS0I9V2ixBD0)"""
