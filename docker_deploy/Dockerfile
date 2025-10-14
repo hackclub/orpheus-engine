@@ -30,6 +30,9 @@ RUN mkdir -p ${DAGSTER_HOME}
 
 COPY docker_deploy/dagster.yaml ${DAGSTER_HOME}/dagster.yaml
 
+# Make startup script executable
+RUN chmod +x /app/scripts/start.sh
+
 EXPOSE 3000
 
-CMD ["sh", "-c", "uv run dagster-daemon run & uv run dagster-webserver -h 0.0.0.0 -p 3000"]
+CMD ["sh", "/app/scripts/start.sh"]

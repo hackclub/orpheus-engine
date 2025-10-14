@@ -16,6 +16,8 @@ run_launcher:
 run_monitoring:
   enabled: true
   poll_interval_seconds: 15  # Check every 15 seconds for stalled runs
+  start_timeout_seconds: 60  # Mark hung STARTING runs as FAILED within ~1 min
+  cancel_timeout_seconds: 60  # Mark hung CANCELING runs as CANCELED within ~1 min
   max_resume_run_attempts: 0  # Run launcher doesn't support resuming, just mark as failed
 
 telemetry:
