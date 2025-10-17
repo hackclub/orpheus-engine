@@ -696,6 +696,7 @@ class AirtableIDs:
             ysws_project_mentions_top_link = "fldM6SIIXbnkWY3hk"  # Name: YSWS Project Mentions - Top Link
             state = "flduHp6cOwETXTRnr"  # Name: State 
             county_centralizing = "fldu7bexqqfq3KoZ0"  # Name: County - Centralizing
+            email_trimmed_lowercased = "fld20if1DEDgTOpPH"  # Name: Email - Trimmed & Lowercased
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -752,6 +753,7 @@ class AirtableIDs:
             unique_shippers = "fld9c4tNzNYkZPYAP"  # Name: # Unique Shippers
             nps_needs_more_feedback = "fldoZgzdBXxT4WZJV"  # Name: NPS–Needs More Feedback?
             total_sign_ups_likely_missing_loops_events = "fldQedY9tfUy704jK"  # Name: Total Sign-Ups–Likely Missing Loops Events?
+            total_sign_ups_override_confirm_has_loops_events_set = "fldzHpRUSrV1IPKFP"  # Name: Total Sign-Ups–Override, Confirm Has Loops Events Set
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
