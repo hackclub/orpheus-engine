@@ -445,7 +445,7 @@ def loops_campaigns_to_warehouse(
 @asset(
     group_name="loops_campaign_and_metrics_export",
     compute_kind="sql",
-    description="Queries warehouse for campaigns that need enrichment (last_enriched_at NULL or > 72 hours old).",
+    description="Queries warehouse for campaigns that need enrichment based on sent status and time since last enrichment.",
     deps=["loops_campaigns_to_warehouse"]  # Ensure warehouse is updated first
 )
 def loops_campaigns_needing_enrichment(
@@ -453,7 +453,11 @@ def loops_campaigns_needing_enrichment(
 ) -> pl.DataFrame:
     """
     Queries warehouse for campaigns that need enrichment.
-    Returns campaigns where last_enriched_at is NULL or > 72 hours old.
+    Update frequency depends on email status:
+    - Not sent yet: every 12 hours
+    - Sent < 1 week ago: every 24 hours
+    - Sent >= 2 weeks and < 8 weeks ago: every 7 days
+    - Sent >= 8 weeks ago: every 30 days
     """
     log = context.log
     import psycopg2
@@ -462,12 +466,33 @@ def loops_campaigns_needing_enrichment(
     if not conn_string:
         raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
     
-    # Build query with optional limit
+    # Build query with time-based enrichment logic
     query = """
         SELECT id, name, emoji
         FROM loops.campaigns
-        WHERE last_enriched_at IS NULL 
-           OR last_enriched_at < NOW() - INTERVAL '72 hours'
+        WHERE 
+            -- Never enriched
+            last_enriched_at IS NULL
+            OR
+            -- Email not sent yet: update every 12 hours
+            ((sent_at IS NULL OR status != 'sent') 
+             AND last_enriched_at < NOW() - INTERVAL '12 hours')
+            OR
+            -- Sent less than 1 week ago: update every 24 hours
+            (sent_at IS NOT NULL AND status = 'sent' 
+             AND sent_at >= NOW() - INTERVAL '1 week' 
+             AND last_enriched_at < NOW() - INTERVAL '24 hours')
+            OR
+            -- Sent between 2 and 8 weeks ago: update every 7 days
+            (sent_at IS NOT NULL AND status = 'sent' 
+             AND sent_at < NOW() - INTERVAL '2 weeks' 
+             AND sent_at >= NOW() - INTERVAL '8 weeks'
+             AND last_enriched_at < NOW() - INTERVAL '7 days')
+            OR
+            -- Sent more than 8 weeks ago: update monthly (30 days)
+            (sent_at IS NOT NULL AND status = 'sent' 
+             AND sent_at < NOW() - INTERVAL '8 weeks'
+             AND last_enriched_at < NOW() - INTERVAL '30 days')
         ORDER BY last_enriched_at NULLS FIRST
     """
     
