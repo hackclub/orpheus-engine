@@ -32,7 +32,7 @@ _NEXT_DATA_RE = re.compile(
 
 # Debug limit for campaigns needing enrichment
 # Set to -1 for no limit, or a positive integer to limit the number of campaigns processed
-DEBUG_ENRICHMENT_LIMIT = 5
+DEBUG_ENRICHMENT_LIMIT = -1
 
 # Common headers for Loops API requests
 COMMON_HEADERS = {
