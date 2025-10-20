@@ -974,33 +974,25 @@ def loops_campaign_recipient_metrics(
         log.info("No campaigns to fetch metrics for, returning empty DataFrame")
         return pl.DataFrame({
             "campaign_id": [],
-            "email_message_id": [],
-            "contact_id": [],
             "email": [],
-            "first_name": [],
-            "last_name": [],
-            "vendor_delivered_at": [],
+            "delivered_at": [],
             "unsubscribed_date": [],
-            "vendor_open": [],
-            "vendor_click": [],
-            "vendor_complaint": [],
-            "vendor_soft_bounce": [],
-            "vendor_hard_bounce": [],
+            "opens": [],
+            "clicks": [],
+            "complaint": [],
+            "soft_bounce": [],
+            "hard_bounce": [],
             "created_at": []
         }, schema={
             "campaign_id": pl.Utf8,
-            "email_message_id": pl.Utf8,
-            "contact_id": pl.Utf8,
             "email": pl.Utf8,
-            "first_name": pl.Utf8,
-            "last_name": pl.Utf8,
-            "vendor_delivered_at": pl.Datetime,
+            "delivered_at": pl.Datetime,
             "unsubscribed_date": pl.Datetime,
-            "vendor_open": pl.Int64,
-            "vendor_click": pl.Int64,
-            "vendor_complaint": pl.Boolean,
-            "vendor_soft_bounce": pl.Boolean,
-            "vendor_hard_bounce": pl.Boolean,
+            "opens": pl.Int64,
+            "clicks": pl.Int64,
+            "complaint": pl.Boolean,
+            "soft_bounce": pl.Boolean,
+            "hard_bounce": pl.Boolean,
             "created_at": pl.Datetime
         })
     
@@ -1066,10 +1058,10 @@ def loops_campaign_recipient_metrics(
                 # Process each recipient
                 for email_data in emails:
                     # Parse timestamps
-                    vendor_delivered_at = None
+                    delivered_at = None
                     if email_data.get("vendorDeliveredAt"):
                         try:
-                            vendor_delivered_at = datetime.fromisoformat(
+                            delivered_at = datetime.fromisoformat(
                                 email_data["vendorDeliveredAt"].replace('Z', '+00:00')
                             )
                         except:
@@ -1095,17 +1087,14 @@ def loops_campaign_recipient_metrics(
                     
                     record = {
                         "campaign_id": campaign_id,
-                        "email_message_id": email_message_id,
                         "email": email_data.get("email", ""),
-                        "first_name": email_data.get("firstName") or "",
-                        "last_name": email_data.get("lastName") or "",
-                        "vendor_delivered_at": vendor_delivered_at,
+                        "delivered_at": delivered_at,
                         "unsubscribed_date": unsubscribed_date,
-                        "vendor_open": email_data.get("vendorOpen", 0),
-                        "vendor_click": email_data.get("vendorClick", 0),
-                        "vendor_complaint": email_data.get("vendorComplaint", False),
-                        "vendor_soft_bounce": email_data.get("vendorSoftBounce", False),
-                        "vendor_hard_bounce": email_data.get("vendorHardBounce", False),
+                        "opens": email_data.get("vendorOpen", 0),
+                        "clicks": email_data.get("vendorClick", 0),
+                        "complaint": email_data.get("vendorComplaint", False),
+                        "soft_bounce": email_data.get("vendorSoftBounce", False),
+                        "hard_bounce": email_data.get("vendorHardBounce", False),
                         "created_at": created_at
                     }
                     
@@ -1147,48 +1136,39 @@ def loops_campaign_recipient_metrics(
         log.warning("No metrics were successfully fetched")
         return pl.DataFrame({
             "campaign_id": [],
-            "email_message_id": [],
             "email": [],
-            "first_name": [],
-            "last_name": [],
-            "vendor_delivered_at": [],
+            "delivered_at": [],
             "unsubscribed_date": [],
-            "vendor_open": [],
-            "vendor_click": [],
-            "vendor_complaint": [],
-            "vendor_soft_bounce": [],
-            "vendor_hard_bounce": [],
+            "opens": [],
+            "clicks": [],
+            "complaint": [],
+            "soft_bounce": [],
+            "hard_bounce": [],
             "created_at": []
         }, schema={
             "campaign_id": pl.Utf8,
-            "email_message_id": pl.Utf8,
             "email": pl.Utf8,
-            "first_name": pl.Utf8,
-            "last_name": pl.Utf8,
-            "vendor_delivered_at": pl.Datetime,
+            "delivered_at": pl.Datetime,
             "unsubscribed_date": pl.Datetime,
-            "vendor_open": pl.Int64,
-            "vendor_click": pl.Int64,
-            "vendor_complaint": pl.Boolean,
-            "vendor_soft_bounce": pl.Boolean,
-            "vendor_hard_bounce": pl.Boolean,
+            "opens": pl.Int64,
+            "clicks": pl.Int64,
+            "complaint": pl.Boolean,
+            "soft_bounce": pl.Boolean,
+            "hard_bounce": pl.Boolean,
             "created_at": pl.Datetime
         })
     
     # Create DataFrame with explicit schema to handle None values
     df = pl.DataFrame(all_records, schema={
         "campaign_id": pl.Utf8,
-        "email_message_id": pl.Utf8,
         "email": pl.Utf8,
-        "first_name": pl.Utf8,
-        "last_name": pl.Utf8,
-        "vendor_delivered_at": pl.Datetime,
+        "delivered_at": pl.Datetime,
         "unsubscribed_date": pl.Datetime,
-        "vendor_open": pl.Int64,
-        "vendor_click": pl.Int64,
-        "vendor_complaint": pl.Boolean,
-        "vendor_soft_bounce": pl.Boolean,
-        "vendor_hard_bounce": pl.Boolean,
+        "opens": pl.Int64,
+        "clicks": pl.Int64,
+        "complaint": pl.Boolean,
+        "soft_bounce": pl.Boolean,
+        "hard_bounce": pl.Boolean,
         "created_at": pl.Datetime
     })
     
@@ -1243,17 +1223,14 @@ def loops_campaign_metrics_to_warehouse(
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS loops.campaign_metrics (
                         campaign_id TEXT NOT NULL,
-                        email_message_id TEXT,
                         email TEXT NOT NULL,
-                        first_name TEXT,
-                        last_name TEXT,
-                        vendor_delivered_at TIMESTAMP WITH TIME ZONE,
+                        delivered_at TIMESTAMP WITH TIME ZONE,
                         unsubscribed_date TIMESTAMP WITH TIME ZONE,
-                        vendor_open INTEGER,
-                        vendor_click INTEGER,
-                        vendor_complaint BOOLEAN,
-                        vendor_soft_bounce BOOLEAN,
-                        vendor_hard_bounce BOOLEAN,
+                        opens INTEGER,
+                        clicks INTEGER,
+                        complaint BOOLEAN,
+                        soft_bounce BOOLEAN,
+                        hard_bounce BOOLEAN,
                         created_at TIMESTAMP WITH TIME ZONE,
                         PRIMARY KEY (campaign_id, email)
                     )
@@ -1265,17 +1242,14 @@ def loops_campaign_metrics_to_warehouse(
                 records = [
                     (
                         row["campaign_id"],
-                        row["email_message_id"],
                         row["email"],
-                        row["first_name"],
-                        row["last_name"],
-                        row["vendor_delivered_at"],
+                        row["delivered_at"],
                         row["unsubscribed_date"],
-                        row["vendor_open"],
-                        row["vendor_click"],
-                        row["vendor_complaint"],
-                        row["vendor_soft_bounce"],
-                        row["vendor_hard_bounce"],
+                        row["opens"],
+                        row["clicks"],
+                        row["complaint"],
+                        row["soft_bounce"],
+                        row["hard_bounce"],
                         row["created_at"]
                     )
                     for row in loops_campaign_recipient_metrics.iter_rows(named=True)
@@ -1286,23 +1260,19 @@ def loops_campaign_metrics_to_warehouse(
                     cursor,
                     """
                     INSERT INTO loops.campaign_metrics (
-                        campaign_id, email_message_id, email, 
-                        first_name, last_name, vendor_delivered_at, unsubscribed_date,
-                        vendor_open, vendor_click, vendor_complaint, 
-                        vendor_soft_bounce, vendor_hard_bounce, created_at
+                        campaign_id, email, delivered_at, unsubscribed_date,
+                        opens, clicks, complaint, 
+                        soft_bounce, hard_bounce, created_at
                     )
                     VALUES %s
                     ON CONFLICT (campaign_id, email) DO UPDATE SET
-                        email_message_id = EXCLUDED.email_message_id,
-                        first_name = EXCLUDED.first_name,
-                        last_name = EXCLUDED.last_name,
-                        vendor_delivered_at = EXCLUDED.vendor_delivered_at,
+                        delivered_at = EXCLUDED.delivered_at,
                         unsubscribed_date = EXCLUDED.unsubscribed_date,
-                        vendor_open = EXCLUDED.vendor_open,
-                        vendor_click = EXCLUDED.vendor_click,
-                        vendor_complaint = EXCLUDED.vendor_complaint,
-                        vendor_soft_bounce = EXCLUDED.vendor_soft_bounce,
-                        vendor_hard_bounce = EXCLUDED.vendor_hard_bounce,
+                        opens = EXCLUDED.opens,
+                        clicks = EXCLUDED.clicks,
+                        complaint = EXCLUDED.complaint,
+                        soft_bounce = EXCLUDED.soft_bounce,
+                        hard_bounce = EXCLUDED.hard_bounce,
                         created_at = EXCLUDED.created_at
                     """,
                     records,
