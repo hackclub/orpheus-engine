@@ -6,11 +6,14 @@ import json
 import urllib.parse
 import os
 import hashlib
+import re
+import dlt
+from dlt.destinations import postgres
+from datetime import date, datetime
 from dagster import asset, EnvVar, DagsterLogManager, AssetExecutionContext, Output, Failure, MetadataValue, TableColumn, TableSchema, TableRecord, DagsterInvariantViolationError
 from typing import List, Dict, Any, Optional
 from enum import Enum
 from pydantic import BaseModel
-from datetime import date
 
 import dagster as dg
 
@@ -22,28 +25,8 @@ from orpheus_engine.defs.shared.address_utils import build_address_string_from_l
 # Import the Loops resource and error
 from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError 
 
-LOOPS_BASE_URL = "https://app.loops.so/api/trpc"
-
-# Define common headers, excluding the cookie which needs the dynamic session token
-# Extracted from the provided curl command examples
-COMMON_HEADERS = {
-    'accept': '*/*',
-    'accept-language': 'en-US,en;q=0.9',
-    'cache-control': 'no-cache',
-    'content-type': 'application/json',
-    'dnt': '1',
-    'origin': 'https://app.loops.so',
-    'pragma': 'no-cache',
-    'priority': 'u=1, i',
-    'referer': 'https://app.loops.so/audience', # Simplified referer
-    'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"macOS"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-}
+# NOTE: Campaign and metrics export assets have been moved to:
+# orpheus_engine/defs/loops_campaign_and_metrics_export/definitions.py
 
 @asset(
     group_name="loops",

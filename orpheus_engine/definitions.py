@@ -5,6 +5,7 @@ import orpheus_engine.defs.airtable.definitions as airtable_defs
 import orpheus_engine.defs.dbt.definitions as dbt_defs
 import orpheus_engine.defs.dlt.definitions as dlt_defs
 import orpheus_engine.defs.loops.definitions as loops_defs
+import orpheus_engine.defs.loops_campaign_and_metrics_export.definitions as loops_campaign_defs
 import orpheus_engine.defs.sling.definitions as sling_defs
 import orpheus_engine.defs.unified_ysws_db.definitions as ysws_defs
 import orpheus_engine.schedules as schedules
@@ -18,6 +19,7 @@ defs = dg.Definitions.merge(
     dbt_defs.defs,
     dlt_defs.defs,
     loops_defs.defs,
+    loops_campaign_defs.defs,
     sling_defs.defs,
     ysws_defs.defs,
     schedules.defs,
