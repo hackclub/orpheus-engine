@@ -32,7 +32,7 @@ _NEXT_DATA_RE = re.compile(
 
 # Debug limit for campaigns needing enrichment
 # Set to -1 for no limit, or a positive integer to limit the number of campaigns processed
-DEBUG_ENRICHMENT_LIMIT = 1
+DEBUG_ENRICHMENT_LIMIT = 5
 
 # Common headers for Loops API requests
 COMMON_HEADERS = {
@@ -903,7 +903,7 @@ def _fetch_campaign_metrics_page(
                 "page": page,
                 "pageSize": page_size,
                 "sortOrder": "desc",
-                "sortBy": "vendorOpen"
+                "sortBy": "email"
             }
         })
     }
@@ -997,6 +997,7 @@ def loops_campaign_recipient_metrics(
             
             page = 0
             campaign_recipients = 0
+            seen_emails = set()  # Track which emails we've seen for this campaign
             
             while True:
                 # Fetch one page of metrics
@@ -1013,6 +1014,21 @@ def loops_campaign_recipient_metrics(
                 
                 if not emails:
                     # No more recipients
+                    break
+                
+                # Check if we're getting duplicates (same emails as before)
+                current_emails = {email.get("email") for email in emails if email.get("email")}
+                new_emails = current_emails - seen_emails
+                duplicate_count = len(current_emails) - len(new_emails)
+                
+                if duplicate_count > 0:
+                    log.warning(
+                        f"Page {page} has {duplicate_count}/{len(current_emails)} duplicates "
+                        f"({duplicate_count/len(current_emails)*100:.1f}% duplicate)"
+                    )
+                
+                if current_emails and not new_emails:
+                    log.warning(f"Page {page} returned ONLY duplicate emails, stopping pagination")
                     break
                 
                 # Process each recipient
@@ -1048,7 +1064,6 @@ def loops_campaign_recipient_metrics(
                     record = {
                         "campaign_id": campaign_id,
                         "email_message_id": email_message_id,
-                        "contact_id": email_data.get("id", ""),
                         "email": email_data.get("email", ""),
                         "first_name": email_data.get("firstName") or "",
                         "last_name": email_data.get("lastName") or "",
@@ -1062,15 +1077,26 @@ def loops_campaign_recipient_metrics(
                         "created_at": created_at
                     }
                     
+                    # Only add if we haven't seen this email before
+                    email_addr = email_data.get("email")
+                    if email_addr:
+                        if email_addr in seen_emails:
+                            # Already processed this email on a previous page
+                            log.debug(f"Skipping duplicate email {email_addr}")
+                            continue
+                        seen_emails.add(email_addr)
+                    
                     all_records.append(record)
                     campaign_recipients += 1
                 
-                # Check if we got a full page - if not, we're done
+                # If we got fewer than 100 emails, we've reached the end
                 if len(emails) < 100:
+                    log.info(f"Received {len(emails)} emails (< 100), pagination complete")
                     break
                 
                 # Move to next page
                 page += 1
+                log.info(f"Moving to page {page} (fetched {len(emails)} emails, {campaign_recipients} total for this campaign)")
                 
                 # Rate limiting
                 time.sleep(0.5)
@@ -1090,7 +1116,6 @@ def loops_campaign_recipient_metrics(
         return pl.DataFrame({
             "campaign_id": [],
             "email_message_id": [],
-            "contact_id": [],
             "email": [],
             "first_name": [],
             "last_name": [],
@@ -1105,7 +1130,6 @@ def loops_campaign_recipient_metrics(
         }, schema={
             "campaign_id": pl.Utf8,
             "email_message_id": pl.Utf8,
-            "contact_id": pl.Utf8,
             "email": pl.Utf8,
             "first_name": pl.Utf8,
             "last_name": pl.Utf8,
@@ -1123,7 +1147,6 @@ def loops_campaign_recipient_metrics(
     df = pl.DataFrame(all_records, schema={
         "campaign_id": pl.Utf8,
         "email_message_id": pl.Utf8,
-        "contact_id": pl.Utf8,
         "email": pl.Utf8,
         "first_name": pl.Utf8,
         "last_name": pl.Utf8,
@@ -1188,9 +1211,8 @@ def loops_campaign_metrics_to_warehouse(
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS loops.campaign_metrics (
                         campaign_id TEXT NOT NULL,
-                        contact_id TEXT NOT NULL,
                         email_message_id TEXT,
-                        email TEXT,
+                        email TEXT NOT NULL,
                         first_name TEXT,
                         last_name TEXT,
                         vendor_delivered_at TIMESTAMP WITH TIME ZONE,
@@ -1201,7 +1223,7 @@ def loops_campaign_metrics_to_warehouse(
                         vendor_soft_bounce BOOLEAN,
                         vendor_hard_bounce BOOLEAN,
                         created_at TIMESTAMP WITH TIME ZONE,
-                        PRIMARY KEY (campaign_id, contact_id)
+                        PRIMARY KEY (campaign_id, email)
                     )
                 """)
                 
@@ -1211,7 +1233,6 @@ def loops_campaign_metrics_to_warehouse(
                 records = [
                     (
                         row["campaign_id"],
-                        row["contact_id"],
                         row["email_message_id"],
                         row["email"],
                         row["first_name"],
@@ -1233,15 +1254,14 @@ def loops_campaign_metrics_to_warehouse(
                     cursor,
                     """
                     INSERT INTO loops.campaign_metrics (
-                        campaign_id, contact_id, email_message_id, email, 
+                        campaign_id, email_message_id, email, 
                         first_name, last_name, vendor_delivered_at, unsubscribed_date,
                         vendor_open, vendor_click, vendor_complaint, 
                         vendor_soft_bounce, vendor_hard_bounce, created_at
                     )
                     VALUES %s
-                    ON CONFLICT (campaign_id, contact_id) DO UPDATE SET
+                    ON CONFLICT (campaign_id, email) DO UPDATE SET
                         email_message_id = EXCLUDED.email_message_id,
-                        email = EXCLUDED.email,
                         first_name = EXCLUDED.first_name,
                         last_name = EXCLUDED.last_name,
                         vendor_delivered_at = EXCLUDED.vendor_delivered_at,
@@ -1264,7 +1284,7 @@ def loops_campaign_metrics_to_warehouse(
             value=None,
             metadata={
                 "num_records": loops_campaign_recipient_metrics.height,
-                "operation": "upsert with composite key (campaign_id, contact_id)"
+                "operation": "upsert with composite key (campaign_id, email)"
             }
         )
     except Exception as e:
