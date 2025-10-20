@@ -457,7 +457,8 @@ def loops_campaigns_needing_enrichment(
     - Not sent yet: every 12 hours
     - Sent < 1 week ago: every 24 hours
     - Sent >= 2 weeks and < 8 weeks ago: every 7 days
-    - Sent >= 8 weeks ago: every 30 days
+    - Sent >= 8 weeks and < 1 year ago: every 30 days
+    - Sent >= 1 year ago: every 90 days
     """
     log = context.log
     import psycopg2
@@ -489,10 +490,16 @@ def loops_campaigns_needing_enrichment(
              AND sent_at >= NOW() - INTERVAL '8 weeks'
              AND last_enriched_at < NOW() - INTERVAL '7 days')
             OR
-            -- Sent more than 8 weeks ago: update monthly (30 days)
+            -- Sent between 8 weeks and 1 year ago: update monthly (30 days)
             (sent_at IS NOT NULL AND status = 'sent' 
              AND sent_at < NOW() - INTERVAL '8 weeks'
+             AND sent_at >= NOW() - INTERVAL '1 year'
              AND last_enriched_at < NOW() - INTERVAL '30 days')
+            OR
+            -- Sent more than 1 year ago: update every 90 days
+            (sent_at IS NOT NULL AND status = 'sent' 
+             AND sent_at < NOW() - INTERVAL '1 year'
+             AND last_enriched_at < NOW() - INTERVAL '90 days')
         ORDER BY last_enriched_at NULLS FIRST
     """
     
