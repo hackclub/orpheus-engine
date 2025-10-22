@@ -28,6 +28,30 @@ from orpheus_engine.defs.loops.resources import LoopsResource, LoopsApiError
 # NOTE: Campaign and metrics export assets have been moved to:
 # orpheus_engine/defs/loops_campaign_and_metrics_export/definitions.py
 
+# Loops API Configuration
+LOOPS_BASE_URL = "https://app.loops.so/api/trpc"
+
+# Common headers for Loops API requests
+COMMON_HEADERS = {
+    'accept': '*/*',
+    'accept-language': 'en-US,en;q=0.9',
+    'cache-control': 'no-cache',
+    'content-type': 'application/json',
+    'dnt': '1',
+    'origin': 'https://app.loops.so',
+    'pragma': 'no-cache',
+    'priority': 'u=1, i',
+    'referer': 'https://app.loops.so/audience',
+    'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"macOS"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'x-trpc-source': 'react-query',
+}
+
 @asset(
     group_name="loops",
     description="Exports all contacts from Loops, polls until completion, downloads the CSV, and returns it as a Polars DataFrame. Uses local cache unless DAGSTER_ENV=production.",
