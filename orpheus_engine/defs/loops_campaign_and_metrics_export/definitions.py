@@ -495,7 +495,8 @@ def loops_campaigns_to_warehouse(
                         id TEXT PRIMARY KEY,
                         name TEXT,
                         emoji TEXT,
-                        last_enriched_at TIMESTAMP WITH TIME ZONE
+                        content_last_fetched_at TIMESTAMP WITH TIME ZONE,
+                        metrics_last_fetched_at TIMESTAMP WITH TIME ZONE
                     )
                 """)
                 
@@ -510,6 +511,35 @@ def loops_campaigns_to_warehouse(
                         ) THEN 
                             ALTER TABLE loops.campaigns 
                             ADD PRIMARY KEY (id);
+                        END IF;
+                    END $$;
+                """)
+                
+                # Migrate existing last_enriched_at column if it exists
+                cursor.execute("""
+                    DO $$ 
+                    BEGIN 
+                        -- Check if last_enriched_at column exists
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_schema = 'loops' 
+                            AND table_name = 'campaigns' 
+                            AND column_name = 'last_enriched_at'
+                        ) THEN 
+                            -- Rename last_enriched_at to content_last_fetched_at
+                            ALTER TABLE loops.campaigns 
+                            RENAME COLUMN last_enriched_at TO content_last_fetched_at;
+                        END IF;
+                        
+                        -- Add metrics_last_fetched_at column if it doesn't exist
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_schema = 'loops' 
+                            AND table_name = 'campaigns' 
+                            AND column_name = 'metrics_last_fetched_at'
+                        ) THEN 
+                            ALTER TABLE loops.campaigns 
+                            ADD COLUMN metrics_last_fetched_at TIMESTAMP WITH TIME ZONE;
                         END IF;
                     END $$;
                 """)
@@ -649,16 +679,16 @@ def loops_mailing_lists_to_warehouse(
 @asset(
     group_name="loops_campaign_and_metrics_export",
     compute_kind="sql",
-    description="Queries warehouse for campaigns that need enrichment based on sent status and time since last enrichment.",
+    description="Queries warehouse for campaigns that need content enrichment based on sent status and time since last content fetch.",
     deps=["loops_campaigns_to_warehouse"]  # Ensure warehouse is updated first
 )
-def loops_campaigns_needing_enrichment(
+def loops_campaigns_needing_content_fetch(
     context: AssetExecutionContext
 ) -> pl.DataFrame:
     """
-    Queries warehouse for campaigns that need enrichment.
+    Queries warehouse for campaigns that need content enrichment.
     Update frequency depends on email status:
-    - Not sent yet: every 12 hours
+    - Not sent yet: every 6 hours
     - Sent < 1 week ago: every 24 hours
     - Sent >= 2 weeks and < 8 weeks ago: every 7 days
     - Sent >= 8 weeks and < 1 year ago: every 30 days
@@ -671,67 +701,152 @@ def loops_campaigns_needing_enrichment(
     if not conn_string:
         raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
     
-    # Build query with time-based enrichment logic
+    # Build query with time-based content enrichment logic
     query = """
         SELECT id, name, emoji
         FROM loops.campaigns
         WHERE 
             -- Never enriched
-            last_enriched_at IS NULL
+            content_last_fetched_at IS NULL
             OR
-            -- Email not sent yet: update every 12 hours
+            -- Email not sent yet: update every 6 hours
             ((sent_at IS NULL OR status != 'sent') 
-             AND last_enriched_at < NOW() - INTERVAL '12 hours')
+             AND content_last_fetched_at < NOW() - INTERVAL '6 hours')
             OR
             -- Sent less than 1 week ago: update every 24 hours
             (sent_at IS NOT NULL AND status = 'sent' 
              AND sent_at >= NOW() - INTERVAL '1 week' 
-             AND last_enriched_at < NOW() - INTERVAL '24 hours')
+             AND content_last_fetched_at < NOW() - INTERVAL '24 hours')
             OR
             -- Sent between 2 and 8 weeks ago: update every 7 days
             (sent_at IS NOT NULL AND status = 'sent' 
              AND sent_at < NOW() - INTERVAL '2 weeks' 
              AND sent_at >= NOW() - INTERVAL '8 weeks'
-             AND last_enriched_at < NOW() - INTERVAL '7 days')
+             AND content_last_fetched_at < NOW() - INTERVAL '7 days')
             OR
             -- Sent between 8 weeks and 1 year ago: update monthly (30 days)
             (sent_at IS NOT NULL AND status = 'sent' 
              AND sent_at < NOW() - INTERVAL '8 weeks'
              AND sent_at >= NOW() - INTERVAL '1 year'
-             AND last_enriched_at < NOW() - INTERVAL '30 days')
+             AND content_last_fetched_at < NOW() - INTERVAL '30 days')
             OR
             -- Sent more than 1 year ago: update every 90 days
             (sent_at IS NOT NULL AND status = 'sent' 
              AND sent_at < NOW() - INTERVAL '1 year'
-             AND last_enriched_at < NOW() - INTERVAL '90 days')
-        ORDER BY last_enriched_at NULLS FIRST
+             AND content_last_fetched_at < NOW() - INTERVAL '90 days')
+        ORDER BY content_last_fetched_at NULLS FIRST
     """
     
     if DEBUG_ENRICHMENT_LIMIT > 0:
         query += f"\n        LIMIT {DEBUG_ENRICHMENT_LIMIT}"
         log.info(f"Debug mode: Limiting campaigns to {DEBUG_ENRICHMENT_LIMIT}")
     else:
-        log.info("No limit on campaigns (processing all that need enrichment)")
+        log.info("No limit on campaigns (processing all that need content enrichment)")
     
     try:
         with psycopg2.connect(conn_string) as conn:
             df = pl.read_database(query, connection=conn)
         
-        log.info(f"Found {df.height} campaigns needing enrichment")
+        log.info(f"Found {df.height} campaigns needing content enrichment")
         
         context.add_output_metadata(
             metadata={
-                "num_campaigns_needing_enrichment": df.height,
+                "num_campaigns_needing_content_enrichment": df.height,
                 "sample_campaigns": MetadataValue.md(
                     "\n".join([f"- {row['name']} (`{row['id']}`)" 
                               for row in df.head(5).to_dicts()])
-                ) if df.height > 0 else MetadataValue.text("No campaigns need enrichment")
+                ) if df.height > 0 else MetadataValue.text("No campaigns need content enrichment")
             }
         )
         
         return df
     except Exception as e:
-        log.error(f"Failed to query warehouse for campaigns needing enrichment: {e}")
+        log.error(f"Failed to query warehouse for campaigns needing content enrichment: {e}")
+        raise
+
+
+@asset(
+    group_name="loops_campaign_and_metrics_export",
+    compute_kind="sql",
+    description="Queries warehouse for campaigns that need metrics enrichment based on sent status and time since last metrics fetch.",
+    deps=["loops_campaigns_to_warehouse"]  # Ensure warehouse is updated first
+)
+def loops_campaigns_needing_metrics_fetch(
+    context: AssetExecutionContext
+) -> pl.DataFrame:
+    """
+    Queries warehouse for campaigns that need metrics enrichment.
+    Only refresh metrics for sent campaigns (metrics are heavy):
+    - Not sent yet: skip (no metrics to fetch)
+    - Sent < 1 week ago: every 24 hours
+    - Sent >= 2 weeks and < 8 weeks ago: every 7 days
+    - Sent >= 8 weeks and < 1 year ago: every 30 days
+    - Sent >= 1 year ago: every 90 days
+    """
+    log = context.log
+    import psycopg2
+    
+    conn_string = os.getenv("WAREHOUSE_COOLIFY_URL")
+    if not conn_string:
+        raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
+    
+    # Build query with time-based metrics enrichment logic
+    query = """
+        SELECT id, name, emoji
+        FROM loops.campaigns
+        WHERE 
+            -- Only process sent campaigns
+            sent_at IS NOT NULL AND status = 'sent'
+            AND (
+                -- Never enriched
+                metrics_last_fetched_at IS NULL
+                OR
+                -- Sent less than 1 week ago: update every 24 hours
+                (sent_at >= NOW() - INTERVAL '1 week' 
+                 AND metrics_last_fetched_at < NOW() - INTERVAL '24 hours')
+                OR
+                -- Sent between 2 and 8 weeks ago: update every 7 days
+                (sent_at < NOW() - INTERVAL '2 weeks' 
+                 AND sent_at >= NOW() - INTERVAL '8 weeks'
+                 AND metrics_last_fetched_at < NOW() - INTERVAL '7 days')
+                OR
+                -- Sent between 8 weeks and 1 year ago: update monthly (30 days)
+                (sent_at < NOW() - INTERVAL '8 weeks'
+                 AND sent_at >= NOW() - INTERVAL '1 year'
+                 AND metrics_last_fetched_at < NOW() - INTERVAL '30 days')
+                OR
+                -- Sent more than 1 year ago: update every 90 days
+                (sent_at < NOW() - INTERVAL '1 year'
+                 AND metrics_last_fetched_at < NOW() - INTERVAL '90 days')
+            )
+        ORDER BY metrics_last_fetched_at NULLS FIRST
+    """
+    
+    if DEBUG_ENRICHMENT_LIMIT > 0:
+        query += f"\n        LIMIT {DEBUG_ENRICHMENT_LIMIT}"
+        log.info(f"Debug mode: Limiting campaigns to {DEBUG_ENRICHMENT_LIMIT}")
+    else:
+        log.info("No limit on campaigns (processing all that need metrics enrichment)")
+    
+    try:
+        with psycopg2.connect(conn_string) as conn:
+            df = pl.read_database(query, connection=conn)
+        
+        log.info(f"Found {df.height} campaigns needing metrics enrichment")
+        
+        context.add_output_metadata(
+            metadata={
+                "num_campaigns_needing_metrics_enrichment": df.height,
+                "sample_campaigns": MetadataValue.md(
+                    "\n".join([f"- {row['name']} (`{row['id']}`)" 
+                              for row in df.head(5).to_dicts()])
+                ) if df.height > 0 else MetadataValue.text("No campaigns need metrics enrichment")
+            }
+        )
+        
+        return df
+    except Exception as e:
+        log.error(f"Failed to query warehouse for campaigns needing metrics enrichment: {e}")
         raise
 
 
@@ -739,11 +854,11 @@ def loops_campaigns_needing_enrichment(
     group_name="loops_campaign_and_metrics_export",
     required_resource_keys={"loops_session_token"},
     compute_kind="loops_trpc",
-    description="Scrapes email content from Loops compose HTML for campaigns needing enrichment."
+    description="Scrapes email content from Loops compose HTML for campaigns needing content enrichment."
 )
 def loops_campaign_email_contents(
     context: AssetExecutionContext,
-    loops_campaigns_needing_enrichment: pl.DataFrame
+    loops_campaigns_needing_content_fetch: pl.DataFrame
 ) -> pl.DataFrame:
     """
     Scrapes email content from Loops compose HTML for each campaign.
@@ -752,7 +867,7 @@ def loops_campaign_email_contents(
     log = context.log
     session_token = context.resources.loops_session_token.get_value()
     
-    if loops_campaigns_needing_enrichment.height == 0:
+    if loops_campaigns_needing_content_fetch.height == 0:
         log.info("No campaigns need enrichment, returning empty DataFrame")
         return pl.DataFrame({
             "id": [],
@@ -806,7 +921,7 @@ def loops_campaign_email_contents(
     success_count = 0
     error_count = 0
     
-    for row in loops_campaigns_needing_enrichment.iter_rows(named=True):
+    for row in loops_campaigns_needing_content_fetch.iter_rows(named=True):
         campaign_id = row["id"]
         campaign_name = row["name"]
         campaign_emoji = row["emoji"]
@@ -976,7 +1091,7 @@ def loops_campaign_email_contents(
 @asset(
     compute_kind="sql",
     group_name="loops_campaign_and_metrics_export",
-    description="Updates loops.campaigns table with enriched content and sets last_enriched_at timestamp."
+    description="Updates loops.campaigns table with enriched content and sets content_last_fetched_at timestamp."
 )
 def loops_campaign_contents_to_warehouse(
     context: AssetExecutionContext,
@@ -984,7 +1099,7 @@ def loops_campaign_contents_to_warehouse(
 ) -> Output[None]:
     """
     Upserts enriched campaign content to loops.campaigns table.
-    Updates all enrichment fields and sets last_enriched_at = NOW().
+    Updates all enrichment fields and sets content_last_fetched_at = NOW().
     """
     log = context.log
     import psycopg2
@@ -1092,7 +1207,7 @@ def loops_campaign_contents_to_warehouse(
                         email_html, email_markdown, created_at, sent_at, sent_count,
                         opens, clicks, unsubscribes, hard_bounces, soft_bounces,
                         mailing_list_id, audience_filter_json,
-                        last_enriched_at
+                        content_last_fetched_at
                     )
                     VALUES %s
                     ON CONFLICT (id) DO UPDATE SET
@@ -1117,7 +1232,7 @@ def loops_campaign_contents_to_warehouse(
                         soft_bounces = EXCLUDED.soft_bounces,
                         mailing_list_id = EXCLUDED.mailing_list_id,
                         audience_filter_json = EXCLUDED.audience_filter_json,
-                        last_enriched_at = EXCLUDED.last_enriched_at
+                        content_last_fetched_at = EXCLUDED.content_last_fetched_at
                     """,
                     records,
                     page_size=100
@@ -1184,7 +1299,7 @@ def _fetch_campaign_metrics_page(
 )
 def loops_campaign_recipient_metrics(
     context: AssetExecutionContext,
-    loops_campaigns_needing_enrichment: pl.DataFrame
+    loops_campaigns_needing_metrics_fetch: pl.DataFrame
 ) -> pl.DataFrame:
     """
     Fetches recipient-level metrics for each campaign.
@@ -1193,7 +1308,7 @@ def loops_campaign_recipient_metrics(
     log = context.log
     session_token = context.resources.loops_session_token.get_value()
     
-    if loops_campaigns_needing_enrichment.height == 0:
+    if loops_campaigns_needing_metrics_fetch.height == 0:
         log.info("No campaigns to fetch metrics for, returning empty DataFrame")
         return pl.DataFrame({
             "campaign_id": [],
@@ -1223,7 +1338,7 @@ def loops_campaign_recipient_metrics(
     total_recipients = 0
     campaigns_processed = 0
     
-    for row in loops_campaigns_needing_enrichment.iter_rows(named=True):
+    for row in loops_campaigns_needing_metrics_fetch.iter_rows(named=True):
         campaign_id = row["id"]
         campaign_name = row["name"]
         
@@ -1504,6 +1619,17 @@ def loops_campaign_metrics_to_warehouse(
                 
                 conn.commit()
                 log.info(f"Successfully upserted {len(records)} metrics")
+                
+                # Update metrics_last_fetched_at timestamp for all campaigns that had metrics written
+                campaign_ids = list(set(row["campaign_id"] for row in loops_campaign_recipient_metrics.iter_rows(named=True)))
+                if campaign_ids:
+                    cursor.execute("""
+                        UPDATE loops.campaigns 
+                        SET metrics_last_fetched_at = NOW()
+                        WHERE id = ANY(%s)
+                    """, (campaign_ids,))
+                    conn.commit()
+                    log.info(f"Updated metrics_last_fetched_at for {len(campaign_ids)} campaigns")
         
         return Output(
             value=None,
@@ -1526,7 +1652,8 @@ defs = Definitions(
         loops_campaigns_to_warehouse,
         loops_mailing_lists,
         loops_mailing_lists_to_warehouse,
-        loops_campaigns_needing_enrichment,
+        loops_campaigns_needing_content_fetch,
+        loops_campaigns_needing_metrics_fetch,
         loops_campaign_email_contents,
         loops_campaign_contents_to_warehouse,
         loops_campaign_recipient_metrics,
