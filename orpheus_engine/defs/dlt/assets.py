@@ -69,11 +69,25 @@ def sanitize_postgres_column_name(col_name: str) -> str:
         # Create a hash of the original name for uniqueness
         import hashlib
         name_hash = hashlib.md5(col_name.encode('utf-8')).hexdigest()[:8]
-        # Truncate to leave room for the hash
-        truncated = sanitized[:55]
-        # Remove trailing underscores from truncated part
-        truncated = truncated.rstrip('_')
-        sanitized = f"{truncated}_{name_hash}"
+        
+        # For mailing list columns, try to preserve the ID part
+        if 'loopsMailingList' in col_name and '-' in col_name:
+            # Extract the ID part (between the first and second dash)
+            parts = col_name.split('-')
+            if len(parts) >= 3:
+                mailing_list_id = parts[1]  # The ID part
+                # Create a shorter name: loopsMailingList_ID_hash
+                sanitized = f"loopsMailingList_{mailing_list_id}_{name_hash}"
+            else:
+                # Fallback to normal truncation
+                truncated = sanitized[:55]
+                truncated = truncated.rstrip('_')
+                sanitized = f"{truncated}_{name_hash}"
+        else:
+            # Normal truncation for non-mailing list columns
+            truncated = sanitized[:55]
+            truncated = truncated.rstrip('_')
+            sanitized = f"{truncated}_{name_hash}"
     
     return sanitized
 

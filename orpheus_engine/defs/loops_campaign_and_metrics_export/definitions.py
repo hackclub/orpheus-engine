@@ -1722,24 +1722,19 @@ def loops_audience_mailing_lists_to_warehouse(
                 # Build mapping of mailing list ID to column name
                 mailing_list_mapping = {}
                 for mailing_list_id, friendly_name in mailing_lists:
-                    # Construct expected column name: loops_mailing_list_{id}_{name}
-                    # Clean the friendly name for column name (remove spaces, special chars)
-                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', friendly_name.lower()).strip('_')
-                    expected_column = f"loops_mailing_list_{mailing_list_id}_{clean_name}"
+                    # Look for any column that starts with loops_mailing_list_{mailing_list_id}_
+                    matching_columns = [col for col in existing_columns 
+                                     if col.startswith(f"loops_mailing_list_{mailing_list_id}_")]
                     
-                    # Check if this column exists in the audience table
-                    if expected_column in existing_columns:
-                        mailing_list_mapping[expected_column] = mailing_list_id
-                        log.info(f"Found column: {expected_column} -> {mailing_list_id}")
+                    if matching_columns:
+                        # Use the first matching column (there should typically be only one)
+                        column_name = matching_columns[0]
+                        mailing_list_mapping[column_name] = mailing_list_id
+                        log.info(f"Found column: {column_name} -> {mailing_list_id} ({friendly_name})")
                     else:
-                        # Try alternative patterns in case the naming is different
-                        for col in existing_columns:
-                            if col.startswith(f"loops_mailing_list_{mailing_list_id}_"):
-                                mailing_list_mapping[col] = mailing_list_id
-                                log.info(f"Found alternative column: {col} -> {mailing_list_id}")
-                                break
-                        else:
-                            log.warning(f"No column found for mailing list: {mailing_list_id} ({friendly_name})")
+                        log.warning(f"No column found for mailing list: {mailing_list_id} ({friendly_name})")
+                        # Log all existing columns for debugging
+                        log.debug(f"Available columns: {sorted(existing_columns)}")
                 
                 if not mailing_list_mapping:
                     log.warning("No valid mailing list columns found")
