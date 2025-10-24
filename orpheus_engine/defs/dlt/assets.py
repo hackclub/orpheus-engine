@@ -21,6 +21,62 @@ def warehouse_coolify_destination() -> postgres:
     # DLT handles the connection details internally
     return dlt.destinations.postgres(credentials=creds)
 
+def sanitize_postgres_column_name(col_name: str) -> str:
+    """
+    Sanitize column names for PostgreSQL compatibility.
+    
+    PostgreSQL has specific rules for identifiers:
+    - Hyphens are treated as minus operators unless quoted
+    - Spaces and special characters need to be handled
+    - Reserved words should be avoided
+    - Maximum identifier length is 63 characters
+    
+    This function replaces problematic characters with underscores and handles length limits.
+    """
+    # Replace hyphens with underscores (most common issue)
+    sanitized = col_name.replace('-', '_')
+    
+    # Replace spaces with underscores
+    sanitized = sanitized.replace(' ', '_')
+    
+    # Replace other problematic characters
+    sanitized = sanitized.replace('(', '_').replace(')', '_')
+    sanitized = sanitized.replace('[', '_').replace(']', '_')
+    sanitized = sanitized.replace('{', '_').replace('}', '_')
+    sanitized = sanitized.replace('@', '_at_')
+    sanitized = sanitized.replace('#', '_hash_')
+    sanitized = sanitized.replace('%', '_percent_')
+    sanitized = sanitized.replace('&', '_and_')
+    sanitized = sanitized.replace('+', '_plus_')
+    sanitized = sanitized.replace('=', '_equals_')
+    sanitized = sanitized.replace('!', '_exclamation_')
+    sanitized = sanitized.replace('?', '_question_')
+    
+    # Remove multiple consecutive underscores
+    while '__' in sanitized:
+        sanitized = sanitized.replace('__', '_')
+    
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    
+    # Ensure the name doesn't start with a number
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"col_{sanitized}"
+    
+    # PostgreSQL has a 63-character limit on identifiers
+    # If the name is too long, truncate it and add a hash suffix
+    if len(sanitized) > 63:
+        # Create a hash of the original name for uniqueness
+        import hashlib
+        name_hash = hashlib.md5(col_name.encode('utf-8')).hexdigest()[:8]
+        # Truncate to leave room for the hash
+        truncated = sanitized[:55]
+        # Remove trailing underscores from truncated part
+        truncated = truncated.rstrip('_')
+        sanitized = f"{truncated}_{name_hash}"
+    
+    return sanitized
+
 def create_airtable_sync_assets(
     base_name: str,
     tables: list[str],
@@ -488,6 +544,31 @@ def loops_audience(
     context.log.info(f"Starting DLT pipeline '{pipeline_name}' to load data.")
     context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name}'")
 
+    # Apply column name sanitization for PostgreSQL compatibility
+    original_columns = loops_processed_audience.columns
+    sanitized_df = loops_processed_audience.rename({col: sanitize_postgres_column_name(col) for col in original_columns})
+    
+    # Log the column name changes for debugging
+    changed_columns = {col: sanitize_postgres_column_name(col) for col in original_columns if col != sanitize_postgres_column_name(col)}
+    if changed_columns:
+        context.log.info(f"Sanitized {len(changed_columns)} column names for PostgreSQL compatibility:")
+        for original, sanitized in changed_columns.items():
+            context.log.info(f"  '{original}' -> '{sanitized}'")
+    
+    # Log mailing list columns specifically for debugging
+    mailing_list_cols = [col for col in original_columns if 'loopsMailingList' in col]
+    context.log.info(f"Found {len(mailing_list_cols)} mailing list columns:")
+    for col in mailing_list_cols:
+        sanitized_col = sanitize_postgres_column_name(col)
+        context.log.info(f"  '{col}' -> '{sanitized_col}'")
+    
+    # Check for potential data type issues
+    context.log.info(f"DataFrame schema:")
+    for col, dtype in sanitized_df.schema.items():
+        context.log.info(f"  {col}: {dtype}")
+    
+    context.log.info(f"Total columns to load: {len(sanitized_df.columns)}")
+
     # Configure the dlt pipeline.
     # Destination details (credentials) are fetched by the helper function.
     pipeline = dlt.pipeline(
@@ -499,7 +580,16 @@ def loops_audience(
 
     # Run the pipeline, passing the data received from the upstream asset.
     # Convert Polars DataFrame to dict iterator - DLT will handle nested structures
-    data_iterator = loops_processed_audience.iter_rows(named=True)
+    data_iterator = sanitized_df.iter_rows(named=True)
+    
+    # Log a sample of the data being loaded for debugging
+    sample_data = sanitized_df.head(1).to_dicts()
+    if sample_data:
+        context.log.info(f"Sample data row (first record):")
+        for key, value in sample_data[0].items():
+            if 'loopsMailingList' in key:
+                context.log.info(f"  {key}: {value} (type: {type(value).__name__})")
+    
     try:
         load_info = pipeline.run(
             data=data_iterator,
@@ -521,12 +611,26 @@ def loops_audience(
                 "dlt_dataset_name": MetadataValue.text(dataset_name),
                 "dlt_table_name": MetadataValue.text(table_name),
                 "write_disposition": MetadataValue.text("replace"),
-                "first_run": MetadataValue.bool(load_info.first_run)
+                "first_run": MetadataValue.bool(load_info.first_run),
+                "columns_sanitized": MetadataValue.int(len(changed_columns)),
+                "total_columns": MetadataValue.int(len(sanitized_df.columns)),
+                "sanitized_column_names": MetadataValue.json(list(changed_columns.keys())) if changed_columns else MetadataValue.text("None")
             }
         )
 
     except Exception as e:
         context.log.error(f"DLT pipeline '{pipeline_name}' failed: {e}")
+        
+        # Additional debugging for column-related errors
+        if "column" in str(e).lower() or "identifier" in str(e).lower():
+            context.log.error("This appears to be a column-related error. Checking problematic columns:")
+            for col in original_columns:
+                sanitized_col = sanitize_postgres_column_name(col)
+                if len(sanitized_col) > 60:  # Close to the 63-character limit
+                    context.log.error(f"  Long column name: '{col}' -> '{sanitized_col}' ({len(sanitized_col)} chars)")
+                if '-' in col or ' ' in col:
+                    context.log.error(f"  Special chars in: '{col}' -> '{sanitized_col}'")
+        
         # Re-raise the exception to mark the Dagster asset run as failed
         raise
 
