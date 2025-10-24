@@ -1643,6 +1643,191 @@ def loops_campaign_metrics_to_warehouse(
         raise
 
 
+@asset(
+    compute_kind="sql",
+    group_name="loops_campaign_and_metrics_export",
+    description="Creates audience mailing list join table by unpivoting mailing list columns from audience table.",
+    deps=["loops_audience", "loops_mailing_lists_to_warehouse"]  # Depend on DLT audience asset and mailing lists asset
+)
+def loops_audience_mailing_lists_to_warehouse(
+    context: AssetExecutionContext
+) -> Output[None]:
+    """
+    Creates loops.audience_mailing_lists table by unpivoting mailing list columns.
+    Extracts mailing list memberships from audience table and creates normalized join table.
+    """
+    log = context.log
+    import psycopg2
+    import tempfile
+    import os
+    import re
+    import csv
+    
+    conn_string = os.getenv("WAREHOUSE_COOLIFY_URL")
+    if not conn_string:
+        raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
+    
+    log.info("Starting audience mailing lists join table creation")
+    
+    try:
+        with psycopg2.connect(conn_string) as conn:
+            with conn.cursor() as cursor:
+                # Ensure schema exists
+                cursor.execute("CREATE SCHEMA IF NOT EXISTS loops")
+                
+                # Create table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS loops.audience_mailing_lists (
+                        email TEXT NOT NULL,
+                        mailing_list_id TEXT NOT NULL,
+                        PRIMARY KEY (email, mailing_list_id)
+                    )
+                """)
+                
+                # Get all mailing lists from the mailing_lists table
+                cursor.execute("""
+                    SELECT id, friendly_name 
+                    FROM loops.mailing_lists 
+                    WHERE deletion_status != 'deleted' OR deletion_status IS NULL
+                    ORDER BY id
+                """)
+                
+                mailing_lists = cursor.fetchall()
+                
+                if not mailing_lists:
+                    log.warning("No mailing lists found in loops.mailing_lists table")
+                    return Output(
+                        value=None,
+                        metadata={
+                            "num_records": 0,
+                            "note": "No mailing lists found"
+                        }
+                    )
+                
+                log.info(f"Found {len(mailing_lists)} mailing lists")
+                
+                # Check which mailing list columns actually exist in audience table
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'loops' 
+                    AND table_name = 'audience' 
+                    AND column_name LIKE 'loops_mailing_list_%'
+                    ORDER BY column_name
+                """)
+                
+                existing_columns = {row[0] for row in cursor.fetchall()}
+                log.info(f"Found {len(existing_columns)} mailing list columns in audience table")
+                
+                # Build mapping of mailing list ID to column name
+                mailing_list_mapping = {}
+                for mailing_list_id, friendly_name in mailing_lists:
+                    # Construct expected column name: loops_mailing_list_{id}_{name}
+                    # Clean the friendly name for column name (remove spaces, special chars)
+                    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', friendly_name.lower()).strip('_')
+                    expected_column = f"loops_mailing_list_{mailing_list_id}_{clean_name}"
+                    
+                    # Check if this column exists in the audience table
+                    if expected_column in existing_columns:
+                        mailing_list_mapping[expected_column] = mailing_list_id
+                        log.info(f"Found column: {expected_column} -> {mailing_list_id}")
+                    else:
+                        # Try alternative patterns in case the naming is different
+                        for col in existing_columns:
+                            if col.startswith(f"loops_mailing_list_{mailing_list_id}_"):
+                                mailing_list_mapping[col] = mailing_list_id
+                                log.info(f"Found alternative column: {col} -> {mailing_list_id}")
+                                break
+                        else:
+                            log.warning(f"No column found for mailing list: {mailing_list_id} ({friendly_name})")
+                
+                if not mailing_list_mapping:
+                    log.warning("No valid mailing list columns found")
+                    return Output(
+                        value=None,
+                        metadata={
+                            "num_records": 0,
+                            "note": "No valid mailing list columns found"
+                        }
+                    )
+                
+                log.info(f"Processing {len(mailing_list_mapping)} valid mailing list columns")
+                
+                # Start transaction
+                cursor.execute("BEGIN")
+                
+                # TRUNCATE table
+                cursor.execute("TRUNCATE loops.audience_mailing_lists")
+                log.info("Truncated audience_mailing_lists table")
+                
+                # Process each mailing list column
+                total_records = 0
+                CHUNK_SIZE = 100_000
+                
+                for col_name, mailing_list_id in mailing_list_mapping.items():
+                    log.info(f"Processing mailing list: {mailing_list_id}")
+                    
+                    # Query audience data for this mailing list
+                    query = f"""
+                        SELECT email 
+                        FROM loops.audience 
+                        WHERE {col_name} = true 
+                        AND email IS NOT NULL 
+                        AND email != ''
+                    """
+                    
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    
+                    if not rows:
+                        log.info(f"No members found for mailing list: {mailing_list_id}")
+                        continue
+                    
+                    # Process in chunks to limit memory usage
+                    for i in range(0, len(rows), CHUNK_SIZE):
+                        chunk = rows[i:i + CHUNK_SIZE]
+                        
+                        # Create temporary CSV file
+                        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
+                            writer = csv.writer(f)
+                            for row in chunk:
+                                writer.writerow([row[0], mailing_list_id])
+                            temp_file = f.name
+                        
+                        # COPY from file
+                        try:
+                            with open(temp_file, 'r') as f:
+                                cursor.copy_expert(
+                                    "COPY loops.audience_mailing_lists (email, mailing_list_id) FROM STDIN WITH CSV",
+                                    f
+                                )
+                            
+                            chunk_count = len(chunk)
+                            total_records += chunk_count
+                            log.info(f"Inserted {chunk_count} records for {mailing_list_id} (chunk {i//CHUNK_SIZE + 1})")
+                            
+                        finally:
+                            # Clean up temp file
+                            os.unlink(temp_file)
+                
+                # Commit transaction
+                cursor.execute("COMMIT")
+                log.info(f"Successfully created audience mailing lists join table with {total_records} records")
+        
+        return Output(
+            value=None,
+            metadata={
+                "num_records": total_records,
+                "num_mailing_lists": len(mailing_list_mapping),
+                "operation": "TRUNCATE + COPY (chunked)"
+            }
+        )
+        
+    except Exception as e:
+        log.error(f"Failed to create audience mailing lists join table: {e}")
+        raise
+
+
 # Export defs
 from dagster import Definitions
 
@@ -1658,5 +1843,6 @@ defs = Definitions(
         loops_campaign_contents_to_warehouse,
         loops_campaign_recipient_metrics,
         loops_campaign_metrics_to_warehouse,
+        loops_audience_mailing_lists_to_warehouse,
     ]
 )

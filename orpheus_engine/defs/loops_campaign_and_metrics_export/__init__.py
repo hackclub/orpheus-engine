@@ -9,6 +9,9 @@ from orpheus_engine.defs.loops_campaign_and_metrics_export.definitions import (
     loops_campaign_contents_to_warehouse,
     loops_campaign_recipient_metrics,
     loops_campaign_metrics_to_warehouse,
+    loops_mailing_lists,
+    loops_mailing_lists_to_warehouse,
+    loops_audience_mailing_lists_to_warehouse,
 )
 
 __all__ = [
@@ -20,5 +23,8 @@ __all__ = [
     "loops_campaign_contents_to_warehouse",
     "loops_campaign_recipient_metrics",
     "loops_campaign_metrics_to_warehouse",
+    "loops_mailing_lists",
+    "loops_mailing_lists_to_warehouse",
+    "loops_audience_mailing_lists_to_warehouse",
 ]
 
