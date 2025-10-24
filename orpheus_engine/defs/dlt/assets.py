@@ -61,7 +61,7 @@ def sanitize_postgres_column_name(col_name: str) -> str:
     
     # Ensure the name doesn't start with a number
     if sanitized and sanitized[0].isdigit():
-        sanitized = f"col_{sanitized}"
+        sanitized = f"_{sanitized}"
     
     # PostgreSQL has a 63-character limit on identifiers
     # If the name is too long, truncate it and add a hash suffix
