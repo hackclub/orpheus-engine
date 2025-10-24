@@ -18,6 +18,7 @@ LOOPS_APP_BASE_URL = "https://app.loops.so"
 LOOPS_TITLES_ENDPOINT = "/teams.getTitlesOfEmails"
 LOOPS_EMAIL_BY_ID_ENDPOINT = "/emailMessages.getEmailMessageById"
 LOOPS_METRICS_ENDPOINT = "/emailMessages.calculateEmailMessageMetrics"
+LOOPS_MAILING_LISTS_ENDPOINT = "/mailingLists.fetchAll"
 LOOPS_COMPOSE_PATH_TEMPLATE = "/campaigns/{campaignId}/compose"
 LOOPS_COMPOSE_QUERYSTRING = (
     "stepName=Compose&page=0&pageSize=20&sortMetricsBy=firstName&"
@@ -141,6 +142,108 @@ def loops_campaign_names_and_ids(context: AssetExecutionContext) -> pl.DataFrame
         raise RuntimeError(f"Failed to parse campaigns response: {e}") from e
 
 
+@asset(
+    group_name="loops_campaign_and_metrics_export",
+    description="Fetches all mailing lists from Loops via the tRPC API.",
+    required_resource_keys={"loops_session_token"},
+    compute_kind="loops_trpc",
+)
+def loops_mailing_lists(context: AssetExecutionContext) -> pl.DataFrame:
+    """
+    Fetches mailing lists from Loops using the tRPC mailingLists.fetchAll endpoint.
+    
+    Returns:
+        A Polars DataFrame with columns: id, friendly_name, description, is_public, 
+        color_scheme, deletion_status, campaigns_json
+    """
+    log = context.log
+    session_token = context.resources.loops_session_token.get_value()
+    
+    url = f"{LOOPS_BASE_URL}{LOOPS_MAILING_LISTS_ENDPOINT}"
+    params = {"input": json.dumps({"json": {}})}
+    headers = COMMON_HEADERS.copy()
+    cookies = {'__Secure-next-auth.session-token': session_token}
+    
+    try:
+        log.info("Fetching mailing lists from Loops tRPC API...")
+        response = requests.get(url, params=params, headers=headers, cookies=cookies, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract mailing lists from nested response structure
+        mailing_lists = data.get('result', {}).get('data', {}).get('json', [])
+        
+        if not mailing_lists:
+            log.warning("No mailing lists found in response")
+            # Return empty DataFrame with correct schema
+            return pl.DataFrame({
+                "id": [],
+                "friendly_name": [],
+                "description": [],
+                "is_public": [],
+                "color_scheme": [],
+                "deletion_status": [],
+                "campaigns_json": []
+            }, schema={
+                "id": pl.Utf8,
+                "friendly_name": pl.Utf8,
+                "description": pl.Utf8,
+                "is_public": pl.Boolean,
+                "color_scheme": pl.Utf8,
+                "deletion_status": pl.Utf8,
+                "campaigns_json": pl.Utf8
+            })
+        
+        log.info(f"Found {len(mailing_lists)} mailing lists")
+        
+        # Convert to Polars DataFrame
+        df = pl.DataFrame([
+            {
+                "id": ml.get("id", ""),
+                "friendly_name": (ml.get("friendlyName") or "").strip(),
+                "description": (ml.get("description") or "").strip(),
+                "is_public": ml.get("isPublic", False),
+                "color_scheme": (ml.get("colorScheme") or "").strip(),
+                "deletion_status": (ml.get("deletionStatus") or "").strip(),
+                "campaigns_json": json.dumps(ml.get("campaigns", []))
+            }
+            for ml in mailing_lists
+        ], schema={
+            "id": pl.Utf8,
+            "friendly_name": pl.Utf8,
+            "description": pl.Utf8,
+            "is_public": pl.Boolean,
+            "color_scheme": pl.Utf8,
+            "deletion_status": pl.Utf8,
+            "campaigns_json": pl.Utf8
+        })
+        
+        context.add_output_metadata(
+            metadata={
+                "num_mailing_lists": df.height,
+                "sample_mailing_lists": MetadataValue.md(
+                    "\n".join([f"- {row['friendly_name']} (`{row['id']}`) - {row['description'][:50]}..." 
+                              if len(row['description']) > 50 else f"- {row['friendly_name']} (`{row['id']}`) - {row['description']}"
+                              for row in df.head(10).to_dicts()])
+                )
+            }
+        )
+        
+        return df
+        
+    except requests.exceptions.RequestException as e:
+        log.error(f"Failed to fetch mailing lists from Loops: {e}")
+        if 'response' in locals():
+            log.error(f"Response status: {response.status_code}")
+            log.error(f"Response text: {response.text[:500]}")
+        raise RuntimeError(f"Failed to fetch mailing lists from Loops: {e}") from e
+    except (KeyError, json.JSONDecodeError) as e:
+        log.error(f"Failed to parse mailing lists response: {e}")
+        if 'response' in locals():
+            log.error(f"Response text: {response.text[:500]}")
+        raise RuntimeError(f"Failed to parse mailing lists response: {e}") from e
+
+
 # --- Helper Functions ---
 
 def warehouse_coolify_destination() -> postgres:
@@ -180,8 +283,10 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
       - props.pageProps.campaign.emailMessage.id
       - props.pageProps.campaign.status
       - props.pageProps.campaign.scheduling.data.timestamp (Unix ms timestamp)
+      - props.pageProps.campaign.mailingListId
+      - props.pageProps.campaign.audienceFilter (JSON object)
     
-    Returns dict with: email_message_id, status, sent_at_timestamp (or None if not found)
+    Returns dict with: email_message_id, status, sent_at_timestamp, mailing_list_id, audience_filter (or None if not found)
     """
     path = LOOPS_COMPOSE_PATH_TEMPLATE.format(campaignId=campaign_id)
     html = _http_get_html(path, session_token, LOOPS_COMPOSE_QUERYSTRING)
@@ -202,11 +307,15 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
         
         status = campaign_data.get("status", "")
         sent_at_timestamp = campaign_data.get("scheduling", {}).get("data", {}).get("timestamp")
+        mailing_list_id = campaign_data.get("mailingListId") or None
+        audience_filter = campaign_data.get("audienceFilter") or None
         
         return {
             "email_message_id": msg_id,
             "status": status,
-            "sent_at_timestamp": sent_at_timestamp  # Unix timestamp in milliseconds
+            "sent_at_timestamp": sent_at_timestamp,  # Unix timestamp in milliseconds
+            "mailing_list_id": mailing_list_id,
+            "audience_filter": audience_filter  # JSON object
         }
     except Exception:
         pass
@@ -443,6 +552,101 @@ def loops_campaigns_to_warehouse(
 
 
 @asset(
+    compute_kind="sql",
+    group_name="loops_campaign_and_metrics_export",
+    description="Writes mailing lists to warehouse.loops.mailing_lists table."
+)
+def loops_mailing_lists_to_warehouse(
+    context: AssetExecutionContext,
+    loops_mailing_lists: pl.DataFrame
+) -> Output[None]:
+    """
+    Upserts mailing lists to warehouse.loops.mailing_lists table.
+    """
+    log = context.log
+    import psycopg2
+    from psycopg2.extras import execute_values
+    
+    conn_string = os.getenv("WAREHOUSE_COOLIFY_URL")
+    if not conn_string:
+        raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
+    
+    log.info(f"Upserting {loops_mailing_lists.height} mailing lists to loops.mailing_lists table")
+    
+    try:
+        with psycopg2.connect(conn_string) as conn:
+            with conn.cursor() as cursor:
+                # Ensure schema exists
+                cursor.execute("CREATE SCHEMA IF NOT EXISTS loops")
+                
+                # Create table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS loops.mailing_lists (
+                        id TEXT PRIMARY KEY,
+                        friendly_name TEXT,
+                        description TEXT,
+                        is_public BOOLEAN,
+                        color_scheme TEXT,
+                        deletion_status TEXT,
+                        campaigns_json JSONB,
+                        last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+                
+                conn.commit()
+                
+                # Prepare data for upsert
+                records = [
+                    (
+                        row["id"],
+                        row["friendly_name"],
+                        row["description"],
+                        row["is_public"],
+                        row["color_scheme"],
+                        row["deletion_status"],
+                        row["campaigns_json"]
+                    )
+                    for row in loops_mailing_lists.iter_rows(named=True)
+                ]
+                
+                # Upsert - update all fields and timestamp
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO loops.mailing_lists (
+                        id, friendly_name, description, is_public, 
+                        color_scheme, deletion_status, campaigns_json, last_updated_at
+                    )
+                    VALUES %s
+                    ON CONFLICT (id) DO UPDATE SET
+                        friendly_name = EXCLUDED.friendly_name,
+                        description = EXCLUDED.description,
+                        is_public = EXCLUDED.is_public,
+                        color_scheme = EXCLUDED.color_scheme,
+                        deletion_status = EXCLUDED.deletion_status,
+                        campaigns_json = EXCLUDED.campaigns_json,
+                        last_updated_at = NOW()
+                    """,
+                    [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], datetime.now()) for r in records],
+                    page_size=1000
+                )
+                
+                conn.commit()
+                log.info(f"Successfully upserted {len(records)} mailing lists")
+        
+        return Output(
+            value=None,
+            metadata={
+                "num_records": loops_mailing_lists.height,
+                "operation": "upsert"
+            }
+        )
+    except Exception as e:
+        log.error(f"Failed to upsert mailing lists: {e}")
+        raise
+
+
+@asset(
     group_name="loops_campaign_and_metrics_export",
     compute_kind="sql",
     description="Queries warehouse for campaigns that need enrichment based on sent status and time since last enrichment.",
@@ -570,7 +774,9 @@ def loops_campaign_email_contents(
             "clicks": [],
             "unsubscribes": [],
             "hard_bounces": [],
-            "soft_bounces": []
+            "soft_bounces": [],
+            "mailing_list_id": [],
+            "audience_filter_json": []
         }, schema={
             "id": pl.Utf8,
             "name": pl.Utf8,
@@ -591,7 +797,9 @@ def loops_campaign_email_contents(
             "clicks": pl.Int64,
             "unsubscribes": pl.Int64,
             "hard_bounces": pl.Int64,
-            "soft_bounces": pl.Int64
+            "soft_bounces": pl.Int64,
+            "mailing_list_id": pl.Utf8,
+            "audience_filter_json": pl.Utf8
         })
     
     records = []
@@ -615,6 +823,8 @@ def loops_campaign_email_contents(
             email_message_id = campaign_info["email_message_id"]
             status = campaign_info.get("status", "")
             sent_at_timestamp = campaign_info.get("sent_at_timestamp")
+            mailing_list_id = campaign_info.get("mailing_list_id") or None
+            audience_filter = campaign_info.get("audience_filter")
             
             # Convert Unix timestamp (milliseconds) to datetime
             if sent_at_timestamp:
@@ -680,7 +890,9 @@ def loops_campaign_email_contents(
                 "clicks": j.get("clicks"),
                 "unsubscribes": j.get("unsubscribes"),
                 "hard_bounces": j.get("hardBounces"),
-                "soft_bounces": j.get("softBounces")
+                "soft_bounces": j.get("softBounces"),
+                "mailing_list_id": mailing_list_id,
+                "audience_filter_json": json.dumps(audience_filter) if audience_filter else None
             }
             
             records.append(record)
@@ -718,7 +930,9 @@ def loops_campaign_email_contents(
             "clicks": [],
             "unsubscribes": [],
             "hard_bounces": [],
-            "soft_bounces": []
+            "soft_bounces": [],
+            "mailing_list_id": [],
+            "audience_filter_json": []
         }, schema={
             "id": pl.Utf8,
             "name": pl.Utf8,
@@ -739,7 +953,9 @@ def loops_campaign_email_contents(
             "clicks": pl.Int64,
             "unsubscribes": pl.Int64,
             "hard_bounces": pl.Int64,
-            "soft_bounces": pl.Int64
+            "soft_bounces": pl.Int64,
+            "mailing_list_id": pl.Utf8,
+            "audience_filter_json": pl.Utf8
         })
     
     df = pl.DataFrame(records)
@@ -813,6 +1029,8 @@ def loops_campaign_contents_to_warehouse(
                     ("unsubscribes", "INTEGER"),
                     ("hard_bounces", "INTEGER"),
                     ("soft_bounces", "INTEGER"),
+                    ("mailing_list_id", "TEXT"),
+                    ("audience_filter_json", "JSONB"),
                 ]
                 
                 for col_name, col_type in enrichment_columns:
@@ -857,6 +1075,8 @@ def loops_campaign_contents_to_warehouse(
                         row["unsubscribes"],
                         row["hard_bounces"],
                         row["soft_bounces"],
+                        row["mailing_list_id"],
+                        row["audience_filter_json"],
                         enrichment_timestamp
                     )
                     for row in loops_campaign_email_contents.iter_rows(named=True)
@@ -871,6 +1091,7 @@ def loops_campaign_contents_to_warehouse(
                         from_name, from_email, reply_to_email, email_content_json,
                         email_html, email_markdown, created_at, sent_at, sent_count,
                         opens, clicks, unsubscribes, hard_bounces, soft_bounces,
+                        mailing_list_id, audience_filter_json,
                         last_enriched_at
                     )
                     VALUES %s
@@ -894,6 +1115,8 @@ def loops_campaign_contents_to_warehouse(
                         unsubscribes = EXCLUDED.unsubscribes,
                         hard_bounces = EXCLUDED.hard_bounces,
                         soft_bounces = EXCLUDED.soft_bounces,
+                        mailing_list_id = EXCLUDED.mailing_list_id,
+                        audience_filter_json = EXCLUDED.audience_filter_json,
                         last_enriched_at = EXCLUDED.last_enriched_at
                     """,
                     records,
@@ -1301,6 +1524,8 @@ defs = Definitions(
     assets=[
         loops_campaign_names_and_ids,
         loops_campaigns_to_warehouse,
+        loops_mailing_lists,
+        loops_mailing_lists_to_warehouse,
         loops_campaigns_needing_enrichment,
         loops_campaign_email_contents,
         loops_campaign_contents_to_warehouse,
