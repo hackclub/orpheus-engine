@@ -282,7 +282,7 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
     Load /campaigns/{campaignId}/compose and parse __NEXT_DATA__ for:
       - props.pageProps.campaign.emailMessage.id
       - props.pageProps.campaign.status
-      - props.pageProps.campaign.scheduling.data.timestamp (Unix ms timestamp)
+      - props.pageProps.sendTime (ISO string timestamp)
       - props.pageProps.campaign.mailingListId
       - props.pageProps.campaign.audienceFilter (JSON object)
     
@@ -295,20 +295,27 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
         return None
     try:
         data = json.loads(m.group("json"))
-        campaign_data = (
-            data.get("props", {})
-                .get("pageProps", {})
-                .get("campaign", {})
-        )
+        page_props = data.get("props", {}).get("pageProps", {})
+        campaign_data = page_props.get("campaign", {})
         
         msg_id = campaign_data.get("emailMessage", {}).get("id")
         if not msg_id or not isinstance(msg_id, str):
             return None
         
         status = campaign_data.get("status", "")
-        sent_at_timestamp = campaign_data.get("scheduling", {}).get("data", {}).get("timestamp")
+        send_time_iso = page_props.get("sendTime")  # ISO string like "2025-10-17T19:13:51.021Z"
         mailing_list_id = campaign_data.get("mailingListId") or None
         audience_filter = campaign_data.get("audienceFilter") or None
+        
+        # Convert ISO string to Unix timestamp in milliseconds
+        sent_at_timestamp = None
+        if send_time_iso:
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(send_time_iso.replace('Z', '+00:00'))
+                sent_at_timestamp = int(dt.timestamp() * 1000)  # Convert to milliseconds
+            except Exception:
+                pass
         
         return {
             "email_message_id": msg_id,
