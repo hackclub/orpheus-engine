@@ -282,7 +282,7 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
     Load /campaigns/{campaignId}/compose and parse __NEXT_DATA__ for:
       - props.pageProps.campaign.emailMessage.id
       - props.pageProps.campaign.status
-      - props.pageProps.sendTime (ISO string timestamp)
+      - props.pageProps.campaign.sendTime (ISO string timestamp)
       - props.pageProps.campaign.mailingListId
       - props.pageProps.campaign.audienceFilter (JSON object)
     
@@ -303,7 +303,7 @@ def _resolve_email_message_id_from_campaign(session_token: str, campaign_id: str
             return None
         
         status = campaign_data.get("status", "")
-        send_time_iso = page_props.get("sendTime")  # ISO string like "2025-10-17T19:13:51.021Z"
+        send_time_iso = campaign_data.get("sendTime")  # ISO string like "2025-10-17T19:13:51.021Z"
         mailing_list_id = campaign_data.get("mailingListId") or None
         audience_filter = campaign_data.get("audienceFilter") or None
         
