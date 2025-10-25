@@ -7,10 +7,40 @@ import json
 import os
 import re
 import dlt
+import asyncio
 from dlt.destinations import postgres
 from datetime import datetime
 from dagster import asset, AssetExecutionContext, Output, MetadataValue
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
+
+# --- Pydantic Models for AI Response Schema ---
+
+class PIIRedaction(BaseModel):
+    type: str  # email|phone|address|token|link_placeholder
+    original_sample: str
+    action: str  # removed|redacted|generalized
+
+class AIAnalysisFlags(BaseModel):
+    removed_email_references: bool
+    personalization_replaced: bool
+    pii_detected: bool
+    pii_safe_to_redact: bool
+    images_present: bool
+
+class EmailPublishableAnalysisResponse(BaseModel):
+    publish: bool
+    reason: str
+    decision_overridden_due_to_pii: bool
+    title: str
+    slug: str
+    excerpt: str
+    tags: List[str]
+    content_markdown: str
+    content_html: str
+    flags: AIAnalysisFlags
+    pii_redactions: List[PIIRedaction]
+    transform_notes: List[str]
 
 # Loops API Configuration
 LOOPS_BASE_URL = "https://app.loops.so/api/trpc"
@@ -34,6 +64,13 @@ _NEXT_DATA_RE = re.compile(
 # Debug limit for campaigns needing enrichment
 # Set to -1 for no limit, or a positive integer to limit the number of campaigns processed
 DEBUG_ENRICHMENT_LIMIT = -1
+
+# Debug limit for AI publishable content analysis
+# Set to -1 for no limit, or a positive integer to limit the number of campaigns processed
+DEBUG_AI_ANALYSIS_LIMIT = 10
+
+# Batch processing configuration for AI requests
+AI_BATCH_SIZE = 20
 
 # Common headers for Loops API requests
 COMMON_HEADERS = {
@@ -377,6 +414,88 @@ def _fetch_email_html(session_token: str, email_message_id: str) -> Optional[str
         return None
     except Exception as e:
         raise RuntimeError(f"Failed to parse JSON from email HTML API: {e}")
+
+
+async def _process_campaign_with_ai(
+    campaign_data: Dict[str, Any], 
+    ai_client, 
+    ai_prompt: str, 
+    log
+) -> Dict[str, Any]:
+    """
+    Process a single campaign with AI analysis.
+    Returns a record dict with AI analysis results.
+    """
+    campaign_id = campaign_data["id"]
+    campaign_name = campaign_data["name"]
+    email_html = campaign_data["email_html"]
+    subject = campaign_data["subject"]
+    sent_at = campaign_data["sent_at"]
+    
+    try:
+        # Convert sent_at to ISO string if available
+        received_at_iso = None
+        if sent_at:
+            if isinstance(sent_at, str):
+                received_at_iso = sent_at
+            else:
+                received_at_iso = sent_at.isoformat()
+        
+        # Construct input JSON for AI
+        input_json = {
+            "html": email_html,
+            "fallback_subject": subject or "",
+            "received_at": received_at_iso
+        }
+        
+        # Create the full prompt with input
+        full_prompt = f"{ai_prompt}\n\nINPUT:\n{json.dumps(input_json, indent=2)}"
+        
+        log.info(f"Processing AI analysis for campaign {campaign_name} ({campaign_id})")
+        
+        # Run the AI call in a thread pool to make it truly async
+        loop = asyncio.get_event_loop()
+        ai_response = await loop.run_in_executor(
+            None,
+            lambda: ai_client.generate_structured_response(
+                prompt=full_prompt,
+                response_schema=EmailPublishableAnalysisResponse,
+                model="gpt-5"
+            )
+        )
+        
+        # Extract key fields
+        ai_publishable = ai_response.publish
+        ai_slug = ai_response.slug
+        ai_content_markdown = ai_response.content_markdown if ai_publishable else ""
+        ai_content_html = ai_response.content_html if ai_publishable else ""
+        
+        # Store full response as JSON
+        ai_response_json = json.dumps(ai_response.model_dump())
+        
+        record = {
+            "id": campaign_id,
+            "ai_publishable_response_json": ai_response_json,
+            "ai_publishable": ai_publishable,
+            "ai_publishable_slug": ai_slug,
+            "ai_publishable_content_markdown": ai_content_markdown,
+            "ai_publishable_content_html": ai_content_html
+        }
+        
+        log.info(f"Successfully analyzed campaign {campaign_name} ({campaign_id}) - Publishable: {ai_publishable}")
+        return record
+        
+    except Exception as e:
+        log.error(f"Failed to analyze campaign {campaign_name} ({campaign_id}): {e}")
+        return {
+            "id": campaign_id,
+            "ai_publishable_response_json": None,
+            "ai_publishable": None,
+            "ai_publishable_slug": None,
+            "ai_publishable_content_markdown": None,
+            "ai_publishable_content_html": None,
+            "error": str(e)
+        }
 
 
 def _html_to_markdown(html: str) -> str:
@@ -858,6 +977,125 @@ def loops_campaigns_needing_metrics_fetch(
 
 
 @asset(
+    compute_kind="sql",
+    group_name="loops_campaign_and_metrics_export",
+    description="Queries warehouse for sent campaigns that need AI publishable content analysis.",
+    deps=["loops_campaign_contents_to_warehouse"]  # Ensure campaign contents are fetched and stored first
+)
+def loops_campaigns_needing_publishable_content_analysis(
+    context: AssetExecutionContext
+) -> pl.DataFrame:
+    """
+    Queries warehouse for sent campaigns that need AI publishable content analysis.
+    Only processes sent campaigns that have email_html but haven't been AI-processed yet.
+    """
+    log = context.log
+    import psycopg2
+    
+    conn_string = os.getenv("WAREHOUSE_COOLIFY_URL")
+    if not conn_string:
+        raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
+    
+    try:
+        with psycopg2.connect(conn_string) as conn:
+            with conn.cursor() as cursor:
+                # Ensure ai_publishable_processed_at column exists
+                cursor.execute("""
+                    DO $$ 
+                    BEGIN 
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_schema = 'loops' 
+                            AND table_name = 'campaigns' 
+                            AND column_name = 'ai_publishable_processed_at'
+                        ) THEN 
+                            ALTER TABLE loops.campaigns 
+                            ADD COLUMN ai_publishable_processed_at TIMESTAMP WITH TIME ZONE;
+                        END IF;
+                    END $$;
+                """)
+                conn.commit()
+                log.info("Ensured ai_publishable_processed_at column exists")
+            
+            # Build query for campaigns needing AI analysis
+            query = """
+                SELECT id, name, emoji, subject, email_html, sent_at
+                FROM loops.campaigns
+                WHERE 
+                    status ILIKE 'sent'
+                    AND email_html IS NOT NULL
+                    AND email_html != ''
+                    AND ai_publishable_processed_at IS NULL
+                ORDER BY sent_at DESC
+            """
+            
+            if DEBUG_AI_ANALYSIS_LIMIT > 0:
+                query += f"\n                LIMIT {DEBUG_AI_ANALYSIS_LIMIT}"
+                log.info(f"Debug mode: Limiting AI analysis campaigns to {DEBUG_AI_ANALYSIS_LIMIT}")
+            else:
+                log.info("No limit on campaigns (processing all that need AI analysis)")
+            
+            df = pl.read_database(query, connection=conn)
+        
+        # Debug: Check what campaigns exist in the database
+        debug_query = """
+            SELECT 
+                COUNT(*) as total_campaigns,
+                COUNT(CASE WHEN status ILIKE 'sent' THEN 1 END) as sent_campaigns,
+                COUNT(CASE WHEN email_html IS NOT NULL AND email_html != '' THEN 1 END) as campaigns_with_html,
+                COUNT(CASE WHEN status ILIKE 'sent' AND email_html IS NOT NULL AND email_html != '' THEN 1 END) as sent_with_html,
+                COUNT(CASE WHEN status ILIKE 'sent' AND email_html IS NOT NULL AND email_html != '' AND ai_publishable_processed_at IS NULL THEN 1 END) as needing_analysis
+            FROM loops.campaigns
+        """
+        
+        debug_df = pl.read_database(debug_query, connection=conn)
+        debug_row = debug_df.to_dicts()[0]
+        
+        log.info(f"Database debug info: {debug_row}")
+        
+        # Debug: Show sample status values
+        sample_query = """
+            SELECT DISTINCT status, COUNT(*) as count
+            FROM loops.campaigns 
+            GROUP BY status 
+            ORDER BY count DESC
+        """
+        sample_df = pl.read_database(sample_query, connection=conn)
+        log.info(f"Status values in database: {sample_df.to_dicts()}")
+        
+        # Debug: Show sample campaigns with email_html
+        sample_html_query = """
+            SELECT id, name, status, 
+                   CASE WHEN email_html IS NOT NULL THEN 'has_html' ELSE 'no_html' END as html_status,
+                   CASE WHEN ai_publishable_processed_at IS NOT NULL THEN 'processed' ELSE 'not_processed' END as ai_status
+            FROM loops.campaigns 
+            WHERE email_html IS NOT NULL AND email_html != ''
+            ORDER BY sent_at DESC
+            LIMIT 5
+        """
+        sample_html_df = pl.read_database(sample_html_query, connection=conn)
+        log.info(f"Sample campaigns with HTML: {sample_html_df.to_dicts()}")
+        
+        log.info(f"Found {df.height} campaigns needing AI publishable content analysis")
+        
+        context.add_output_metadata(
+            metadata={
+                "num_campaigns_needing_ai_analysis": df.height,
+                "sample_campaigns": MetadataValue.md(
+                    "\n".join([f"- {row['name']} (`{row['id']}`) - {row['subject'][:50]}..." 
+                              if len(row['subject']) > 50 else f"- {row['name']} (`{row['id']}`) - {row['subject']}"
+                              for row in df.head(5).to_dicts()])
+                ) if df.height > 0 else MetadataValue.text("No campaigns need AI analysis")
+            }
+        )
+        
+        return df
+    except Exception as e:
+        log.error(f"Failed to query warehouse for campaigns needing AI analysis: {e}")
+        raise
+
+
+@asset(
     group_name="loops_campaign_and_metrics_export",
     required_resource_keys={"loops_session_token"},
     compute_kind="loops_trpc",
@@ -1258,6 +1496,437 @@ def loops_campaign_contents_to_warehouse(
         )
     except Exception as e:
         log.error(f"Failed to upsert enriched campaigns: {e}")
+        raise
+
+
+# --- AI Publishable Content Analysis Assets ---
+
+@asset(
+    group_name="loops_campaign_and_metrics_export",
+    required_resource_keys={"ai_client"},
+    compute_kind="ai_analysis",
+    description="Analyzes campaign emails with AI to determine if they're suitable for blog publication."
+)
+def loops_campaign_publishable_content(
+    context: AssetExecutionContext,
+    loops_campaigns_needing_publishable_content_analysis: pl.DataFrame
+) -> pl.DataFrame:
+    """
+    Analyzes campaign emails with AI to determine publishability and clean content.
+    Returns DataFrame with AI analysis results for each campaign.
+    """
+    log = context.log
+    ai_client = context.resources.ai_client
+    
+    if loops_campaigns_needing_publishable_content_analysis.height == 0:
+        log.info("No campaigns need AI analysis, returning empty DataFrame")
+        return pl.DataFrame({
+            "id": [],
+            "ai_publishable_response_json": [],
+            "ai_publishable": [],
+            "ai_publishable_slug": [],
+            "ai_publishable_content_markdown": [],
+            "ai_publishable_content_html": []
+        }, schema={
+            "id": pl.Utf8,
+            "ai_publishable_response_json": pl.Utf8,
+            "ai_publishable": pl.Boolean,
+            "ai_publishable_slug": pl.Utf8,
+            "ai_publishable_content_markdown": pl.Utf8,
+            "ai_publishable_content_html": pl.Utf8
+        })
+    
+    # AI prompt from user specification
+    ai_prompt = """
+You are an expert email-to-blog converter. You ingest ONE email (often raw HTML) and decide if it should be published as a blog post. If publishable, you return final, ready-to-publish Markdown **and** HTML that **preserves the input HTML’s styling and structure exactly** except for the minimal edits required to (a) match the Markdown’s content and (b) remove email-only/PII content.
+
+If a section is deleted in Markdown, delete the corresponding HTML **section**. Be **layout-smart**: preserve the surrounding rhythm and spacing; delete only what’s necessary and compact leftover spacers (see **Smart deletions & spacer compaction**). If the unsubscribe/footer area needs to be deleted, delete it and its local spacers, but keep the overall layout intact.
+
+## INPUT (JSON you will receive)
+
+```json
+{
+  "html": "<raw email html here>",
+  "fallback_subject": "Subject line if missing in HTML",
+  "received_at": "ISO8601 timestamp (optional)"
+}
+```
+
+## OUTPUT (return EXACTLY ONE JSON object; no prose before/after)
+
+```json
+{
+  "publish": true,
+  "reason": "Short justification (<= 25 words).",
+  "decision_overridden_due_to_pii": false,
+  "title": "Concise, faithful title",
+  "slug": "kebab-case-slug",
+  "excerpt": "1–2 sentences from the email, no new info.",
+  "tags": ["few","keywords","optional"],
+  "content_markdown": "FINAL READY-TO-PUBLISH MARKDOWN",
+  "content_html": "<!doctype html>... FINAL, EDITED HTML (IDENTICAL STYLING; CONTENT MATCHES MARKDOWN) ...",
+  "flags": {
+    "removed_email_references": true,
+    "personalization_replaced": true,
+    "pii_detected": false,
+    "pii_safe_to_redact": true,
+    "images_present": true,
+    "verified_consistency_of_spacing_in_returned_content_html": true
+  },
+  "pii_redactions": [
+    { "type": "email|phone|address|token|link_placeholder", "original_sample": "…", "action": "removed|redacted|generalized" }
+  ],
+  "transform_notes": [
+    "Bullet list of notable edits."
+  ]
+}
+```
+
+## ORDER OF OPERATIONS (STRICT)
+
+1. **Decide publishability** (see PUBLISH DECISION).
+2. **Produce `content_markdown`** first. All content decisions happen here.
+3. **Derive `content_html` by minimally editing the original HTML so its visible content exactly matches the Markdown**, while keeping styling and layout identical.
+
+---
+
+## PUBLISH DECISION
+
+* **Publish (`true`)** for substantive content: announcements, essays, stories, launches, event recaps, calls to action, product/game updates, general news.
+* **Do NOT publish (`false`)** if primarily: feedback request; apology/correction (“oops”); purely transactional/administrative (unsubscribe, receipts, password resets, billing, delivery confirmations); nonsensical without mail-merge fields; list-maintenance only (“You’re receiving this because…”, “Manage preferences…”).
+* If publication is blocked due to essential PII that cannot be generalized, set:
+
+  * `"publish": false`
+  * `"decision_overridden_due_to_pii": true`
+  * `"content_markdown": ""`
+  * `"content_html": ""`
+  * include concrete findings in `"pii_redactions"`.
+
+## PII RULE (strict)
+
+* Detect PII: emails, phone numbers, postal addresses, account/order numbers, private/tokenized links.
+* If PII is **not essential**: remove or generalize and proceed; record in `"pii_redactions"`; set `"pii_detected": true` and `"pii_safe_to_redact": true`.
+* If PII is **essential** (e.g., private address/phone required to attend; non-public contact): **do not publish** (as above).
+
+---
+
+## TRANSFORM: “VERBATIM BUT BLOG-SAFE”
+
+Keep the writer’s wording and **visual intent**.
+
+### Markdown rules
+
+* Minimal, clean, semantic headings; standard link/image syntax; **no inline CSS** in Markdown.
+* The Markdown’s content and ordering must match the kept HTML content (images/links preserved).
+* Replace personalization (e.g., “Hi {first_name}” → “Hi all”).
+* Remove email-only references and unsubscribe/footer content.
+
+### HTML rules (IDENTICAL STYLING; CONTENT PARITY WITH MARKDOWN)
+
+**Start from the original input HTML.** Everywhere not edited must remain **byte-for-byte the same** (same classes/IDs, inline styles, media queries, tables, attribute order, comments, whitespace, and DOM order).
+
+**Allowed edits ONLY:**
+
+1. **Text edits** needed to align wording with Markdown (no style/structure changes).
+2. **Link cleanup:** keep button/link appearance; strip tracking params (`utm_*`, `mc_*`, `gclid`, `fbclid`, per-recipient tokens like `?e=…`, `token=…`). If stripping breaks the URL, replace with a safe public base URL or remove per PII rules.
+3. **Image handling:** keep meaningful images and their exact attributes; remove 1×1 pixels/invisible spacers; update `alt` only to remove PII/placeholders.
+4. **Email-only content removal:** remove blocks like “You’re receiving this email because…”, “Manage/Update preferences”, “Unsubscribe”, “View in browser”, ESP footers, CAN-SPAM address blocks, tracking pixels.
+5. **Personalization → blog-appropriate:** “Hi {first_name}” / “Hello {{ first_name }}” → “Hi all” (or drop if fluff), editing only text nodes.
+6. **Scripts:** remove `<script>` tags. **Keep `<link>`/`<style>` (including Google Fonts) unchanged** unless inside a fully deleted subtree.
+
+---
+
+## SMART DELETIONS & SPACER COMPACTION (to avoid broken flow)
+
+**Goal:** Remove unwanted content **without leaving holes** or breaking rhythm—especially around removed list-maintenance lines near the top.
+
+### A) Two-pass keep map
+
+* **Pass 1 (KEEP):** Map Markdown blocks to HTML by matching normalized visible text. Mark nodes containing kept text as **KEEP**.
+* **Pass 2 (CANDIDATE):** Nodes not in KEEP that match email-only/PII patterns become **CANDIDATE** for deletion.
+
+### B) Smallest-ancestor deletion with stoplist
+
+Delete the **smallest enclosing ancestor** whose descendants are all CANDIDATE or **pure spacers** (see C) and which is not one of the **stoplist** ancestors:
+
+* Column container (e.g., `.mj-column-per-*`, `td.column-container`, `.styled-primary-column`, or equivalent).
+* The immediate `<table role="presentation">` that also contains other KEEP siblings.
+* `<body>`, `<html>`, or global wrappers.
+
+### C) Spacer detection (conservative)
+
+A node is a **spacer** *only if*:
+
+* Rendered text is empty/whitespace/`&nbsp;`, **and**
+* It contains no meaningful images (≤2×2 px or `display:none` images are non-meaningful), **and**
+* It’s clearly for padding/spacing (empty `<tr>`, `<td>`, `<div>`, single empty `<span>`, or a table that becomes empty after deletions).
+
+### D) **Adjacent spacer collapse (deterministic)**
+
+After any deletion or text edit, for each container (e.g., the primary column/table body):
+
+* Find **runs of consecutive spacers** between two KEEP blocks; **reduce the run to exactly one spacer**.
+* **Preference when choosing which spacer to keep (pick the first that applies):**
+
+  1. Keep the spacer **outside** the deleted subtree.
+  2. Keep the spacer with **greater explicit vertical padding** (inline `padding-top/bottom` or CSS height).
+  3. Otherwise keep the **later** spacer in document order.
+* If a spacer is both **leading** (at the start of the column) or **trailing** (at the end), keep **at most one** there.
+
+### E) **Spacer content sanitization (no visual change)**
+
+To avoid extra blank lines caused by spacer text nodes:
+
+* If a preserved spacer’s container (`td`/`div`) already provides vertical padding (inline style with `padding-top` or `padding-bottom` ≥ 8px), **remove inner `&nbsp;`/whitespace** from that spacer (leave the element and its padding intact).
+* Do **not** alter styles, classes, or structure; only clear the inner text for that spacer container.
+
+### F) Shared-separator preservation
+
+If a spacer sits **between two KEEP blocks** that originally had a single separator, ensure **exactly one** remains after edits (neither zero nor two).
+
+### G) Valid table cleanup (surgical)
+
+* Remove any now-empty `<tr>`; if a `<table>` becomes empty, remove it.
+* Keep MSO conditionals balanced; if their contents were fully removed, delete the empty conditional pair.
+
+### H) Guardrails (don’t over-delete)
+
+* Never delete the greeting/opening line or the first two substantive paragraphs **unless** Markdown removed them.
+* Never delete a container that also holds any KEEP node.
+* Prefer editing link/text over removing the enclosing block if the block is otherwise KEEP.
+
+---
+
+## TITLE, SLUG, EXCERPT, TAGS
+
+* **Title**: `<title>`, else first visible `<h1>`, else infer from opening lines (no added hype).
+* **Slug**: kebab-case, ASCII only, collapse multiple hyphens, ≤ 80 chars.
+* **Excerpt**: 1–2 sentences from the body, no new info/CTAs.
+* **Tags**: 3–6 concise keywords (optional).
+
+---
+
+## VALIDATION (self-check before returning)
+
+* Return **ONE** JSON object only; no extra text.
+* If `"publish": false` → `"content_markdown"` and `"content_html"` are empty strings.
+* All URLs valid; tracking params removed; no stray encoded quotes.
+* Flags reflect reality (`images_present` true only if ≥1 meaningful image remains).
+* No duplicate keys/objects.
+* **Table integrity:** no empty `<tr>/<td>` shells; no empty wrapper tables; conditional comments balanced.
+* **Flow continuity:** no obvious blank holes where email-only sections were; between any two KEEP blocks there is **at most one** spacer.
+* **HTML fidelity:** aside from the explicitly allowed edits and smart, minimal deletions/compaction above, the HTML is identical to the input (same styling, classes, IDs, structure, attribute order, comments, and whitespace).
+
+**Proceed with the above. Output exactly and only the final JSON object.**
+"""
+    
+    # Apply debug limit if set
+    campaigns_to_process = loops_campaigns_needing_publishable_content_analysis
+    if DEBUG_AI_ANALYSIS_LIMIT > 0:
+        campaigns_to_process = campaigns_to_process.head(DEBUG_AI_ANALYSIS_LIMIT)
+        log.info(f"Debug mode: Processing only first {DEBUG_AI_ANALYSIS_LIMIT} campaigns")
+    
+    # Convert to list of dicts for processing
+    campaign_list = campaigns_to_process.to_dicts()
+    total_campaigns = len(campaign_list)
+    
+    log.info(f"Starting batch processing of {total_campaigns} campaigns in batches of {AI_BATCH_SIZE}")
+    
+    async def process_batches():
+        records = []
+        success_count = 0
+        error_count = 0
+        
+        # Process campaigns in batches
+        for i in range(0, total_campaigns, AI_BATCH_SIZE):
+            batch = campaign_list[i:i + AI_BATCH_SIZE]
+            batch_num = (i // AI_BATCH_SIZE) + 1
+            total_batches = (total_campaigns + AI_BATCH_SIZE - 1) // AI_BATCH_SIZE
+            
+            log.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} campaigns)")
+            
+            # Create async tasks for this batch
+            tasks = [
+                _process_campaign_with_ai(campaign_data, ai_client, ai_prompt, log)
+                for campaign_data in batch
+            ]
+            
+            # Process batch in parallel using asyncio.gather
+            try:
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Process results
+                for result in batch_results:
+                    if isinstance(result, Exception):
+                        error_count += 1
+                        log.error(f"Batch processing error: {result}")
+                    elif result.get("error"):
+                        error_count += 1
+                    else:
+                        records.append(result)
+                        success_count += 1
+                
+                log.info(f"Batch {batch_num} completed. Success: {success_count}, Errors: {error_count}")
+                    
+            except Exception as e:
+                log.error(f"Batch {batch_num} failed: {e}")
+                error_count += len(batch)
+        
+        log.info(f"AI analysis completed. Success: {success_count}, Errors: {error_count}")
+        return records, success_count, error_count
+    
+    # Run the async batch processing
+    records, success_count, error_count = asyncio.run(process_batches())
+    
+    if not records:
+        log.warning("No campaigns were successfully analyzed")
+        return pl.DataFrame({
+            "id": [],
+            "ai_publishable_response_json": [],
+            "ai_publishable": [],
+            "ai_publishable_slug": [],
+            "ai_publishable_content_markdown": [],
+            "ai_publishable_content_html": []
+        }, schema={
+            "id": pl.Utf8,
+            "ai_publishable_response_json": pl.Utf8,
+            "ai_publishable": pl.Boolean,
+            "ai_publishable_slug": pl.Utf8,
+            "ai_publishable_content_markdown": pl.Utf8,
+            "ai_publishable_content_html": pl.Utf8
+        })
+    
+    df = pl.DataFrame(records)
+    
+    context.add_output_metadata(
+        metadata={
+            "num_campaigns_analyzed": success_count,
+            "num_errors": error_count,
+            "sample_results": MetadataValue.md(
+                "\n".join([f"- {row['id']}: Publishable={row['ai_publishable']}" 
+                          for row in df.head(5).to_dicts()])
+            )
+        }
+    )
+    
+    return df
+
+
+@asset(
+    compute_kind="sql",
+    group_name="loops_campaign_and_metrics_export",
+    description="Updates loops.campaigns table with AI publishable content analysis results."
+)
+def loops_campaign_publishable_content_to_warehouse(
+    context: AssetExecutionContext,
+    loops_campaign_publishable_content: pl.DataFrame
+) -> Output[None]:
+    """
+    Upserts AI analysis results to loops.campaigns table.
+    Updates AI fields and sets ai_publishable_processed_at = NOW().
+    """
+    log = context.log
+    import psycopg2
+    from psycopg2.extras import execute_values
+    
+    if loops_campaign_publishable_content.height == 0:
+        log.info("No AI analysis results to write to warehouse")
+        return Output(
+            value=None,
+            metadata={
+                "num_records": 0,
+                "note": "No campaigns were analyzed"
+            }
+        )
+    
+    conn_string = os.getenv("WAREHOUSE_COOLIFY_URL")
+    if not conn_string:
+        raise ValueError("Environment variable WAREHOUSE_COOLIFY_URL is not set")
+    
+    processing_timestamp = datetime.now()
+    log.info(f"Upserting {loops_campaign_publishable_content.height} AI analysis results to loops.campaigns table")
+    
+    try:
+        with psycopg2.connect(conn_string) as conn:
+            with conn.cursor() as cursor:
+                # Ensure all AI columns exist
+                ai_columns = [
+                    ("ai_publishable_response_json", "JSONB"),
+                    ("ai_publishable", "BOOLEAN"),
+                    ("ai_publishable_slug", "TEXT"),
+                    ("ai_publishable_content_markdown", "TEXT"),
+                    ("ai_publishable_content_html", "TEXT"),
+                    ("ai_publishable_processed_at", "TIMESTAMP WITH TIME ZONE"),
+                ]
+                
+                for col_name, col_type in ai_columns:
+                    cursor.execute(f"""
+                        DO $$ 
+                        BEGIN 
+                            IF NOT EXISTS (
+                                SELECT 1 FROM information_schema.columns 
+                                WHERE table_schema = 'loops' 
+                                AND table_name = 'campaigns' 
+                                AND column_name = '{col_name}'
+                            ) THEN 
+                                ALTER TABLE loops.campaigns 
+                                ADD COLUMN {col_name} {col_type};
+                            END IF;
+                        END $$;
+                    """)
+                
+                conn.commit()
+                log.info("Ensured all AI columns exist")
+                
+                # Prepare data for upsert
+                records = [
+                    (
+                        row["id"],
+                        row["ai_publishable_response_json"],
+                        row["ai_publishable"],
+                        row["ai_publishable_slug"],
+                        row["ai_publishable_content_markdown"],
+                        row["ai_publishable_content_html"],
+                        processing_timestamp
+                    )
+                    for row in loops_campaign_publishable_content.iter_rows(named=True)
+                ]
+                
+                # Upsert - update all AI fields
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO loops.campaigns (
+                        id, ai_publishable_response_json, ai_publishable,
+                        ai_publishable_slug, ai_publishable_content_markdown, ai_publishable_content_html,
+                        ai_publishable_processed_at
+                    )
+                    VALUES %s
+                    ON CONFLICT (id) DO UPDATE SET
+                        ai_publishable_response_json = EXCLUDED.ai_publishable_response_json,
+                        ai_publishable = EXCLUDED.ai_publishable,
+                        ai_publishable_slug = EXCLUDED.ai_publishable_slug,
+                        ai_publishable_content_markdown = EXCLUDED.ai_publishable_content_markdown,
+                        ai_publishable_content_html = EXCLUDED.ai_publishable_content_html,
+                        ai_publishable_processed_at = EXCLUDED.ai_publishable_processed_at
+                    """,
+                    records,
+                    page_size=100
+                )
+                
+                conn.commit()
+                log.info(f"Successfully upserted {len(records)} AI analysis results")
+        
+        return Output(
+            value=None,
+            metadata={
+                "num_records": loops_campaign_publishable_content.height,
+                "processing_timestamp": MetadataValue.text(str(processing_timestamp)),
+                "operation": "upsert (AI analysis fields)"
+            }
+        )
+    except Exception as e:
+        log.error(f"Failed to upsert AI analysis results: {e}")
         raise
 
 
@@ -1843,6 +2512,9 @@ defs = Definitions(
         loops_campaigns_needing_metrics_fetch,
         loops_campaign_email_contents,
         loops_campaign_contents_to_warehouse,
+        loops_campaigns_needing_publishable_content_analysis,
+        loops_campaign_publishable_content,
+        loops_campaign_publishable_content_to_warehouse,
         loops_campaign_recipient_metrics,
         loops_campaign_metrics_to_warehouse,
         loops_audience_mailing_lists_to_warehouse,
