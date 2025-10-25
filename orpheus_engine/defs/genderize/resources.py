@@ -55,7 +55,7 @@ class GenderizeResource(ConfigurableResource):
         if country_code:
             params["country_id"] = country_code
 
-        if country_code == "US":
+        if country_code == "US" or country_code == "CA":
             response = requests.get(f"https://nomen.sh/api/gender?name={urllib.parse.quote(name)}", timeout=15)
             if response.status_code == 200:
                 data = response.json()
