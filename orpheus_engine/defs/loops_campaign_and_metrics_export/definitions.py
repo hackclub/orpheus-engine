@@ -1878,15 +1878,33 @@ def loops_campaign_publishable_content_to_warehouse(
                 conn.commit()
                 log.info("Ensured all AI columns exist")
                 
+                # Helper function to remove NUL characters from strings
+                def sanitize_string(value):
+                    if value is None:
+                        return value
+                    if isinstance(value, str):
+                        return value.replace('\x00', '')
+                    return value
+                
+                # Helper function to sanitize JSON
+                def sanitize_json(value):
+                    if value is None:
+                        return value
+                    if isinstance(value, dict):
+                        return {k: sanitize_string(v) if isinstance(v, str) else v for k, v in value.items()}
+                    if isinstance(value, str):
+                        return sanitize_string(value)
+                    return value
+                
                 # Prepare data for upsert
                 records = [
                     (
                         row["id"],
-                        row["ai_publishable_response_json"],
+                        sanitize_json(row["ai_publishable_response_json"]),
                         row["ai_publishable"],
-                        row["ai_publishable_slug"],
-                        row["ai_publishable_content_markdown"],
-                        row["ai_publishable_content_html"],
+                        sanitize_string(row["ai_publishable_slug"]),
+                        sanitize_string(row["ai_publishable_content_markdown"]),
+                        sanitize_string(row["ai_publishable_content_html"]),
                         processing_timestamp
                     )
                     for row in loops_campaign_publishable_content.iter_rows(named=True)
