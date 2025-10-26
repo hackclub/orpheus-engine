@@ -1893,14 +1893,16 @@ def loops_campaign_publishable_content_to_warehouse(
                         )
                     return value
                 
-                # Helper function to sanitize JSON
+                # Helper function to sanitize JSON recursively
                 def sanitize_json(value):
                     if value is None:
                         return value
-                    if isinstance(value, dict):
-                        return {k: sanitize_string(v) if isinstance(v, str) else v for k, v in value.items()}
                     if isinstance(value, str):
                         return sanitize_string(value)
+                    if isinstance(value, dict):
+                        return {sanitize_json(k): sanitize_json(v) for k, v in value.items()}
+                    if isinstance(value, list):
+                        return [sanitize_json(item) for item in value]
                     return value
                 
                 # Prepare data for upsert
