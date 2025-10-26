@@ -8,6 +8,7 @@ import os
 import re
 import dlt
 import asyncio
+import unicodedata
 from dlt.destinations import postgres
 from datetime import datetime
 from dagster import asset, AssetExecutionContext, Output, MetadataValue
@@ -1878,12 +1879,18 @@ def loops_campaign_publishable_content_to_warehouse(
                 conn.commit()
                 log.info("Ensured all AI columns exist")
                 
-                # Helper function to remove NUL characters from strings
+                # Helper function to remove control characters from strings
                 def sanitize_string(value):
                     if value is None:
                         return value
                     if isinstance(value, str):
-                        return value.replace('\x00', '')
+                        # Remove control characters (Cc) and format characters (Cf) which can cause database issues
+                        # Cc = Control (NULL, LF, etc.)
+                        # Cf = Format (zero-width spaces, etc.)
+                        return ''.join(
+                            char for char in value 
+                            if unicodedata.category(char) not in ('Cc', 'Cf')
+                        )
                     return value
                 
                 # Helper function to sanitize JSON
