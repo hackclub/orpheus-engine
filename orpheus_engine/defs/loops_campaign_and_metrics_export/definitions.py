@@ -67,7 +67,7 @@ DEBUG_ENRICHMENT_LIMIT = -1
 
 # Debug limit for AI publishable content analysis
 # Set to -1 for no limit, or a positive integer to limit the number of campaigns processed
-DEBUG_AI_ANALYSIS_LIMIT = 10
+DEBUG_AI_ANALYSIS_LIMIT = 40
 
 # Batch processing configuration for AI requests
 AI_BATCH_SIZE = 20
