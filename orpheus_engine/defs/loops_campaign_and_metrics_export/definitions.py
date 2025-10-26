@@ -1893,22 +1893,58 @@ def loops_campaign_publishable_content_to_warehouse(
                         )
                     return value
                 
-                # Helper function to sanitize JSON recursively
+                # Helper function to sanitize JSON structures (dicts/lists)
+                def sanitize_json_structure(obj):
+                    if isinstance(obj, str):
+                        return sanitize_string(obj)
+                    if isinstance(obj, dict):
+                        return {sanitize_json_structure(k): sanitize_json_structure(v) for k, v in obj.items()}
+                    if isinstance(obj, list):
+                        return [sanitize_json_structure(item) for item in obj]
+                    return obj
+                
+                # Helper function to sanitize JSON string value
                 def sanitize_json(value):
                     if value is None:
                         return value
                     if isinstance(value, str):
-                        return sanitize_string(value)
-                    if isinstance(value, dict):
-                        return {sanitize_json(k): sanitize_json(v) for k, v in value.items()}
-                    if isinstance(value, list):
-                        return [sanitize_json(item) for item in value]
+                        # Check if it's a JSON string that needs parsing
+                        stripped = value.strip()
+                        if (stripped.startswith('{') and stripped.endswith('}')) or \
+                           (stripped.startswith('[') and stripped.endswith(']')):
+                            try:
+                                # Parse, sanitize recursively, then re-serialize
+                                parsed = json.loads(value)
+                                sanitized = sanitize_json_structure(parsed)
+                                return json.dumps(sanitized)
+                            except (json.JSONDecodeError, TypeError):
+                                # If it's not valid JSON, just sanitize the string
+                                return sanitize_string(value)
+                        else:
+                            # Not a JSON structure, just sanitize the string
+                            return sanitize_string(value)
                     return value
                 
-                # Prepare data for upsert
-                records = [
-                    (
-                        row["id"],
+                # Prepare data for upsert with debug logging
+                records = []
+                for idx, row in enumerate(loops_campaign_publishable_content.iter_rows(named=True)):
+                    campaign_id = row["id"]
+                    
+                    # Check for control characters in raw data
+                    for field_name in ["ai_publishable_response_json", "ai_publishable_slug", 
+                                      "ai_publishable_content_markdown", "ai_publishable_content_html"]:
+                        raw_value = row[field_name]
+                        if raw_value and isinstance(raw_value, str):
+                            control_chars = []
+                            for char in raw_value:
+                                cat = unicodedata.category(char)
+                                if cat in ('Cc', 'Cf'):
+                                    control_chars.append((ord(char), repr(char)))
+                            if control_chars:
+                                log.warning(f"[Record {idx+1}] {campaign_id}: Found control chars in {field_name}: {control_chars[:5]}")
+                    
+                    record = (
+                        campaign_id,
                         sanitize_json(row["ai_publishable_response_json"]),
                         row["ai_publishable"],
                         sanitize_string(row["ai_publishable_slug"]),
@@ -1916,33 +1952,67 @@ def loops_campaign_publishable_content_to_warehouse(
                         sanitize_string(row["ai_publishable_content_html"]),
                         processing_timestamp
                     )
-                    for row in loops_campaign_publishable_content.iter_rows(named=True)
-                ]
+                    
+                    # Debug: check sanitized values
+                    for i, value in enumerate(record[1:-1]):  # Skip id and timestamp
+                        if value and isinstance(value, str):
+                            for char in value:
+                                cat = unicodedata.category(char)
+                                if cat in ('Cc', 'Cf'):
+                                    field_names = ["ai_publishable_response_json", "ai_publishable", 
+                                                 "ai_publishable_slug", "ai_publishable_content_markdown", 
+                                                 "ai_publishable_content_html"]
+                                    log.error(f"[Record {idx+1}] {campaign_id}: SANITIZATION FAILED in {field_names[i]}: {ord(char)} (category: {cat})")
+                    
+                    records.append(record)
+                    log.info(f"[Record {idx+1}/{loops_campaign_publishable_content.height}] Prepared {campaign_id}")
+                
+                log.info(f"Prepared {len(records)} records for upsert")
                 
                 # Upsert - update all AI fields
-                execute_values(
-                    cursor,
-                    """
-                    INSERT INTO loops.campaigns (
-                        id, ai_publishable_response_json, ai_publishable,
-                        ai_publishable_slug, ai_publishable_content_markdown, ai_publishable_content_html,
-                        ai_publishable_processed_at
-                    )
-                    VALUES %s
-                    ON CONFLICT (id) DO UPDATE SET
-                        ai_publishable_response_json = EXCLUDED.ai_publishable_response_json,
-                        ai_publishable = EXCLUDED.ai_publishable,
-                        ai_publishable_slug = EXCLUDED.ai_publishable_slug,
-                        ai_publishable_content_markdown = EXCLUDED.ai_publishable_content_markdown,
-                        ai_publishable_content_html = EXCLUDED.ai_publishable_content_html,
-                        ai_publishable_processed_at = EXCLUDED.ai_publishable_processed_at
-                    """,
-                    records,
-                    page_size=100
-                )
+                # Insert in batches to help identify problematic records
+                batch_size = 100
+                inserted_count = 0
+                for batch_start in range(0, len(records), batch_size):
+                    batch_end = min(batch_start + batch_size, len(records))
+                    batch = records[batch_start:batch_end]
+                    
+                    try:
+                        execute_values(
+                            cursor,
+                            """
+                            INSERT INTO loops.campaigns (
+                                id, ai_publishable_response_json, ai_publishable,
+                                ai_publishable_slug, ai_publishable_content_markdown, ai_publishable_content_html,
+                                ai_publishable_processed_at
+                            )
+                            VALUES %s
+                            ON CONFLICT (id) DO UPDATE SET
+                                ai_publishable_response_json = EXCLUDED.ai_publishable_response_json,
+                                ai_publishable = EXCLUDED.ai_publishable,
+                                ai_publishable_slug = EXCLUDED.ai_publishable_slug,
+                                ai_publishable_content_markdown = EXCLUDED.ai_publishable_content_markdown,
+                                ai_publishable_content_html = EXCLUDED.ai_publishable_content_html,
+                                ai_publishable_processed_at = EXCLUDED.ai_publishable_processed_at
+                            """,
+                            batch,
+                            page_size=100
+                        )
+                        inserted_count += len(batch)
+                        log.info(f"Successfully inserted batch {batch_start}-{batch_end-1}")
+                    except Exception as e:
+                        log.error(f"Failed to insert batch {batch_start}-{batch_end-1}: {e}")
+                        # Try to identify the problematic record in this batch
+                        for i, record in enumerate(batch):
+                            log.error(f"  Record {batch_start + i}: id={record[0]}, "
+                                    f"ai_publishable_response_json length={len(record[1]) if record[1] else 0}, "
+                                    f"ai_publishable={record[2]}, slug length={len(record[3]) if record[3] else 0}, "
+                                    f"markdown length={len(record[4]) if record[4] else 0}, "
+                                    f"html length={len(record[5]) if record[5] else 0}")
+                        raise
                 
                 conn.commit()
-                log.info(f"Successfully upserted {len(records)} AI analysis results")
+                log.info(f"Successfully upserted {inserted_count} AI analysis results")
         
         return Output(
             value=None,
