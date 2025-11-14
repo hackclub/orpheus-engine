@@ -1,136 +1,18 @@
-# orpheus_engine
+orpheus-engine is a Dagster project that calculates stats regularly for dashboards / reporting across Hack Club. Most nonprofits / organizations / companies don’t have the code for their data pipelines public. I’ve actually never seen anyone publicize it before besides Dagster’s sample project. All of Hack Club's data scripts are open source in this repo.
 
-This is a [Dagster](https://dagster.io/) project scaffolded with [`dagster project scaffold`](https://docs.dagster.io/guides/build/projects/creating-a-new-project).
+Some other tasks it does are:
 
-## Getting started
+- Calculates sign-up counts and HCB spend for YSWS programs
+- Downloads our email list and backs it up in Postgres
+- Syncs Airtables to Postgres for reporting
 
-First, install your Dagster code location as a Python package. By using the --editable flag, pip will install your Python package in ["editable mode"](https://pip.pypa.io/en/latest/topics/local-project-installs/#editable-installs) so that as you develop, local code changes will automatically apply.
+To illustrate, here’s what happens when you submit a project that gets approved for YSWS:
 
-```bash
-pip install -e ".[dev]"
-```
+- If we don’t already have a gender on file for you, we use the Genderize API to try and guess your gender using the name you provided. We use this to try and understand how many girls are shipping projects, since we don’t want to have to ask for gender across every form and care about helping more girls make projects. If you have self-reported gender before, we always default to your self reported gender (male / female / or nonbinary)
 
-Then, start the Dagster UI web server:
+- We geocode your address using the Google Maps API to convert it into a latitude and longitude. We use this for map visualizations and also to understand how many Hack Clubbers are participating from different regions (ex. USA vs. Europe).
 
-```bash
-dagster dev
-```
+- We use the GitHub API to get the current number of stars from your GitHub repo. If your repo has more than 5 GitHub stars, we then use the Bright Data API to try and find places your project has gone viral on the internet (ex. reddit / Hacker News / etc). We do this as one way of understanding quality of projects across YSWS programs. For example, if a YSWS program has 1,000 projects made for it and none went viral - that’s a red flag. Or, if a smaller YSWS program has a lot of projects that went viral, then something amazing happened and we need to understand what worked so we can do it more. This is new and an attempt to start measuring quality of projects instead of just quantity. I think it’d be cool if this could be shared with project authors too (ex. “your project just went viral!” or a place where you can see all the places your projects went viral)
 
-Open http://localhost:3000 with your browser to see the project.
+- We use archive.hackclub.com (https://github.com/hackclub/arker) to archive the public deployed page for your project and your git repo. Occasionally this is helpful for fraud detection (sometimes people ship a project, get approved, them immediately private their repo because they did fraud and we can’t retroactively go and check to see what was in their repo once it’s gone). It’s also for generally a historic record - some of the coolest projects made years ago in Hack Club are sadly no longer online and it’s sad that we can no longer see them. This only pulls public information from your public git repo and your public deployed page. I’m planning to add Wayback Machine support for this too.
 
-You can start writing assets in `orpheus_engine/assets.py`. The assets are automatically loaded into the Dagster code location as you define them.
-
-## Development
-
-### Adding new Python dependencies
-
-You can specify new Python dependencies in `setup.py`.
-
-### Unit testing
-
-Tests are in the `orpheus_engine_tests` directory and you can run tests using `pytest`:
-
-```bash
-pytest orpheus_engine_tests
-```
-
-### Schedules and sensors
-
-If you want to enable Dagster [Schedules](https://docs.dagster.io/guides/automate/schedules/) or [Sensors](https://docs.dagster.io/guides/automate/sensors/) for your jobs, the [Dagster Daemon](https://docs.dagster.io/guides/deploy/execution/dagster-daemon) process must be running. This is done automatically when you run `dagster dev`.
-
-Once your Dagster Daemon is running, you can start turning on schedules and sensors for your jobs.
-
-## Deploy on Dagster+
-
-The easiest way to deploy your Dagster project is to use Dagster+.
-
-Check out the [Dagster+ documentation](https://docs.dagster.io/dagster-plus/) to learn more.
-
-## Docker Compose Deployment (Postgres + S3)
-
-This project includes a Docker Compose setup for deploying Dagster with PostgreSQL for metadata storage and AWS S3 for IO management. This is suitable for local testing and deployment platforms like Coolify.
-
-**Prerequisites:**
-
-*   Docker and Docker Compose installed.
-*   AWS Credentials (Access Key ID, Secret Access Key, Region) configured where your environment can access them.
-*   An S3 bucket created for Dagster's IO Manager.
-*   PostgreSQL connection details (User, Password, DB Name, Host, Port).
-    *   If deploying via Coolify, you can use Coolify's managed PostgreSQL service instead of the one defined in `docker-compose.yml`.
-
-**Configuration (Local Environment):**
-
-1.  **Create `.env` file:** In the project root directory (`orpheus-engine/`), create a file named `.env`. **Do not commit this file to Git.**
-2.  **Populate `.env`:** Add the following environment variables to the `.env` file, replacing the placeholder values with your actual credentials and settings:
-
-    ```env
-    # --- Dagster & Postgres --- 
-    # Use 'orpheus_engine_postgres' as host if using the compose service
-    # If using external/Coolify Postgres, use its connection details
-    DAGSTER_POSTGRES_USER=dagster
-    DAGSTER_POSTGRES_PASSWORD=dagster
-    DAGSTER_POSTGRES_DB=dagster
-    POSTGRES_HOST=orpheus_engine_postgres
-    POSTGRES_PORT=5432
-    
-    # Optional: Port mapping for Dagster Webserver on your host machine
-    DAGSTER_PORT=3000
-
-    # --- AWS --- 
-    AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY
-    AWS_REGION=your-aws-region # e.g., us-east-1
-    DAGSTER_S3_BUCKET=your-dagster-io-manager-bucket-name # Bucket for IO Manager
-
-    # --- Application Secrets --- 
-    LOOPS_API_KEY=YOUR_LOOPS_API_KEY
-    LOOPS_SESSION_TOKEN=YOUR_LOOPS_SESSION_TOKEN # If used
-    GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
-    GENDERIZE_API_KEY=YOUR_GENDERIZE_API_KEY # Optional
-    AIRTABLE_PERSONAL_ACCESS_TOKEN=YOUR_AIRTABLE_TOKEN
-    OPENAI_API_KEY=YOUR_OPENAI_KEY # Or other LiteLLM keys
-    WAREHOUSE_COOLIFY_URL=YOUR_DLT_POSTGRES_URL # e.g., postgresql://user:pass@host:port/db
-
-    # --- Dagster Environment --- 
-    # Set to 'development' for local testing (enables caches, etc.) 
-    # Set to 'production' for deployed environments
-    DAGSTER_ENV=development 
-    ```
-
-**Running Locally:**
-
-1.  Ensure `docker-compose.yml` is in the project root directory (`orpheus-engine/`).
-2.  Ensure your `.env` file is populated in the project root.
-3.  From the project root directory, build the Docker images:
-    ```bash
-    docker compose --env-file .env build
-    ```
-4.  Start the services in detached mode:
-    ```bash
-    docker compose --env-file .env up -d
-    ```
-5.  Access the Dagster UI in your browser:
-    `http://localhost:3000` (or the port set by `DAGSTER_PORT` in your `.env` file).
-
-**Stopping Services:**
-
-```bash
-docker compose --env-file .env down
-```
-
-**Coolify Deployment:**
-
-1.  Push your code (ensure `docker-compose.yml` is in the root) to your Git repository.
-2.  In Coolify, create a new Application sourced from your Git repository.
-3.  Select "Docker Compose" as the build pack.
-4.  Set the "Docker Compose Location" to `docker-compose.yml` (just the filename, as it's in the root).
-5.  **Database:**
-    *   **Option A (Recommended for Coolify): Use Coolify Managed Postgres.**
-        *   Ensure the `orpheus_engine_postgres` service and `postgres_data` volume are removed from your `docker-compose.yml` (as done in the latest commits).
-        *   Add a PostgreSQL service resource within your Coolify project.
-    *   **Option B: Use Compose Managed Postgres.**
-        *   Keep the `orpheus_engine_postgres` service and `postgres_data` volume definitions in `docker-compose.yml`.
-6.  **Environment Variables:** Configure *all* the necessary environment variables (as listed in the `.env` section above) within the Coolify application's "Environment Variables" settings. Use Coolify secrets for sensitive values.
-    *   **If using Coolify Managed Postgres (Option A):** You *must* set `POSTGRES_HOST`, `DAGSTER_POSTGRES_USER`, `DAGSTER_POSTGRES_PASSWORD`, `DAGSTER_POSTGRES_DB`, and `POSTGRES_PORT` in Coolify to match the connection details provided by the Coolify managed database service.
-    *   **Crucially, set `DAGSTER_ENV=production` for deployed environments.**
-7.  Deploy the application via Coolify.
