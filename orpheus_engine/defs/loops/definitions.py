@@ -147,7 +147,7 @@ def loops_raw_audience(context) -> pl.DataFrame:
     # URL encode the JSON payload for the 'input' query parameter
     status_params = {'input': json.dumps({'json': {'id': job_id}})}
     export_status = None
-    max_polls = 100 # Limit polling (100 polls * 3 seconds = 5 minutes)
+    max_polls = 300 # Limit polling (300 polls * 3 seconds = 15 minutes)
     poll_count = 0
     poll_interval_seconds = 3
 
