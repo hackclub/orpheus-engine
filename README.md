@@ -1,4 +1,6 @@
-orpheus-engine is a Dagster project that calculates stats regularly for dashboards / reporting across Hack Club. Most nonprofits / organizations / companies don’t have the code for their data pipelines public. I’ve actually never seen anyone publicize it before besides Dagster’s sample project. All of Hack Club's data scripts are open source in this repo.
+This is a set of Python scripts that generates dashboards and reporting across Hack Club. 
+
+Most nonprofits / organizations / companies don’t have the code for their data pipelines public. I’ve actually never seen anyone publicize it before besides Dagster’s sample project. All of Hack Club's data scripts are open source in this repo.
 
 Some other tasks it does are:
 
