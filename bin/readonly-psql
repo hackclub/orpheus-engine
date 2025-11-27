@@ -1,0 +1,48 @@
+#!/bin/bash
+# 
+# Run a readonly SQL query against the data warehouse.
+#
+# Usage:
+#   ./bin/readonly-psql 'SELECT * FROM some_table LIMIT 10;'
+#
+# Getting Started:
+# 1. List schemas: SELECT schema_name FROM information_schema.schemata;
+# 2. Explore a schema: SELECT util_schema_markdown('schema_name');
+#
+# Quick Reference:
+# • Key schemas: loops (user truth), public_unified_analytics (events), 
+#   airtable_unified_ysws_projects_db (projects/programs), hackatime (coding activity)
+# • Use public_unified_analytics.events for fast queries (~0.3s vs ~8s unpivoting loops)
+# • Airtable joins use _dlt_parent_id → _dlt_id pattern; always join on
+#   LOWER(email) when using emails as primary keys
+# • events table only has subscribed=true users; query loops.audience for unsubscribed
+# • Filter hackatime noise: WHERE event NOT LIKE 'hackatime%' for milestone queries
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 'SQL statement'" >&2
+    exit 1
+fi
+
+# Load .env file
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+if [ -z "${WAREHOUSE_COOLIFY_URL:-}" ]; then
+    echo "Error: WAREHOUSE_COOLIFY_URL is not set in .env" >&2
+    exit 1
+fi
+
+# Add options=-c default_transaction_read_only=on to the URL params
+if [[ "$WAREHOUSE_COOLIFY_URL" == *"?"* ]]; then
+    # URL already has query params, append with &
+    URL="${WAREHOUSE_COOLIFY_URL}&options=-c%20default_transaction_read_only%3Don"
+else
+    # URL has no query params, add with ?
+    URL="${WAREHOUSE_COOLIFY_URL}?options=-c%20default_transaction_read_only%3Don"
+fi
+
+psql "$URL" -c "$1"
+
+
