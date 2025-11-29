@@ -14,12 +14,16 @@ Environment:
   COOLIFY_API_URL    - Base URL of your Coolify instance (e.g., https://coolify.example.com)
 """
 
+import argparse
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # Load .env file
@@ -49,37 +53,52 @@ API_URL = f"{COOLIFY_API_URL}/api/v1"
 
 
 def api_get(endpoint: str, retries: int = 3) -> dict | list | None:
-    """Make API GET request using curl (more reliable than urllib)."""
+    """Make API GET request using urllib."""
     url = f"{API_URL}{endpoint}"
     
     for attempt in range(retries):
-        result = subprocess.run(
-            ["curl", "-s", "--max-time", "30", "-H", f"Authorization: Bearer {COOLIFY_API_KEY}", url],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            if attempt < retries - 1:
-                time.sleep(2)
-                continue
-            return None
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {COOLIFY_API_KEY}")
         
         try:
-            data = json.loads(result.stdout)
-            # Check for error response
-            if isinstance(data, dict) and "error" in data:
-                return None
-            return data
-        except json.JSONDecodeError:
-            # Likely rate limited (HTML response) - retry after delay
-            if "429" in result.stdout or "slow down" in result.stdout.lower():
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                # Check for error response
+                if isinstance(data, dict) and "error" in data:
+                    return None
+                return data
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                # Rate limited - retry with exponential backoff
                 if attempt < retries - 1:
-                    delay = 5 * (attempt + 1)  # Exponential backoff: 5s, 10s, 15s
+                    delay = 5 * (attempt + 1)
                     print(f"  Rate limited, waiting {delay}s...", file=sys.stderr)
                     time.sleep(delay)
                     continue
             return None
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+            if attempt < retries - 1:
+                time.sleep(2)
+                continue
+            return None
     
     return None
+
+
+def _fetch_project(uuid: str) -> tuple[str, dict | None]:
+    """Fetch a single project's details. Returns (uuid, data)."""
+    url = f"{API_URL}/projects/{uuid}"
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {COOLIFY_API_KEY}")
+    
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if isinstance(data, dict) and "name" in data:
+                return (uuid, data)
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TimeoutError):
+        pass
+    return (uuid, None)
 
 
 def fetch_project_details_for_env_ids(project_uuids: list[str], needed_env_ids: set[int]) -> dict[int, tuple[str, str]]:
@@ -92,48 +111,32 @@ def fetch_project_details_for_env_ids(project_uuids: list[str], needed_env_ids: 
     total = len(project_uuids)
     fetched = 0
     
-    # Process in larger batches (20 concurrent) with shorter delays
-    batch_size = 20
-    for batch_start in range(0, total, batch_size):
-        if not remaining:
-            break  # Found all needed environments!
+    # Use ThreadPoolExecutor for efficient concurrent requests
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        # Submit all tasks
+        futures = {executor.submit(_fetch_project, uuid): uuid for uuid in project_uuids}
+        
+        for future in as_completed(futures):
+            if not remaining:
+                # Cancel remaining futures if we've found all environments
+                for f in futures:
+                    f.cancel()
+                break
             
-        batch_end = min(batch_start + batch_size, total)
-        batch = project_uuids[batch_start:batch_end]
-        
-        # Start concurrent curl processes
-        processes = {}
-        for uuid in batch:
-            url = f"{API_URL}/projects/{uuid}"
-            proc = subprocess.Popen(
-                ["curl", "-s", "--max-time", "10", "-H", f"Authorization: Bearer {COOLIFY_API_KEY}", url],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            processes[uuid] = proc
-        
-        # Collect results
-        for uuid, proc in processes.items():
-            stdout, _ = proc.communicate()
             fetched += 1
-            try:
-                data = json.loads(stdout)
-                if isinstance(data, dict) and "name" in data:
-                    project_name = data.get("name", "Unknown")
-                    for env in data.get("environments", []):
-                        env_id = env.get("id")
-                        env_name = env.get("name", "Unknown")
-                        if env_id:
-                            env_map[env_id] = (project_name, env_name)
-                            remaining.discard(env_id)
-            except json.JSONDecodeError:
-                pass
-        
-        found = len(needed_env_ids) - len(remaining)
-        print(f"\r  Progress: {fetched}/{total} projects, {found}/{len(needed_env_ids)} envs mapped", end="", file=sys.stderr)
-        
-        # Short delay between batches to avoid rate limits
-        if remaining and batch_end < total:
-            time.sleep(0.5)
+            uuid, data = future.result()
+            
+            if data:
+                project_name = data.get("name", "Unknown")
+                for env in data.get("environments", []):
+                    env_id = env.get("id")
+                    env_name = env.get("name", "Unknown")
+                    if env_id:
+                        env_map[env_id] = (project_name, env_name)
+                        remaining.discard(env_id)
+            
+            found = len(needed_env_ids) - len(remaining)
+            print(f"\r  Progress: {fetched}/{total} projects, {found}/{len(needed_env_ids)} envs mapped", end="", file=sys.stderr)
     
     print(file=sys.stderr)
     return env_map
@@ -265,6 +268,24 @@ def find_database(search: str) -> dict | None:
     return None
 
 
+def require_postgres(db: dict) -> None:
+    """Validate that the database is PostgreSQL, exit with error if not."""
+    db_type = db.get("database_type", "")
+    if "postgres" not in db_type:
+        print(f"Error: Currently only PostgreSQL databases are supported.", file=sys.stderr)
+        print(f"       Database '{db.get('name')}' is type '{db_type}'.", file=sys.stderr)
+        sys.exit(1)
+
+
+def get_postgres_credentials(db: dict) -> tuple[str, str, str]:
+    """Extract PostgreSQL credentials from database config. Returns (user, password, dbname)."""
+    return (
+        db.get("postgres_user", "postgres"),
+        db.get("postgres_password", ""),
+        db.get("postgres_db", "postgres"),
+    )
+
+
 def run_query(db_identifier: str, sql: str):
     """Run a readonly SQL query on a database."""
     db = find_database(db_identifier)
@@ -272,9 +293,10 @@ def run_query(db_identifier: str, sql: str):
         print(f"Error: No database found matching '{db_identifier}'", file=sys.stderr)
         sys.exit(1)
     
+    require_postgres(db)
+    
     uuid = db["uuid"]
     name = db["name"]
-    db_type = db.get("database_type", "")
     
     # Get server info
     server = db.get("destination", {}).get("server", {})
@@ -289,14 +311,7 @@ def run_query(db_identifier: str, sql: str):
     print(f"Found database: {name} (uuid: {uuid})", file=sys.stderr)
     print(f"Server: {server_user}@{server_ip}", file=sys.stderr)
     
-    # Get credentials
-    if "postgres" in db_type:
-        db_user = db.get("postgres_user", "postgres")
-        db_pass = db.get("postgres_password", "")
-        db_name = db.get("postgres_db", "postgres")
-    else:
-        print(f"Error: Unsupported database type: {db_type}", file=sys.stderr)
-        sys.exit(1)
+    db_user, db_pass, db_name = get_postgres_credentials(db)
     
     # Validate SQL - block transaction control and session modification
     sql_upper = sql.upper()
@@ -308,13 +323,16 @@ def run_query(db_identifier: str, sql: str):
     print("", file=sys.stderr)
     
     # Run via SSH + docker exec
-    # Use SET SESSION CHARACTERISTICS to make ALL transactions read-only for this session
+    # Pass SQL via stdin to prevent command injection
+    docker_cmd = f"docker exec -i -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name}"
     ssh_cmd = [
         "ssh", "-p", str(server_port), f"{server_user}@{server_ip}",
-        f"docker exec -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name} -c 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;' -c \"{sql}\""
+        docker_cmd
     ]
     
-    result = subprocess.run(ssh_cmd, capture_output=False)
+    # Prepend read-only session setting to user SQL
+    safe_sql = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\n" + sql
+    result = subprocess.run(ssh_cmd, input=safe_sql, text=True)
     if result.returncode == 255:
         print("\nSSH connection failed. If this is a host key error, add the host to known_hosts:", file=sys.stderr)
         print(f"  ssh-keyscan -p {server_port} {server_ip} >> ~/.ssh/known_hosts", file=sys.stderr)
@@ -328,28 +346,32 @@ def list_schemas(db_identifier: str):
         print(f"Error: No database found matching '{db_identifier}'", file=sys.stderr)
         sys.exit(1)
     
+    require_postgres(db)
+    
     sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast') ORDER BY schema_name;"
     run_query_raw(db, sql)
 
 
 def run_query_raw(db: dict, sql: str):
-    """Run query and return just results."""
+    """Run query and return just results. Assumes PostgreSQL."""
     uuid = db["uuid"]
     server = db.get("destination", {}).get("server", {})
     server_ip = server.get("ip")
     server_user = server.get("user", "root")
     server_port = server.get("port", 22)
     
-    db_user = db.get("postgres_user", "postgres")
-    db_pass = db.get("postgres_password", "")
-    db_name = db.get("postgres_db", "postgres")
+    db_user, db_pass, db_name = get_postgres_credentials(db)
     
+    # Pass SQL via stdin to prevent command injection
+    docker_cmd = f"docker exec -i -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name} -t -A -q"
     ssh_cmd = [
         "ssh", "-p", str(server_port), f"{server_user}@{server_ip}",
-        f"docker exec -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name} -t -A -q -c 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;' -c \"{sql}\""
+        docker_cmd
     ]
     
-    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+    # Prepend read-only session setting to user SQL
+    safe_sql = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\n" + sql
+    result = subprocess.run(ssh_cmd, input=safe_sql, text=True, capture_output=True)
     if result.returncode == 255:
         print(f"SSH connection failed. If this is a host key error, run:", file=sys.stderr)
         print(f"  ssh-keyscan -p {server_port} {server_ip} >> ~/.ssh/known_hosts", file=sys.stderr)
@@ -367,6 +389,8 @@ def introspect_schema(db_identifier: str, schema_name: str, sample_count: int = 
         print(f"Error: No database found matching '{db_identifier}'", file=sys.stderr)
         sys.exit(1)
     
+    require_postgres(db)
+    
     uuid = db["uuid"]
     name = db["name"]
     server = db.get("destination", {}).get("server", {})
@@ -374,16 +398,19 @@ def introspect_schema(db_identifier: str, schema_name: str, sample_count: int = 
     server_user = server.get("user", "root")
     server_port = server.get("port", 22)
     
-    db_user = db.get("postgres_user", "postgres")
-    db_pass = db.get("postgres_password", "")
-    db_name_actual = db.get("postgres_db", "postgres")
+    db_user, db_pass, db_name_actual = get_postgres_credentials(db)
+    
+    # Validate schema_name to prevent SQL injection (only allow valid PostgreSQL identifiers)
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema_name):
+        print(f"Error: Invalid schema name '{schema_name}'", file=sys.stderr)
+        sys.exit(1)
     
     print(f"Introspecting schema '{schema_name}' in {name} (samples: {sample_count})...", file=sys.stderr)
     print(f"Database: {name}", file=sys.stderr)
     print(f"Server: {server_ip}", file=sys.stderr)
     print("", file=sys.stderr)
     
-    # Get tables with columns
+    # Get tables with columns - use parameterized query via psql variable
     sql = f"""
         SELECT t.table_name, string_agg(c.column_name, ',' ORDER BY c.ordinal_position)
         FROM information_schema.tables t
@@ -392,12 +419,15 @@ def introspect_schema(db_identifier: str, schema_name: str, sample_count: int = 
         GROUP BY t.table_name ORDER BY t.table_name;
     """
     
+    # Pass SQL via stdin to prevent command injection
+    docker_cmd = f"docker exec -i -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name_actual} -t -A -q"
     ssh_cmd = [
         "ssh", "-p", str(server_port), f"{server_user}@{server_ip}",
-        f"docker exec -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name_actual} -t -A -q -c 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;' -c \"{sql}\""
+        docker_cmd
     ]
     
-    result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+    safe_sql = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\n" + sql
+    result = subprocess.run(ssh_cmd, input=safe_sql, text=True, capture_output=True)
     if result.returncode == 255:
         print(f"SSH connection failed. If this is a host key error, run:", file=sys.stderr)
         print(f"  ssh-keyscan -p {server_port} {server_ip} >> ~/.ssh/known_hosts", file=sys.stderr)
@@ -418,13 +448,17 @@ def introspect_schema(db_identifier: str, schema_name: str, sample_count: int = 
         print(columns)
         
         # Use COPY ... TO STDOUT WITH CSV for proper escaping of commas, quotes, etc.
+        # table_name comes from database query result, but we still pass via stdin for safety
         sample_sql = f"COPY (SELECT * FROM {schema_name}.{table_name} LIMIT {sample_count}) TO STDOUT WITH CSV;"
+        
+        docker_cmd = f"docker exec -i -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name_actual} -q"
         ssh_cmd = [
             "ssh", "-p", str(server_port), f"{server_user}@{server_ip}",
-            f"docker exec -e PGPASSWORD='{db_pass}' {uuid} psql -U {db_user} -d {db_name_actual} -q -c 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;' -c \"{sample_sql}\""
+            docker_cmd
         ]
         
-        sample_result = subprocess.run(ssh_cmd, capture_output=True, text=True)
+        safe_sample_sql = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\n" + sample_sql
+        sample_result = subprocess.run(ssh_cmd, input=safe_sample_sql, text=True, capture_output=True)
         if sample_result.returncode == 0 and sample_result.stdout.strip():
             for line in sample_result.stdout.strip().split("\n"):
                 if line:
@@ -435,45 +469,73 @@ def introspect_schema(db_identifier: str, schema_name: str, sample_count: int = 
 
 
 def main():
-    args = sys.argv[1:]
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     
-    if len(args) == 0:
+    parser.add_argument(
+        'database', nargs='?',
+        help='Database UUID or name to operate on'
+    )
+    parser.add_argument(
+        'sql', nargs='?',
+        help='SQL query to run (readonly)'
+    )
+    parser.add_argument(
+        '--project', metavar='NAME',
+        help='Search for a project by name'
+    )
+    parser.add_argument(
+        '--schemas', action='store_true',
+        help='List all schemas in the database'
+    )
+    parser.add_argument(
+        '--schema', metavar='NAME',
+        help='Introspect a specific schema'
+    )
+    parser.add_argument(
+        '--samples', type=int, default=3,
+        help='Number of sample rows to show when introspecting (default: 3)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Mode: Search for project
+    if args.project:
+        search_project(args.project)
+        return
+    
+    # Mode: List all databases (no arguments)
+    if not args.database:
         list_databases()
-    elif len(args) == 1:
-        if args[0] in ("--help", "-h"):
-            print(__doc__)
-        else:
-            db = find_database(args[0])
-            if db:
-                print(f"Found: {db['name']} (uuid: {db['uuid']})")
-                print(f"\nExamples:")
-                print(f"  {sys.argv[0]} '{args[0]}' 'SELECT 1;'")
-                print(f"  {sys.argv[0]} '{args[0]}' --schemas")
-                print(f"  {sys.argv[0]} '{args[0]}' --schema public")
-            else:
-                print(f"No database found matching '{args[0]}'", file=sys.stderr)
-                sys.exit(1)
-    elif len(args) == 2:
-        if args[0] == "--project":
-            search_project(args[1])
-        elif args[1] == "--schemas":
-            list_schemas(args[0])
-        else:
-            run_query(args[0], args[1])
-    elif len(args) == 3:
-        if args[1] == "--schema":
-            introspect_schema(args[0], args[2])
-        else:
-            print(f"Unknown arguments: {args}", file=sys.stderr)
-            sys.exit(1)
-    elif len(args) == 4:
-        if args[1] == "--schema":
-            introspect_schema(args[0], args[2], int(args[3]))
-        else:
-            print(f"Unknown arguments: {args}", file=sys.stderr)
-            sys.exit(1)
+        return
+    
+    # Mode: List schemas in database
+    if args.schemas:
+        list_schemas(args.database)
+        return
+    
+    # Mode: Introspect a specific schema
+    if args.schema:
+        introspect_schema(args.database, args.schema, args.samples)
+        return
+    
+    # Mode: Run SQL query
+    if args.sql:
+        run_query(args.database, args.sql)
+        return
+    
+    # Mode: Show database info (database specified but no action)
+    db = find_database(args.database)
+    if db:
+        print(f"Found: {db['name']} (uuid: {db['uuid']})")
+        print(f"\nExamples:")
+        print(f"  {sys.argv[0]} '{args.database}' 'SELECT 1;'")
+        print(f"  {sys.argv[0]} '{args.database}' --schemas")
+        print(f"  {sys.argv[0]} '{args.database}' --schema public")
     else:
-        print(__doc__)
+        print(f"No database found matching '{args.database}'", file=sys.stderr)
         sys.exit(1)
 
 
