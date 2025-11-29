@@ -837,28 +837,28 @@ def loops_campaigns_needing_content_fetch(
             content_last_fetched_at IS NULL
             OR
             -- Email not sent yet: update every 6 hours
-            ((sent_at IS NULL OR status != 'sent') 
+            ((sent_at IS NULL OR status != 'Sent') 
              AND content_last_fetched_at < NOW() - INTERVAL '6 hours')
             OR
             -- Sent less than 1 week ago: update every 24 hours
-            (sent_at IS NOT NULL AND status = 'sent' 
+            (sent_at IS NOT NULL AND status = 'Sent' 
              AND sent_at >= NOW() - INTERVAL '1 week' 
              AND content_last_fetched_at < NOW() - INTERVAL '24 hours')
             OR
             -- Sent between 2 and 8 weeks ago: update every 7 days
-            (sent_at IS NOT NULL AND status = 'sent' 
+            (sent_at IS NOT NULL AND status = 'Sent' 
              AND sent_at < NOW() - INTERVAL '2 weeks' 
              AND sent_at >= NOW() - INTERVAL '8 weeks'
              AND content_last_fetched_at < NOW() - INTERVAL '7 days')
             OR
             -- Sent between 8 weeks and 1 year ago: update monthly (30 days)
-            (sent_at IS NOT NULL AND status = 'sent' 
+            (sent_at IS NOT NULL AND status = 'Sent' 
              AND sent_at < NOW() - INTERVAL '8 weeks'
              AND sent_at >= NOW() - INTERVAL '1 year'
              AND content_last_fetched_at < NOW() - INTERVAL '30 days')
             OR
             -- Sent more than 1 year ago: update every 90 days
-            (sent_at IS NOT NULL AND status = 'sent' 
+            (sent_at IS NOT NULL AND status = 'Sent' 
              AND sent_at < NOW() - INTERVAL '1 year'
              AND content_last_fetched_at < NOW() - INTERVAL '90 days')
         ORDER BY content_last_fetched_at NULLS FIRST
@@ -923,7 +923,7 @@ def loops_campaigns_needing_metrics_fetch(
         FROM loops.campaigns
         WHERE 
             -- Only process sent campaigns
-            sent_at IS NOT NULL AND status = 'sent'
+            sent_at IS NOT NULL AND status = 'Sent'
             AND (
                 -- Never enriched
                 metrics_last_fetched_at IS NULL
