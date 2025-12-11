@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Project search using GPT-5 with Brightdata MCP server for web and Reddit data.
+Project search using GPT-5.2 with Brightdata MCP server for web and Reddit data.
 
 Environment variables required:
 - OPENAI_API_KEY: Your OpenAI API key
@@ -407,7 +407,7 @@ def write_search_record_to_airtable(
             "Output JSON": output_json,
             "Full Output Log": full_output_log,
             "Prompt": prompt,
-            "Model": "gpt-5",
+            "Model": "gpt-5.2",
             "Non-Cached Input Tokens": token_usage.get("non_cached_tokens", 0),
             "Cached Input Tokens": token_usage.get("cached_tokens", 0),
             "Output Tokens": token_usage.get("output_tokens", 0),
@@ -554,7 +554,7 @@ if __name__ == "__main__":
         )
         return example.model_dump_json(indent=2)
     
-    print("🔍 Querying GPT-5 with Brightdata MCP server tools...")
+    print("🔍 Querying GPT-5.2 with Brightdata MCP server tools...")
     start_time = time.time()
     
     # Prepare authorization header outside of f-string to avoid nesting
@@ -689,7 +689,7 @@ EXAMPLE JSON FORMAT
 
     # API parameters (MCP server tools with structured output)
     base_params = {
-        "model": "gpt-5",
+        "model": "gpt-5.2",
         "input": [
             {"role": "developer", "content": prompt_content}
         ],
@@ -837,10 +837,10 @@ EXAMPLE JSON FORMAT
                     "total_tokens": input_tokens + output_tokens,
                 }
                 
-                # Calculate costs using GPT-5 pricing
-                non_cached_cost = non_cached_tokens * 1.25 / 1_000_000
-                cached_cost = cached_tokens * 0.125 / 1_000_000
-                output_cost = output_tokens * 10.0 / 1_000_000
+                # Calculate costs using GPT-5.2 pricing
+                non_cached_cost = non_cached_tokens * 1.75 / 1_000_000
+                cached_cost = cached_tokens * 0.175 / 1_000_000
+                output_cost = output_tokens * 14.0 / 1_000_000
                 total_cost = non_cached_cost + cached_cost + output_cost
                 print(f"💰 Estimated cost: ${total_cost:.4f}")
             else:
@@ -968,7 +968,7 @@ EXAMPLE JSON FORMAT
             
             # Continue the existing conversation to fix JSON
             fix_response = client.responses.create(
-                model="gpt-5",
+                model="gpt-5.2",
                 input=[
                     {"role": "user", "content": f"""
 The JSON output you provided failed to parse. Please fix the syntax errors and return valid JSON that matches this exact schema:
@@ -1007,7 +1007,7 @@ Please return ONLY the corrected JSON that validates against the schema above, w
             
             # Continue the existing conversation to fix data structure
             fix_response = client.responses.create(
-                model="gpt-5",
+                model="gpt-5.2",
                 input=[
                     {"role": "user", "content": f"""
 Your JSON output has the correct syntax but failed Pydantic validation. Please fix the data structure to match this exact schema:
