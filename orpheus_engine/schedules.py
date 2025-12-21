@@ -1,14 +1,14 @@
 import dagster as dg
 
-# 1. "All assets" job
+# 1. "All assets" job (excluding slack_member_analytics which will be ran manually)
 materialize_all_assets_job = dg.define_asset_job(
-    name="materialize_all_assets_job",                     # pick any name you like
-    selection="*",
+    name="materialize_all_assets_job",
+    selection=dg.AssetSelection.all() - dg.AssetSelection.assets("slack_member_analytics"),
 )
 
 # 2. Every 6 hours schedule (30 minutes past every 6 hours, NY time)
-hourly_materialize_schedule = dg.ScheduleDefinition(
-    name="hourly_materialize_schedule",
+materialize_all_assets_schedule = dg.ScheduleDefinition(
+    name="materialize_all_assets",
     job=materialize_all_assets_job,
     cron_schedule="30 */6 * * *",                           # minute hour day month weekday
     execution_timezone="America/New_York",                 # keeps logs in local time
@@ -51,5 +51,5 @@ unified_ysws_15min_schedule = dg.ScheduleDefinition(
 # 5. Wrap in a Definitions so Dagster can find it
 defs = dg.Definitions(
     jobs=[materialize_all_assets_job, materialize_unified_ysws_job],
-    schedules=[hourly_materialize_schedule, unified_ysws_15min_schedule],
+    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule],
 ) 

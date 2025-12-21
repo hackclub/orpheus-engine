@@ -169,3 +169,154 @@ class SlackAnalyticsResource(ConfigurableResource):
         """
         return self._make_analytics_request("public_channel", metadata_only=True)
 
+    def _get_team_ids_from_admin_users(self) -> List[str]:
+        """
+        Gets all unique team IDs by scanning workspaces from admin.users.list.
+        
+        Returns:
+            A list of unique team IDs.
+        """
+        url = f"{self.SLACK_API_BASE_URL}/admin.users.list"
+        headers = {"Authorization": f"Bearer {self.user_token}"}
+        
+        team_ids = set()
+        cursor = None
+        
+        while True:
+            params = {"limit": 100}
+            if cursor:
+                params["cursor"] = cursor
+            
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=60)
+                response.raise_for_status()
+                data = response.json()
+                
+                if not data.get("ok"):
+                    error_msg = data.get("error", "Unknown error")
+                    raise SlackAnalyticsApiError(f"Slack API error: {error_msg}")
+                
+                for user in data.get("users", []):
+                    for workspace in user.get("workspaces", []):
+                        team_ids.add(workspace)
+                
+                cursor = data.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+                    
+            except requests.exceptions.Timeout:
+                raise SlackAnalyticsApiError("Request to Slack API timed out")
+            except requests.exceptions.RequestException as e:
+                raise SlackAnalyticsApiError(f"Request to Slack API failed: {e}") from e
+        
+        return list(team_ids)
+
+    def _get_users_for_team(self, team_id: str) -> List[Dict[str, Any]]:
+        """
+        Retrieves all users for a specific team using users.list.
+        
+        Args:
+            team_id: The team/workspace ID
+            
+        Returns:
+            A list of user records with full profile information.
+        """
+        url = f"{self.SLACK_API_BASE_URL}/users.list"
+        headers = {"Authorization": f"Bearer {self.user_token}"}
+        
+        all_users = []
+        cursor = None
+        
+        while True:
+            params = {"team_id": team_id, "limit": 1000}
+            if cursor:
+                params["cursor"] = cursor
+            
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=60)
+                response.raise_for_status()
+                data = response.json()
+                
+                if not data.get("ok"):
+                    error_msg = data.get("error", "Unknown error")
+                    raise SlackAnalyticsApiError(f"Slack API error for team {team_id}: {error_msg}")
+                
+                users = data.get("members", [])
+                all_users.extend(users)
+                
+                cursor = data.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+                    
+            except requests.exceptions.Timeout:
+                raise SlackAnalyticsApiError("Request to Slack API timed out")
+            except requests.exceptions.RequestException as e:
+                raise SlackAnalyticsApiError(f"Request to Slack API failed: {e}") from e
+        
+        return all_users
+
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """
+        Retrieves all user metadata across all teams in the Enterprise Grid.
+        
+        First discovers all team IDs from admin.users.list, then fetches full
+        user profiles from each team using users.list (which allows limit=1000).
+        
+        Returns:
+            A list of user records with full profile information including:
+            - id, name, team_id, deleted, updated, real_name
+            - tz, tz_label, tz_offset
+            - is_admin, is_owner, is_primary_owner, is_restricted, is_ultra_restricted
+            - is_bot, is_app_user, is_email_confirmed, has_2fa
+            - profile (with email, display_name, first_name, last_name, title, phone, etc.)
+            
+        Raises:
+            SlackAnalyticsApiError: If the API request fails.
+        """
+        # First, get all team IDs
+        team_ids = self._get_team_ids_from_admin_users()
+        
+        # Fetch users from each team, deduplicating by user ID
+        users_by_id = {}
+        for team_id in team_ids:
+            team_users = self._get_users_for_team(team_id)
+            for user in team_users:
+                user_id = user.get("id")
+                if user_id and user_id not in users_by_id:
+                    users_by_id[user_id] = user
+        
+        return list(users_by_id.values())
+
+    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+        """
+        Retrieves a single user's profile using users.profile.get.
+        This includes custom profile fields that aren't in users.list.
+        
+        Args:
+            user_id: The Slack user ID
+            
+        Returns:
+            The user's profile dict including fields.
+            
+        Raises:
+            SlackAnalyticsApiError: If the API request fails.
+        """
+        url = f"{self.SLACK_API_BASE_URL}/users.profile.get"
+        headers = {"Authorization": f"Bearer {self.user_token}"}
+        
+        try:
+            response = requests.get(url, headers=headers, params={"user": user_id}, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get("ok"):
+                error_msg = data.get("error", "Unknown error")
+                raise SlackAnalyticsApiError(f"Slack API error for user {user_id}: {error_msg}")
+            
+            return data.get("profile", {})
+            
+        except requests.exceptions.Timeout:
+            raise SlackAnalyticsApiError(f"Request to Slack API timed out for user {user_id}")
+        except requests.exceptions.RequestException as e:
+            raise SlackAnalyticsApiError(f"Request to Slack API failed for user {user_id}: {e}") from e
+

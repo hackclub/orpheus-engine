@@ -10,9 +10,11 @@ import csv
 import io
 import os
 from datetime import date, timedelta
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import psycopg2
+import requests
 from dagster import (
     AssetExecutionContext,
     Definitions,
@@ -50,7 +52,7 @@ CREATE TABLE IF NOT EXISTS slack.member_analytics (
     slack_calls_count INTEGER,
     slack_huddles_count INTEGER,
     search_count INTEGER,
-    date_claimed BIGINT,
+    date_claimed TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (date, user_id)
 );
 """
@@ -62,8 +64,8 @@ CREATE TABLE IF NOT EXISTS slack.public_channel_analytics (
     date DATE NOT NULL,
     channel_id TEXT NOT NULL,
     originating_team JSONB,
-    date_created BIGINT,
-    date_last_active BIGINT,
+    date_created TIMESTAMP WITH TIME ZONE,
+    date_last_active TIMESTAMP WITH TIME ZONE,
     total_members_count INTEGER,
     full_members_count INTEGER,
     guest_member_count INTEGER,
@@ -81,6 +83,9 @@ CREATE TABLE IF NOT EXISTS slack.public_channel_analytics (
 );
 """
 
+# Fields that contain Unix timestamps and should be converted to timestamps
+UNIX_TIMESTAMP_FIELDS = {"date_claimed", "date_created", "date_last_active"}
+
 CHANNEL_METADATA_SCHEMA = """
 CREATE TABLE IF NOT EXISTS slack.public_channel_metadata (
     channel_id TEXT PRIMARY KEY,
@@ -92,6 +97,52 @@ CREATE TABLE IF NOT EXISTS slack.public_channel_metadata (
 """
 
 CHANNEL_METADATA_COLUMNS = ["channel_id", "name", "topic", "description"]
+
+MEMBER_METADATA_SCHEMA = """
+CREATE TABLE IF NOT EXISTS slack.member_metadata (
+    user_id TEXT PRIMARY KEY,
+    team_id TEXT,
+    enterprise_id TEXT,
+    name TEXT,
+    real_name TEXT,
+    display_name TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT,
+    title TEXT,
+    phone TEXT,
+    tz TEXT,
+    tz_label TEXT,
+    tz_offset INTEGER,
+    is_admin BOOLEAN,
+    is_owner BOOLEAN,
+    is_primary_owner BOOLEAN,
+    is_restricted BOOLEAN,
+    is_ultra_restricted BOOLEAN,
+    is_bot BOOLEAN,
+    is_app_user BOOLEAN,
+    is_email_confirmed BOOLEAN,
+    has_2fa BOOLEAN,
+    deleted BOOLEAN,
+    color TEXT,
+    status_text TEXT,
+    status_emoji TEXT,
+    avatar_hash TEXT,
+    image_original TEXT,
+    profile_fields JSONB,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+"""
+
+# Columns for bulk COPY (excludes profile_fields which is enriched separately)
+MEMBER_METADATA_COLUMNS = [
+    "user_id", "team_id", "enterprise_id", "name", "real_name", "display_name", "first_name", "last_name",
+    "email", "title", "phone", "tz", "tz_label", "tz_offset",
+    "is_admin", "is_owner", "is_primary_owner", "is_restricted", "is_ultra_restricted",
+    "is_bot", "is_app_user", "is_email_confirmed", "has_2fa", "deleted", "color",
+    "status_text", "status_emoji", "avatar_hash", "image_original", "updated_at"
+]
 
 # Column order for COPY operations
 MEMBER_ANALYTICS_COLUMNS = [
@@ -160,6 +211,16 @@ def normalize_email(email: str) -> str:
     return email.lower().strip()
 
 
+def unix_timestamp_to_iso(timestamp: int) -> Optional[str]:
+    """Convert Unix timestamp to ISO 8601 string, or None if timestamp is 0 or invalid."""
+    if timestamp is None or timestamp == 0:
+        return None
+    try:
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+    except (ValueError, OSError):
+        return None
+
+
 def records_to_csv(
     records: List[Dict[str, Any]], 
     columns: List[str],
@@ -178,6 +239,10 @@ def records_to_csv(
             # Normalize email addresses if requested
             if normalize_email_field and col == "email_address" and value is not None:
                 value = normalize_email(value)
+            
+            # Convert Unix timestamps to ISO 8601 strings
+            if col in UNIX_TIMESTAMP_FIELDS and value is not None:
+                value = unix_timestamp_to_iso(value)
             
             if value is None:
                 row.append('')
@@ -536,11 +601,400 @@ def slack_public_channel_metadata(
         conn.close()
 
 
+def _transform_user_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a raw Slack user record to match our schema."""
+    profile = record.get("profile", {})
+    enterprise_user = record.get("enterprise_user", {})
+    return {
+        "user_id": record.get("id"),
+        "team_id": record.get("team_id"),
+        "enterprise_id": enterprise_user.get("enterprise_id"),
+        "name": record.get("name"),
+        "real_name": record.get("real_name"),
+        "display_name": profile.get("display_name"),
+        "first_name": profile.get("first_name"),
+        "last_name": profile.get("last_name"),
+        "email": profile.get("email"),
+        "title": profile.get("title"),
+        "phone": profile.get("phone"),
+        "tz": record.get("tz"),
+        "tz_label": record.get("tz_label"),
+        "tz_offset": record.get("tz_offset"),
+        "is_admin": record.get("is_admin"),
+        "is_owner": record.get("is_owner"),
+        "is_primary_owner": record.get("is_primary_owner"),
+        "is_restricted": record.get("is_restricted"),
+        "is_ultra_restricted": record.get("is_ultra_restricted"),
+        "is_bot": record.get("is_bot"),
+        "is_app_user": record.get("is_app_user"),
+        "is_email_confirmed": record.get("is_email_confirmed"),
+        "has_2fa": record.get("has_2fa"),
+        "deleted": record.get("deleted"),
+        "color": record.get("color"),
+        "status_text": profile.get("status_text"),
+        "status_emoji": profile.get("status_emoji"),
+        "avatar_hash": profile.get("avatar_hash"),
+        "image_original": profile.get("image_original"),
+        "updated_at": unix_timestamp_to_iso(record.get("updated")) if record.get("updated") else None,
+    }
+
+
+def _upsert_user_batch(conn, records: List[Dict[str, Any]], log):
+    """Upsert a batch of user records to the database."""
+    if not records:
+        return 0
+    
+    transformed = [_transform_user_record(r) for r in records]
+    
+    with conn.cursor() as cur:
+        # Create temp staging table
+        cur.execute("""
+            CREATE TEMP TABLE member_metadata_staging (
+                user_id TEXT,
+                team_id TEXT,
+                enterprise_id TEXT,
+                name TEXT,
+                real_name TEXT,
+                display_name TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                email TEXT,
+                title TEXT,
+                phone TEXT,
+                tz TEXT,
+                tz_label TEXT,
+                tz_offset INTEGER,
+                is_admin BOOLEAN,
+                is_owner BOOLEAN,
+                is_primary_owner BOOLEAN,
+                is_restricted BOOLEAN,
+                is_ultra_restricted BOOLEAN,
+                is_bot BOOLEAN,
+                is_app_user BOOLEAN,
+                is_email_confirmed BOOLEAN,
+                has_2fa BOOLEAN,
+                deleted BOOLEAN,
+                color TEXT,
+                status_text TEXT,
+                status_emoji TEXT,
+                avatar_hash TEXT,
+                image_original TEXT,
+                updated_at TIMESTAMP WITH TIME ZONE
+            )
+        """)
+        
+        # COPY to staging
+        csv_data = records_to_csv(transformed, MEMBER_METADATA_COLUMNS)
+        columns_str = ", ".join(MEMBER_METADATA_COLUMNS)
+        cur.copy_expert(
+            f"COPY member_metadata_staging ({columns_str}) FROM STDIN WITH (FORMAT csv)",
+            csv_data
+        )
+        
+        # Upsert from staging (NOT touching profile_fields)
+        cur.execute("""
+            INSERT INTO slack.member_metadata (
+                user_id, team_id, enterprise_id, name, real_name, display_name, first_name, last_name,
+                email, title, phone, tz, tz_label, tz_offset,
+                is_admin, is_owner, is_primary_owner, is_restricted, is_ultra_restricted,
+                is_bot, is_app_user, is_email_confirmed, has_2fa, deleted, color,
+                status_text, status_emoji, avatar_hash, image_original, updated_at, fetched_at
+            )
+            SELECT 
+                user_id, team_id, enterprise_id, name, real_name, display_name, first_name, last_name,
+                email, title, phone, tz, tz_label, tz_offset,
+                is_admin, is_owner, is_primary_owner, is_restricted, is_ultra_restricted,
+                is_bot, is_app_user, is_email_confirmed, has_2fa, deleted, color,
+                status_text, status_emoji, avatar_hash, image_original, updated_at, NOW()
+            FROM member_metadata_staging
+            ON CONFLICT (user_id) DO UPDATE SET
+                team_id = EXCLUDED.team_id,
+                enterprise_id = EXCLUDED.enterprise_id,
+                name = EXCLUDED.name,
+                real_name = EXCLUDED.real_name,
+                display_name = EXCLUDED.display_name,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                email = EXCLUDED.email,
+                title = EXCLUDED.title,
+                phone = EXCLUDED.phone,
+                tz = EXCLUDED.tz,
+                tz_label = EXCLUDED.tz_label,
+                tz_offset = EXCLUDED.tz_offset,
+                is_admin = EXCLUDED.is_admin,
+                is_owner = EXCLUDED.is_owner,
+                is_primary_owner = EXCLUDED.is_primary_owner,
+                is_restricted = EXCLUDED.is_restricted,
+                is_ultra_restricted = EXCLUDED.is_ultra_restricted,
+                is_bot = EXCLUDED.is_bot,
+                is_app_user = EXCLUDED.is_app_user,
+                is_email_confirmed = EXCLUDED.is_email_confirmed,
+                has_2fa = EXCLUDED.has_2fa,
+                deleted = EXCLUDED.deleted,
+                color = EXCLUDED.color,
+                status_text = EXCLUDED.status_text,
+                status_emoji = EXCLUDED.status_emoji,
+                avatar_hash = EXCLUDED.avatar_hash,
+                image_original = EXCLUDED.image_original,
+                updated_at = EXCLUDED.updated_at,
+                fetched_at = NOW()
+        """)
+        upserted = cur.rowcount
+        
+        # Drop staging table
+        cur.execute("DROP TABLE member_metadata_staging")
+    
+    conn.commit()
+    return upserted
+
+
+@asset(
+    compute_kind="slack_api",
+    group_name="slack",
+    description="Fetches member metadata from Slack and upserts to slack.member_metadata (excludes profile_fields)"
+)
+def slack_member_metadata(
+    context: AssetExecutionContext,
+    slack_analytics: SlackAnalyticsResource,
+) -> Output[None]:
+    """
+    Fetches metadata for all Slack members and upserts to the database.
+    
+    1. Lists all teams via admin.teams.list
+    2. For each team, fetches users via users.list (1000/page)
+    3. Upserts each page as it's fetched (interruptable)
+    
+    Does NOT update profile_fields column - that's handled by slack_member_metadata_enrichment.
+    """
+    log = context.log
+    headers = {"Authorization": f"Bearer {slack_analytics.user_token}"}
+    
+    # Ensure table exists
+    conn = get_db_connection()
+    ensure_schema_exists(conn)
+    with conn.cursor() as cur:
+        cur.execute(MEMBER_METADATA_SCHEMA)
+    conn.commit()
+    conn.close()
+    
+    # Step 1: Get all teams
+    log.info("Step 1: Listing teams via admin.teams.list...")
+    teams = []
+    cursor = None
+    
+    while True:
+        params = {"limit": 100}
+        if cursor:
+            params["cursor"] = cursor
+        
+        response = requests.get(
+            f"{slack_analytics.SLACK_API_BASE_URL}/admin.teams.list",
+            headers=headers, params=params, timeout=60
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data.get("ok"):
+            raise SlackAnalyticsApiError(f"admin.teams.list error: {data.get('error')}")
+        
+        teams.extend(data.get("teams", []))
+        cursor = data.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    
+    team_ids = [t["id"] for t in teams]
+    log.info(f"Found {len(team_ids)} teams: {team_ids}")
+    
+    # Step 2: For each team, fetch and upsert users page by page
+    log.info("Step 2: Fetching and upserting users from each team...")
+    total_users = 0
+    seen_user_ids = set()
+    
+    for team_idx, team_id in enumerate(team_ids):
+        log.info(f"  Team {team_id} ({team_idx+1}/{len(team_ids)})...")
+        cursor = None
+        page = 0
+        
+        while True:
+            page += 1
+            params = {"team_id": team_id, "limit": 1000}
+            if cursor:
+                params["cursor"] = cursor
+            
+            response = requests.get(
+                f"{slack_analytics.SLACK_API_BASE_URL}/users.list",
+                headers=headers, params=params, timeout=120
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get("ok"):
+                raise SlackAnalyticsApiError(f"users.list error for team {team_id}: {data.get('error')}")
+            
+            batch = data.get("members", [])
+            
+            # Filter duplicates (users can be in multiple teams)
+            new_users = []
+            for user in batch:
+                uid = user.get("id")
+                if uid and uid not in seen_user_ids:
+                    seen_user_ids.add(uid)
+                    new_users.append(user)
+            
+            if new_users:
+                # Fresh connection for each batch
+                conn = get_db_connection()
+                try:
+                    upserted = _upsert_user_batch(conn, new_users, log)
+                    total_users += len(new_users)
+                    log.info(f"    Page {page}: {len(batch)} fetched, {len(new_users)} new, upserted {upserted}. Total: {total_users}")
+                finally:
+                    conn.close()
+            
+            cursor = data.get("response_metadata", {}).get("next_cursor")
+            if not cursor:
+                break
+    
+    log.info(f"Done! Total users upserted: {total_users}")
+    
+    return Output(
+        value=None,
+        metadata={
+            "total_members": MetadataValue.int(total_users),
+            "table": MetadataValue.text("slack.member_metadata"),
+        }
+    )
+
+
+@asset(
+    compute_kind="slack_api",
+    group_name="slack",
+    deps=["slack_member_metadata"],
+    description="Enriches member metadata with profile_fields from users.profile.get API"
+)
+def slack_member_metadata_enrichment(
+    context: AssetExecutionContext,
+    slack_analytics: SlackAnalyticsResource,
+) -> Output[None]:
+    """
+    Enriches slack.member_metadata with custom profile fields.
+    
+    Iterates through all users and calls users.profile.get to fetch their
+    custom profile fields, updating each row immediately (interruptable).
+    
+    Profile fields are stored with human-readable labels instead of Slack field IDs.
+    """
+    import json
+    import time
+    
+    log = context.log
+    headers = {"Authorization": f"Bearer {slack_analytics.user_token}"}
+    
+    # Step 1: Get field ID -> label mapping from team.profile.get
+    log.info("Fetching profile field definitions...")
+    response = requests.get(
+        f"{slack_analytics.SLACK_API_BASE_URL}/team.profile.get",
+        headers=headers,
+        timeout=60
+    )
+    response.raise_for_status()
+    data = response.json()
+    
+    if not data.get("ok"):
+        raise SlackAnalyticsApiError(f"team.profile.get error: {data.get('error')}")
+    
+    field_id_to_label = {}
+    for field in data.get("profile", {}).get("fields", []):
+        field_id_to_label[field["id"]] = field.get("label", field["id"])
+    
+    log.info(f"Found {len(field_id_to_label)} profile field definitions")
+    
+    # Step 2: Get all user IDs
+    conn = get_db_connection()
+    with conn.cursor() as cur:
+        cur.execute("SELECT user_id FROM slack.member_metadata WHERE deleted = false OR deleted IS NULL")
+        user_ids = [row[0] for row in cur.fetchall()]
+    conn.close()
+    
+    log.info(f"Enriching profile fields for {len(user_ids)} users...")
+    
+    enriched_count = 0
+    error_count = 0
+    
+    for i, user_id in enumerate(user_ids):
+        # Retry loop for rate limiting
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                profile = slack_analytics.get_user_profile(user_id)
+                raw_fields = profile.get("fields", {})
+                
+                # Only update if there are fields
+                if raw_fields:
+                    # Convert field IDs to labels
+                    labeled_fields = {}
+                    for field_id, field_data in raw_fields.items():
+                        label = field_id_to_label.get(field_id, field_id)
+                        labeled_fields[label] = field_data.get("value", "")
+                    
+                    # Fresh connection for each update
+                    conn = get_db_connection()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE slack.member_metadata SET profile_fields = %s WHERE user_id = %s",
+                                (json.dumps(labeled_fields), user_id)
+                            )
+                        conn.commit()
+                        enriched_count += 1
+                        log.info(f"Enriched user {user_id} with {len(labeled_fields)} fields: {list(labeled_fields.keys())}")
+                    finally:
+                        conn.close()
+                
+                break  # Success, exit retry loop
+                
+            except SlackAnalyticsApiError as e:
+                if "ratelimited" in str(e).lower():
+                    wait_time = 60 * (attempt + 1)  # Exponential backoff
+                    log.warning(f"Rate limited, sleeping {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                    time.sleep(wait_time)
+                else:
+                    error_count += 1
+                    log.warning(f"Error enriching user {user_id}: {e}")
+                    break
+            except Exception as e:
+                error_count += 1
+                log.warning(f"Error enriching user {user_id}: {e}")
+                break
+        
+        # Log progress every 1000 users
+        if (i + 1) % 1000 == 0:
+            log.info(f"Progress: {i + 1}/{len(user_ids)} processed, {enriched_count} enriched, {error_count} errors")
+    
+    log.info(f"Done! {enriched_count} users enriched, {error_count} errors")
+    
+    return Output(
+        value=None,
+        metadata={
+            "total_users": MetadataValue.int(len(user_ids)),
+            "enriched_count": MetadataValue.int(enriched_count),
+            "error_count": MetadataValue.int(error_count),
+            "table": MetadataValue.text("slack.member_metadata"),
+        }
+    )
+
+
 # Create the resource instance
 slack_analytics_resource = SlackAnalyticsResource()
 
 defs = Definitions(
-    assets=[slack_public_channel_analytics, slack_member_analytics, slack_public_channel_metadata],
+    assets=[
+        slack_public_channel_analytics,
+        slack_member_analytics,
+        slack_public_channel_metadata,
+        slack_member_metadata,
+        slack_member_metadata_enrichment,
+    ],
     resources={
         "slack_analytics": slack_analytics_resource,
     },
