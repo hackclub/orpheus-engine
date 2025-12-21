@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import psycopg2
-import requests
 from dagster import (
     AssetExecutionContext,
     Definitions,
@@ -23,7 +22,7 @@ from dagster import (
     asset,
 )
 
-from .resources import SlackAnalyticsResource, SlackAnalyticsApiError
+from .resources import SlackAnalyticsResource, SlackAnalyticsApiError, SlackRateLimitError
 
 
 # Schema definitions for table creation
@@ -767,7 +766,6 @@ def slack_member_metadata(
     Does NOT update profile_fields column - that's handled by slack_member_metadata_enrichment.
     """
     log = context.log
-    headers = {"Authorization": f"Bearer {slack_analytics.user_token}"}
     
     # Ensure table exists
     conn = get_db_connection()
@@ -779,29 +777,7 @@ def slack_member_metadata(
     
     # Step 1: Get all teams
     log.info("Step 1: Listing teams via admin.teams.list...")
-    teams = []
-    cursor = None
-    
-    while True:
-        params = {"limit": 100}
-        if cursor:
-            params["cursor"] = cursor
-        
-        response = requests.get(
-            f"{slack_analytics.SLACK_API_BASE_URL}/admin.teams.list",
-            headers=headers, params=params, timeout=60
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data.get("ok"):
-            raise SlackAnalyticsApiError(f"admin.teams.list error: {data.get('error')}")
-        
-        teams.extend(data.get("teams", []))
-        cursor = data.get("response_metadata", {}).get("next_cursor")
-        if not cursor:
-            break
-    
+    teams = slack_analytics.get_teams()
     team_ids = [t["id"] for t in teams]
     log.info(f"Found {len(team_ids)} teams: {team_ids}")
     
@@ -812,26 +788,10 @@ def slack_member_metadata(
     
     for team_idx, team_id in enumerate(team_ids):
         log.info(f"  Team {team_id} ({team_idx+1}/{len(team_ids)})...")
-        cursor = None
         page = 0
         
-        while True:
+        for batch in slack_analytics.get_users_for_team_paginated(team_id):
             page += 1
-            params = {"team_id": team_id, "limit": 1000}
-            if cursor:
-                params["cursor"] = cursor
-            
-            response = requests.get(
-                f"{slack_analytics.SLACK_API_BASE_URL}/users.list",
-                headers=headers, params=params, timeout=120
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if not data.get("ok"):
-                raise SlackAnalyticsApiError(f"users.list error for team {team_id}: {data.get('error')}")
-            
-            batch = data.get("members", [])
             
             # Filter duplicates (users can be in multiple teams)
             new_users = []
@@ -850,10 +810,6 @@ def slack_member_metadata(
                     log.info(f"    Page {page}: {len(batch)} fetched, {len(new_users)} new, upserted {upserted}. Total: {total_users}")
                 finally:
                     conn.close()
-            
-            cursor = data.get("response_metadata", {}).get("next_cursor")
-            if not cursor:
-                break
     
     log.info(f"Done! Total users upserted: {total_users}")
     
@@ -888,25 +844,10 @@ def slack_member_metadata_enrichment(
     import time
     
     log = context.log
-    headers = {"Authorization": f"Bearer {slack_analytics.user_token}"}
     
     # Step 1: Get field ID -> label mapping from team.profile.get
     log.info("Fetching profile field definitions...")
-    response = requests.get(
-        f"{slack_analytics.SLACK_API_BASE_URL}/team.profile.get",
-        headers=headers,
-        timeout=60
-    )
-    response.raise_for_status()
-    data = response.json()
-    
-    if not data.get("ok"):
-        raise SlackAnalyticsApiError(f"team.profile.get error: {data.get('error')}")
-    
-    field_id_to_label = {}
-    for field in data.get("profile", {}).get("fields", []):
-        field_id_to_label[field["id"]] = field.get("label", field["id"])
-    
+    field_id_to_label = slack_analytics.get_profile_field_definitions()
     log.info(f"Found {len(field_id_to_label)} profile field definitions")
     
     # Step 2: Get all user IDs
@@ -922,9 +863,8 @@ def slack_member_metadata_enrichment(
     error_count = 0
     
     for i, user_id in enumerate(user_ids):
-        # Retry loop for rate limiting
-        max_retries = 5
-        for attempt in range(max_retries):
+        # Retry loop for rate limiting - keep trying until success or non-rate-limit error
+        while True:
             try:
                 profile = slack_analytics.get_user_profile(user_id)
                 raw_fields = profile.get("fields", {})
@@ -953,15 +893,14 @@ def slack_member_metadata_enrichment(
                 
                 break  # Success, exit retry loop
                 
+            except SlackRateLimitError as e:
+                log.warning(f"Rate limited, sleeping {e.retry_after}s before retrying user {user_id}...")
+                time.sleep(e.retry_after)
+                # Continue the while loop to retry this user
             except SlackAnalyticsApiError as e:
-                if "ratelimited" in str(e).lower():
-                    wait_time = 60 * (attempt + 1)  # Exponential backoff
-                    log.warning(f"Rate limited, sleeping {wait_time}s before retry {attempt + 1}/{max_retries}...")
-                    time.sleep(wait_time)
-                else:
-                    error_count += 1
-                    log.warning(f"Error enriching user {user_id}: {e}")
-                    break
+                error_count += 1
+                log.warning(f"Error enriching user {user_id}: {e}")
+                break
             except Exception as e:
                 error_count += 1
                 log.warning(f"Error enriching user {user_id}: {e}")
