@@ -1,31 +1,54 @@
-# Row Hash Function
+# Row Hash for PostgreSQL Change Detection
 
-Simple SQL function to hash table rows for change detection, excluding `_row_hash*` columns to avoid circular dependencies.
+Self-contained SQL script to compute row hashes for CDC/change detection. Stores hashes in `_row_hash` (uuid) and `_row_hash_at` (timestamptz) columns.
 
 ## Usage
 
+Edit `row_hash.sql` to set `target_table`, then run in your PostgreSQL client:
+
 ```sql
--- Load the function
 \i row_hash.sql
-
--- Hash a row
-SELECT row_hash(t.*) FROM my_table t;
-
--- Store hash in the table itself
-UPDATE my_table SET _row_hash = row_hash(my_table.*);
 ```
 
-## Performance (10M rows)
+The script:
+1. Adds `_row_hash` and `_row_hash_at` columns if missing
+2. Dynamically builds column list (excludes `_row_hash*` columns)
+3. Updates only rows where hash changed
 
-| Function | Sequential | Parallel (4 workers) |
-|----------|-----------|---------------------|
-| row_hash | 510ms | 150ms |
-| md5(row::text) | 497ms | 141ms |
+## Performance (100-column table, mixed types including JSONB)
 
-~6% overhead vs raw md5 for the column exclusion logic.
+**Hash Computation (SELECT only):**
+| Rows | Time | Throughput |
+|------|------|------------|
+| 100K | 30ms | 3.4 M rows/sec |
+| 500K | 325ms | 1.5 M rows/sec |
+| 1M | 610ms | **1.6 M rows/sec** |
+| 2M | 2.1s | 0.96 M rows/sec |
 
-## How it works
+**UPDATE with hash storage:**
+| Rows | Initial (all NULL) | Re-run (no changes) |
+|------|-------------------|---------------------|
+| 100K | 4.3s | 3.1s |
+| 500K | 22.8s | 18.4s |
+| 1M | 47.2s | 36.4s |
+| 2M | 98.5s | 72.0s |
 
-Uses `row_to_json(row)::jsonb - '_row_hash' - '_row_hash_at'` to exclude hash columns, then `md5()`. The `row_to_json` approach is 2x faster than `to_jsonb` directly.
+*Tested on Docker postgres:17 with 4GB memory, 100 columns (10 UUIDs, 20 integers, 10 floats, 20 timestamps/dates, 20 text columns, 10 booleans, 5 JSONB, 4 numerics)*
 
-No custom extension needed - works on any PostgreSQL 12+.
+## Key Optimization
+
+`ROW(col1, col2, ...)::text` is **8x faster** than `row_to_json()::jsonb`:
+- jsonb approach: ~8s for 100K rows with 122 columns
+- ROW() approach: ~1s for same data
+
+## Storage Overhead
+
+~25 bytes per row:
+- `_row_hash` (uuid): 16 bytes
+- `_row_hash_at` (timestamptz): 8 bytes
+- Column overhead: ~1 byte
+
+## Files
+
+- `row_hash.sql` - Main script (copy-paste into psql)
+- `benchmark_100col.sh` - Performance benchmark with 100-column table
