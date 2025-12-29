@@ -1,0 +1,4 @@
+comment = 'Fast row hashing using xxHash - hashes binary tuples directly'
+default_version = '1.0'
+module_pathname = '$libdir/pg_rowhash'
+relocatable = true
