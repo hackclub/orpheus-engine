@@ -1,0 +1,3 @@
+[submodule "warehouse-postgres-docker/vendor/pg_xxhash"]
+	path = warehouse-postgres-docker/vendor/pg_xxhash
+	url = https://github.com/hatarist/pg_xxhash.git
