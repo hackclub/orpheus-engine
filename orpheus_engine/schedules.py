@@ -1,9 +1,17 @@
 import dagster as dg
 
-# 1. "All assets" job (excluding slack_member_analytics which will be ran manually)
+# Assets excluded from the main materialize_all_assets_job
+# These are either run manually or have special scheduling
+EXCLUDED_FROM_MAIN_JOB: set[dg.AssetKey] = {
+    dg.AssetKey("slack_member_analytics"),  # Run manually
+}
+
+# 1. "All assets" job (excluding assets in EXCLUDED_FROM_MAIN_JOB)
+# warehouse_row_hashes is included - it dynamically depends on ALL other assets,
+# so Dagster will automatically run it last after all dependencies complete
 materialize_all_assets_job = dg.define_asset_job(
     name="materialize_all_assets_job",
-    selection=dg.AssetSelection.all() - dg.AssetSelection.assets("slack_member_analytics"),
+    selection=dg.AssetSelection.all() - dg.AssetSelection.assets(*EXCLUDED_FROM_MAIN_JOB),
 )
 
 # 2. Every 6 hours schedule (30 minutes past every 6 hours, NY time)
