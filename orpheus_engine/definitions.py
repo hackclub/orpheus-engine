@@ -14,8 +14,8 @@ import orpheus_engine.schedules as schedules
 # Import analytics asset separately (it doesn't export defs)
 from orpheus_engine.defs.analytics.definitions import analytics_hack_clubbers
 
-# Import the DuckLake row hash asset factory (not a defs module)
-from orpheus_engine.defs.ducklake.definitions import create_warehouse_row_hashes_asset
+# Import the DuckLake row hash asset factory and sync asset
+from orpheus_engine.defs.ducklake.definitions import create_warehouse_row_hashes_asset, ducklake_sync
 
 # Import shared exclusion list (single source of truth)
 from orpheus_engine.schedules import EXCLUDED_FROM_MAIN_JOB
@@ -57,10 +57,12 @@ def _build_definitions() -> dg.Definitions:
     # Create the DuckLake row hash asset with dependencies matching materialize_all_assets_job
     warehouse_row_hashes = create_warehouse_row_hashes_asset(dep_asset_keys=all_asset_keys)
 
-    # Final merged definitions including the dynamically-created DuckLake asset
+    # Final merged definitions including the DuckLake assets
+    # - warehouse_row_hashes: computes row hashes (depends on all other assets)
+    # - ducklake_sync: syncs to DuckLake (depends on warehouse_row_hashes)
     return dg.Definitions.merge(
         base_defs,
-        dg.Definitions(assets=[warehouse_row_hashes])
+        dg.Definitions(assets=[warehouse_row_hashes, ducklake_sync])
     )
 
 
