@@ -1067,8 +1067,8 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     for ext in ["ducklake", "postgres", "httpfs"]:
         try:
             conn.execute(f"LOAD {ext}")
-        except duckdb.CatalogException:
-            # Extension not installed, try to install it
+        except (duckdb.CatalogException, duckdb.IOException):
+            # Extension not installed or not found on disk, try to install it
             conn.execute(f"INSTALL {ext}")
             conn.execute(f"LOAD {ext}")
     
