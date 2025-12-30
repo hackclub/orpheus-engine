@@ -46,9 +46,7 @@ EXCLUDED_TABLES = frozenset({
 # Set to None to sync all tables, or a list of regex patterns to filter
 # Pattern matches against "schema.table" format
 # =============================================================================
-DEBUG_SYNC_TABLE_PATTERNS: list[str] | None = [
-    r"^loops\.audience$",  # Sync only loops.audience
-]
+DEBUG_SYNC_TABLE_PATTERNS: list[str] | None = None
 # Set to None to disable debug filtering and sync all tables:
 # DEBUG_SYNC_TABLE_PATTERNS = None
 # =============================================================================
