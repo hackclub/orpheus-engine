@@ -11,6 +11,7 @@ Processing is parallelized across multiple workers based on Postgres max_paralle
 """
 
 import os
+import re
 import time
 import signal
 import threading
@@ -35,6 +36,18 @@ EXCLUDED_SCHEMAS = frozenset({
 EXCLUDED_TABLES = frozenset({
     # Add any specific tables to skip here
 })
+
+# =============================================================================
+# DEBUG: Limit sync to specific tables matching these regex patterns
+# Set to None to sync all tables, or a list of regex patterns to filter
+# Pattern matches against "schema.table" format
+# =============================================================================
+DEBUG_SYNC_TABLE_PATTERNS: list[str] | None = [
+    r"^loops\.audience$",  # Only sync loops.audience for testing
+]
+# Set to None to disable debug filtering and sync all tables:
+# DEBUG_SYNC_TABLE_PATTERNS = None
+# =============================================================================
 
 # Progress update interval in seconds
 PROGRESS_UPDATE_INTERVAL = 5.0
@@ -936,13 +949,16 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     Configures DuckDB with:
     - DuckLake extension
     - PostgreSQL extension (for catalog)
-    - S3 credentials from environment (Hetzner Object Storage)
+    - S3 credentials from environment
     - PostgreSQL catalog with S3 data storage
+    
+    Environment variables:
+    - DUCKLAKE_S3_URL: Full S3 endpoint URL (e.g., https://xxx.r2.cloudflarestorage.com)
     """
     catalog_url = os.environ.get("DUCKLAKE_CATALOG_DB_URL")
     s3_bucket = os.environ.get("DUCKLAKE_S3_BUCKET")
     s3_prefix = os.environ.get("DUCKLAKE_S3_PREFIX", "ducklake_data")
-    s3_region = os.environ.get("DUCKLAKE_S3_LOCATION")  # e.g., 'hel1' for Hetzner
+    s3_url = os.environ.get("DUCKLAKE_S3_URL")
     s3_key_id = os.environ.get("DUCKLAKE_S3_KEY_ID")
     s3_secret = os.environ.get("DUCKLAKE_S3_SECRET")
     
@@ -950,8 +966,8 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
         raise ValueError("DUCKLAKE_CATALOG_DB_URL environment variable not set")
     if not s3_bucket:
         raise ValueError("DUCKLAKE_S3_BUCKET environment variable not set")
-    if not s3_region:
-        raise ValueError("DUCKLAKE_S3_LOCATION environment variable not set")
+    if not s3_url:
+        raise ValueError("DUCKLAKE_S3_URL environment variable not set")
     if not s3_key_id or not s3_secret:
         raise ValueError("DUCKLAKE_S3_KEY_ID and DUCKLAKE_S3_SECRET must be set")
     
@@ -965,9 +981,9 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     conn.execute("INSTALL httpfs")
     conn.execute("LOAD httpfs")
     
-    # Configure S3 credentials for Hetzner Object Storage
-    # Hetzner uses endpoint format: {region}.your-objectstorage.com
-    s3_endpoint = f"{s3_region}.your-objectstorage.com"
+    # Configure S3 endpoint (strip protocol prefix)
+    s3_endpoint = s3_url.replace("https://", "").replace("http://", "").rstrip("/")
+    
     conn.execute(f"""
         CREATE SECRET ducklake_s3 (
             TYPE S3,
@@ -1740,15 +1756,16 @@ def sync_table(
         column_names = [col[0] for col in columns]
         
         # Smart incremental sync with metadata comparison
-        rows_deleted, rows_inserted, was_full_resync = sync_table_incremental(
+        rows_deleted, rows_updated, rows_inserted, was_full_resync = sync_table_incremental(
             pg_conn, duck_conn, schema, table, column_names
         )
         
         stats["rows_deleted"] = rows_deleted
+        stats["rows_updated"] = rows_updated
         stats["rows_inserted"] = rows_inserted
         stats["full_resync"] = was_full_resync
         
-        if rows_deleted == 0 and rows_inserted == 0:
+        if rows_deleted == 0 and rows_updated == 0 and rows_inserted == 0:
             # Table is already in sync
             progress.mark_skipped(table_name)
             stats["skipped"] = True
@@ -1891,9 +1908,28 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
     pg_conn = get_warehouse_connection()
     try:
         tables = get_all_tables(pg_conn)
-        log.info(f"✓ PostgreSQL warehouse: {len(tables)} tables to sync")
+        log.info(f"✓ PostgreSQL warehouse: {len(tables)} tables found")
     finally:
         pg_conn.close()
+    
+    # Apply debug filter if enabled
+    if DEBUG_SYNC_TABLE_PATTERNS is not None:
+        log.warning("=" * 60)
+        log.warning("DEBUG MODE: Filtering tables by patterns")
+        log.warning(f"  Patterns: {DEBUG_SYNC_TABLE_PATTERNS}")
+        log.warning("=" * 60)
+        
+        original_count = len(tables)
+        filtered_tables = []
+        for schema, table in tables:
+            table_name = f"{schema}.{table}"
+            for pattern in DEBUG_SYNC_TABLE_PATTERNS:
+                if re.match(pattern, table_name):
+                    filtered_tables.append((schema, table))
+                    break
+        tables = filtered_tables
+        log.warning(f"  Filtered: {original_count} -> {len(tables)} tables")
+        log.warning("")
     
     duck_conn = get_ducklake_connection()
     try:
