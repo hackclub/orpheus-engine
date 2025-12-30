@@ -14,6 +14,7 @@ import os
 import re
 import time
 import signal
+import logging
 import threading
 from queue import Queue, Empty
 from dataclasses import dataclass, field
@@ -22,6 +23,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import dagster as dg
 import psycopg2
+
+# Module-level logger - Dagster automatically captures standard logging
+logger = logging.getLogger(__name__)
 
 # Schemas to exclude from DuckLake row hash computation
 EXCLUDED_SCHEMAS = frozenset({
@@ -43,7 +47,8 @@ EXCLUDED_TABLES = frozenset({
 # Pattern matches against "schema.table" format
 # =============================================================================
 DEBUG_SYNC_TABLE_PATTERNS: list[str] | None = [
-    r"^loops\.audience$",  # Only sync loops.audience for testing
+    r"^loops\.",  # Sync all loops.* tables
+    r"^summer_of_making_2025\.",  # Sync all summer_of_making_2025.* tables
 ]
 # Set to None to disable debug filtering and sync all tables:
 # DEBUG_SYNC_TABLE_PATTERNS = None
@@ -825,10 +830,14 @@ class SyncTableProgress:
     schema: str
     table: str
     status: str = "pending"  # pending, syncing, completed, error, skipped
+    phase: str = ""  # Current phase: downloading, diffing, deleting, updating, inserting, loading
     rows_deleted: int = 0
     rows_inserted: int = 0
+    current_rows: int = 0  # Rows processed so far in current operation
+    total_rows: int = 0  # Total rows to process in current operation
     start_time: Optional[float] = None
     end_time: Optional[float] = None
+    phase_start_time: Optional[float] = None  # When current phase started
     error: Optional[str] = None
     worker_id: Optional[int] = None
     
@@ -842,6 +851,35 @@ class SyncTableProgress:
             return 0.0
         end = self.end_time if self.end_time else time.time()
         return end - self.start_time
+    
+    @property
+    def phase_elapsed_seconds(self) -> float:
+        if self.phase_start_time is None:
+            return 0.0
+        return time.time() - self.phase_start_time
+    
+    @property
+    def rows_per_second(self) -> float:
+        elapsed = self.phase_elapsed_seconds
+        if elapsed <= 0 or self.current_rows <= 0:
+            return 0.0
+        return self.current_rows / elapsed
+    
+    @property
+    def eta_seconds(self) -> Optional[float]:
+        if self.total_rows <= 0 or self.current_rows <= 0:
+            return None
+        rps = self.rows_per_second
+        if rps <= 0:
+            return None
+        remaining = self.total_rows - self.current_rows
+        return remaining / rps
+    
+    @property
+    def progress_pct(self) -> float:
+        if self.total_rows <= 0:
+            return 0.0
+        return min(100.0, (self.current_rows / self.total_rows) * 100)
 
 
 @dataclass  
@@ -865,6 +903,22 @@ class SyncGlobalProgress:
             if table_name in self.tables:
                 for key, value in kwargs.items():
                     setattr(self.tables[table_name], key, value)
+    
+    def set_phase(self, table_name: str, phase: str, total_rows: int = 0):
+        """Set the current phase and reset progress counters."""
+        with self.lock:
+            if table_name in self.tables:
+                progress = self.tables[table_name]
+                progress.phase = phase
+                progress.total_rows = total_rows
+                progress.current_rows = 0
+                progress.phase_start_time = time.time()
+    
+    def update_progress(self, table_name: str, current_rows: int):
+        """Update the current row count for progress tracking."""
+        with self.lock:
+            if table_name in self.tables:
+                self.tables[table_name].current_rows = current_rows
     
     def mark_completed(self, table_name: str, rows_deleted: int, rows_inserted: int, 
                        error: str = None):
@@ -912,8 +966,14 @@ class SyncGlobalProgress:
                         "name": name,
                         "worker_id": progress.worker_id,
                         "status": progress.status,
+                        "phase": progress.phase,
                         "rows_deleted": progress.rows_deleted,
                         "rows_inserted": progress.rows_inserted,
+                        "current_rows": progress.current_rows,
+                        "total_rows": progress.total_rows,
+                        "progress_pct": progress.progress_pct,
+                        "rows_per_second": progress.rows_per_second,
+                        "eta_seconds": progress.eta_seconds,
                         "elapsed": progress.elapsed_seconds,
                     })
                     running_rows_deleted += progress.rows_deleted
@@ -1030,6 +1090,9 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
             DATA_PATH '{s3_data_path}'
         )
     """)
+    
+    # Increase retry count for high-concurrency scenarios
+    conn.execute("SET ducklake_max_retry_count = 100")
     
     return conn
 
@@ -1179,22 +1242,35 @@ def sync_table_schema(
     duck_conn: duckdb.DuckDBPyConnection,
     schema: str,
     table: str,
-) -> bool:
+) -> Tuple[bool, dict]:
     """
     Sync table schema from PostgreSQL to DuckLake.
     Creates table if it doesn't exist, adds new columns if needed.
-    Returns True if table was created, False if it already existed.
+    Returns (was_created, timing_info).
     """
+    table_name = f"{schema}.{table}"
+    timing = {"total": 0.0, "ensure_schema": 0.0, "get_src_cols": 0.0, "check_exists": 0.0, "create_or_alter": 0.0}
+    total_start = time.time()
+    
     # Ensure schema exists
+    t0 = time.time()
     ensure_schema_exists_ducklake(duck_conn, schema)
+    timing["ensure_schema"] = time.time() - t0
     
     # Get source columns
+    t0 = time.time()
     src_columns = get_table_columns_pg(pg_conn, schema, table)
+    timing["get_src_cols"] = time.time() - t0
     if not src_columns:
         raise ValueError(f"No columns found in source table {schema}.{table}")
     
     # Check if table exists in DuckLake
-    if not table_exists_in_ducklake(duck_conn, schema, table):
+    t0 = time.time()
+    exists = table_exists_in_ducklake(duck_conn, schema, table)
+    timing["check_exists"] = time.time() - t0
+    
+    t0 = time.time()
+    if not exists:
         # Create table with all columns plus _row_hash
         col_defs = ", ".join([f'"{col}" {dtype}' for col, dtype in src_columns])
         col_defs += ", _row_hash BLOB"
@@ -1202,18 +1278,23 @@ def sync_table_schema(
         duck_conn.execute(f"""
             CREATE TABLE ducklake."{schema}"."{table}" ({col_defs})
         """)
-        return True
+        timing["create_or_alter"] = time.time() - t0
+        timing["total"] = time.time() - total_start
+        logger.info(f"  [{table_name}] SCHEMA: created new table ({len(src_columns)} cols) in {timing['total']*1000:.0f}ms")
+        return True, timing
     
     # Table exists - check for new columns
     dst_columns = get_table_columns_ducklake(duck_conn, schema, table)
     dst_col_names = {col[0] for col in dst_columns}
     
+    cols_added = 0
     for col_name, col_type in src_columns:
         if col_name not in dst_col_names:
             duck_conn.execute(f"""
                 ALTER TABLE ducklake."{schema}"."{table}" 
                 ADD COLUMN "{col_name}" {col_type}
             """)
+            cols_added += 1
     
     # Ensure _row_hash column exists (required for sync)
     if "_row_hash" not in dst_col_names:
@@ -1221,8 +1302,15 @@ def sync_table_schema(
             ALTER TABLE ducklake."{schema}"."{table}" 
             ADD COLUMN "_row_hash" BLOB
         """)
+        cols_added += 1
     
-    return False
+    timing["create_or_alter"] = time.time() - t0
+    timing["total"] = time.time() - total_start
+    
+    if cols_added > 0:
+        logger.info(f"  [{table_name}] SCHEMA: added {cols_added} columns in {timing['total']*1000:.0f}ms")
+    
+    return False, timing
 
 
 def ensure_warehouse_attached(duck_conn: duckdb.DuckDBPyConnection):
@@ -1261,22 +1349,34 @@ def download_sync_metadata(
     duck_conn: duckdb.DuckDBPyConnection,
     schema: str,
     table: str,
-) -> Tuple[List[str], int]:
+    progress: Optional[SyncGlobalProgress] = None,
+) -> Tuple[List[str], int, dict]:
     """
     Download lightweight sync metadata from PostgreSQL into a temp DuckDB table.
     
     Downloads: primary key columns (if any) + _row_hash + _row_hash_at
     
-    Returns (pk_columns, row_count).
+    Returns (pk_columns, row_count, timing_info).
     """
-    import sys
     table_name = f"{schema}.{table}"
-    
-    print(f"    [download_sync_metadata] Starting for {table_name}", flush=True)
+    timing = {"total": 0.0, "get_pk": 0.0, "count_src": 0.0, "drop_temp": 0.0, "attach": 0.0, "download": 0.0, "count": 0.0}
+    total_start = time.time()
     
     # Get primary key columns
+    t0 = time.time()
     pk_columns = get_primary_key_columns(pg_conn, schema, table)
-    print(f"    [download_sync_metadata] PK columns: {pk_columns}", flush=True)
+    timing["get_pk"] = time.time() - t0
+    
+    # Count rows in source first for progress tracking
+    t0 = time.time()
+    with pg_conn.cursor() as cur:
+        cur.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}" WHERE _row_hash IS NOT NULL')
+        expected_rows = cur.fetchone()[0]
+    timing["count_src"] = time.time() - t0
+    
+    # Set download phase with expected row count
+    if progress:
+        progress.set_phase(table_name, "downloading", expected_rows)
     
     # Build column list for download
     if pk_columns:
@@ -1284,33 +1384,46 @@ def download_sync_metadata(
         select_cols = f"{pk_cols_quoted}, _row_hash, _row_hash_at"
     else:
         select_cols = "_row_hash, _row_hash_at"
-    print(f"    [download_sync_metadata] Select cols: {select_cols[:100]}...", flush=True)
     
     # Drop temp table if exists
-    print(f"    [download_sync_metadata] Dropping temp table...", flush=True)
+    t0 = time.time()
     duck_conn.execute("DROP TABLE IF EXISTS _sync_metadata")
+    timing["drop_temp"] = time.time() - t0
     
     # Ensure warehouse is attached
-    print(f"    [download_sync_metadata] Ensuring warehouse attached...", flush=True)
+    t0 = time.time()
     ensure_warehouse_attached(duck_conn)
+    timing["attach"] = time.time() - t0
     
     # Download metadata directly from PostgreSQL into DuckDB temp table
-    print(f"    [download_sync_metadata] Downloading metadata from PG...", flush=True)
-    start = time.time()
+    t0 = time.time()
     duck_conn.execute(f"""
         CREATE TEMP TABLE _sync_metadata AS
         SELECT {select_cols}
         FROM warehouse."{schema}"."{table}"
         WHERE _row_hash IS NOT NULL
     """)
-    elapsed = time.time() - start
-    print(f"    [download_sync_metadata] Download completed in {elapsed:.1f}s", flush=True)
+    timing["download"] = time.time() - t0
     
     # Get row count
+    t0 = time.time()
     row_count = duck_conn.execute("SELECT COUNT(*) FROM _sync_metadata").fetchone()[0]
-    print(f"    [download_sync_metadata] Downloaded {row_count:,} rows", flush=True)
+    timing["count"] = time.time() - t0
     
-    return pk_columns, row_count
+    # Update progress with actual downloaded rows
+    if progress:
+        progress.update_progress(table_name, row_count)
+    
+    timing["total"] = time.time() - total_start
+    
+    pk_info = f"PK={pk_columns}" if pk_columns else "no PK"
+    logger.info(
+        f"  [{table_name}] DOWNLOAD:\n"
+        f"    {row_count:,} rows, {pk_info}\n"
+        f"    download={timing['download']*1000:.0f}ms, total={timing['total']*1000:.0f}ms"
+    )
+    
+    return pk_columns, row_count, timing
 
 
 def compute_sync_diff(
@@ -1318,14 +1431,15 @@ def compute_sync_diff(
     schema: str,
     table: str,
     pk_columns: List[str],
-) -> dict:
+) -> Tuple[dict, dict]:
     """
     Compare _sync_metadata (from PostgreSQL) with DuckLake table.
     
     If PK columns exist, compares by PK (enables updates).
     Otherwise, compares by _row_hash only.
     
-    Returns dict with:
+    Returns (diff_info, timing_info).
+    diff_info contains:
     - src_count: rows in source
     - dst_count: rows in destination  
     - to_insert: count of rows to insert (PK/hash in source, not in dest)
@@ -1336,25 +1450,27 @@ def compute_sync_diff(
     - pk_columns: the PK columns used for comparison
     """
     table_name = f"{schema}.{table}"
-    print(f"    [compute_sync_diff] Starting for {table_name}", flush=True)
+    timing = {"total": 0.0, "src_count": 0.0, "dst_count": 0.0, "count_insert": 0.0, "count_update": 0.0, "count_delete": 0.0}
+    total_start = time.time()
     
     # Source count (from temp table)
-    print(f"    [compute_sync_diff] Counting source rows...", flush=True)
+    t0 = time.time()
     src_count = duck_conn.execute("SELECT COUNT(*) FROM _sync_metadata").fetchone()[0]
-    print(f"    [compute_sync_diff] Source: {src_count:,}", flush=True)
+    timing["src_count"] = time.time() - t0
     
     # Destination count
-    print(f"    [compute_sync_diff] Counting dest rows...", flush=True)
+    t0 = time.time()
     try:
         dst_count = duck_conn.execute(
             f'SELECT COUNT(*) FROM ducklake."{schema}"."{table}"'
         ).fetchone()[0]
     except:
         dst_count = 0
-    print(f"    [compute_sync_diff] Dest: {dst_count:,}", flush=True)
+    timing["dst_count"] = time.time() - t0
     
     if dst_count == 0:
-        print(f"    [compute_sync_diff] Dest empty, returning full insert", flush=True)
+        timing["total"] = time.time() - total_start
+        logger.info(f"  [{table_name}] DIFF: dest empty, full insert of {src_count:,} rows, total={timing['total']*1000:.0f}ms")
         return {
             "src_count": src_count,
             "dst_count": 0,
@@ -1364,16 +1480,14 @@ def compute_sync_diff(
             "in_sync": 0,
             "change_pct": 100.0,
             "pk_columns": pk_columns,
-        }
+        }, timing
     
     # Build join condition based on PK or hash
     if pk_columns:
         pk_join = " AND ".join([f'src."{c}" = dst."{c}"' for c in pk_columns])
-        print(f"    [compute_sync_diff] Using PK join: {pk_join[:80]}...", flush=True)
         
         # Count rows to INSERT (PK in source, not in dest)
-        print(f"    [compute_sync_diff] Counting rows to insert...", flush=True)
-        start = time.time()
+        t0 = time.time()
         to_insert = duck_conn.execute(f"""
             SELECT COUNT(*) FROM _sync_metadata src
             WHERE NOT EXISTS (
@@ -1381,21 +1495,19 @@ def compute_sync_diff(
                 WHERE {pk_join}
             )
         """).fetchone()[0]
-        print(f"    [compute_sync_diff] To insert: {to_insert:,} ({time.time()-start:.1f}s)", flush=True)
+        timing["count_insert"] = time.time() - t0
         
         # Count rows to UPDATE (PK in both, hash differs)
-        print(f"    [compute_sync_diff] Counting rows to update...", flush=True)
-        start = time.time()
+        t0 = time.time()
         to_update = duck_conn.execute(f"""
             SELECT COUNT(*) FROM _sync_metadata src
             INNER JOIN ducklake."{schema}"."{table}" dst ON {pk_join}
             WHERE src._row_hash != dst._row_hash
         """).fetchone()[0]
-        print(f"    [compute_sync_diff] To update: {to_update:,} ({time.time()-start:.1f}s)", flush=True)
+        timing["count_update"] = time.time() - t0
         
         # Count rows to DELETE (PK in dest, not in source)
-        print(f"    [compute_sync_diff] Counting rows to delete...", flush=True)
-        start = time.time()
+        t0 = time.time()
         to_delete = duck_conn.execute(f"""
             SELECT COUNT(*) FROM ducklake."{schema}"."{table}" dst
             WHERE NOT EXISTS (
@@ -1403,15 +1515,13 @@ def compute_sync_diff(
                 WHERE {pk_join}
             )
         """).fetchone()[0]
-        print(f"    [compute_sync_diff] To delete: {to_delete:,} ({time.time()-start:.1f}s)", flush=True)
+        timing["count_delete"] = time.time() - t0
         
     else:
         # Hash-only comparison (no updates possible)
-        print(f"    [compute_sync_diff] Using hash-only comparison (no PK)", flush=True)
         
         # Count rows to insert (hash in source, not in dest)
-        print(f"    [compute_sync_diff] Counting rows to insert...", flush=True)
-        start = time.time()
+        t0 = time.time()
         to_insert = duck_conn.execute(f"""
             SELECT COUNT(*) FROM _sync_metadata src
             WHERE NOT EXISTS (
@@ -1419,13 +1529,12 @@ def compute_sync_diff(
                 WHERE dst._row_hash = src._row_hash
             )
         """).fetchone()[0]
-        print(f"    [compute_sync_diff] To insert: {to_insert:,} ({time.time()-start:.1f}s)", flush=True)
+        timing["count_insert"] = time.time() - t0
         
         to_update = 0  # No updates without PK
         
         # Count rows to delete (hash in dest, not in source)
-        print(f"    [compute_sync_diff] Counting rows to delete...", flush=True)
-        start = time.time()
+        t0 = time.time()
         to_delete = duck_conn.execute(f"""
             SELECT COUNT(*) FROM ducklake."{schema}"."{table}" dst
             WHERE NOT EXISTS (
@@ -1433,7 +1542,7 @@ def compute_sync_diff(
                 WHERE src._row_hash = dst._row_hash
             )
         """).fetchone()[0]
-        print(f"    [compute_sync_diff] To delete: {to_delete:,} ({time.time()-start:.1f}s)", flush=True)
+        timing["count_delete"] = time.time() - t0
     
     # Rows in sync
     in_sync = src_count - to_insert - to_update
@@ -1442,7 +1551,16 @@ def compute_sync_diff(
     total_changes = to_insert + to_update + to_delete
     change_pct = (total_changes / max(src_count, 1)) * 100
     
-    print(f"    [compute_sync_diff] Done: insert={to_insert}, update={to_update}, delete={to_delete}, in_sync={in_sync:,}, change={change_pct:.1f}%", flush=True)
+    timing["total"] = time.time() - total_start
+    
+    compare_type = "PK" if pk_columns else "hash"
+    logger.info(
+        f"  [{table_name}] DIFF ({compare_type}):\n"
+        f"    src={src_count:,}, dst={dst_count:,}\n"
+        f"    insert={to_insert:,}, update={to_update:,}, delete={to_delete:,}, change={change_pct:.1f}%\n"
+        f"    times: ins={timing['count_insert']*1000:.0f}ms, upd={timing['count_update']*1000:.0f}ms, "
+        f"del={timing['count_delete']*1000:.0f}ms, total={timing['total']*1000:.0f}ms"
+    )
     
     return {
         "src_count": src_count,
@@ -1453,7 +1571,7 @@ def compute_sync_diff(
         "in_sync": in_sync,
         "change_pct": change_pct,
         "pk_columns": pk_columns,
-    }
+    }, timing
 
 
 def sync_table_incremental(
@@ -1463,7 +1581,8 @@ def sync_table_incremental(
     table: str,
     column_names: List[str],
     full_resync_threshold: float = 80.0,
-) -> Tuple[int, int, int, bool]:
+    progress: Optional[SyncGlobalProgress] = None,
+) -> Tuple[int, int, int, bool, dict]:
     """
     Incrementally sync a table from PostgreSQL to DuckLake.
     
@@ -1473,36 +1592,70 @@ def sync_table_incremental(
     3. If change % > threshold, do full resync
     4. Otherwise, sync just the changes using UPDATE for changed rows (if PK exists)
     
-    Returns (rows_deleted, rows_updated, rows_inserted, was_full_resync).
+    Returns (rows_deleted, rows_updated, rows_inserted, was_full_resync, timing_info).
     """
     table_name = f"{schema}.{table}"
+    timing = {
+        "total": 0.0,
+        "download_metadata": 0.0,
+        "compute_diff": 0.0,
+        "clear_dest": 0.0,
+        "bulk_load": 0.0,
+        "dedup_check": 0.0,
+        "dedup_delete": 0.0,
+        "delete_op": 0.0,
+        "update_op": 0.0,
+        "insert_op": 0.0,
+        "cleanup": 0.0,
+    }
+    total_start = time.time()
     
-    # Step 1: Download metadata
-    pk_columns, src_count = download_sync_metadata(pg_conn, duck_conn, schema, table)
+    # Step 1: Download metadata (includes progress tracking)
+    t0 = time.time()
+    pk_columns, src_count, download_timing = download_sync_metadata(pg_conn, duck_conn, schema, table, progress=progress)
+    timing["download_metadata"] = time.time() - t0
     
     # Step 2: Compute diff (PK-aware)
-    diff = compute_sync_diff(duck_conn, schema, table, pk_columns)
-    
-    print(f"  {table_name}: src={diff['src_count']:,}, dst={diff['dst_count']:,}", flush=True)
-    print(f"  {table_name}: insert={diff['to_insert']:,}, update={diff['to_update']:,}, "
-          f"delete={diff['to_delete']:,}, change={diff['change_pct']:.1f}%", flush=True)
+    if progress:
+        progress.set_phase(table_name, "diffing", src_count)
+    t0 = time.time()
+    diff, diff_timing = compute_sync_diff(duck_conn, schema, table, pk_columns)
+    timing["compute_diff"] = time.time() - t0
     
     # Step 3: Decide full vs incremental sync
     if diff['dst_count'] == 0 or diff['change_pct'] >= full_resync_threshold:
         # Full resync
-        print(f"  → Full resync (change_pct={diff['change_pct']:.1f}% >= {full_resync_threshold}%)", flush=True)
+        logger.info(f"  [{table_name}] FULL RESYNC: change_pct={diff['change_pct']:.1f}% >= {full_resync_threshold}%")
         
         # Clear destination
+        t0 = time.time()
         if diff['dst_count'] > 0:
+            if progress:
+                progress.set_phase(table_name, "clearing", diff['dst_count'])
             duck_conn.execute(f'DELETE FROM ducklake."{schema}"."{table}"')
+        timing["clear_dest"] = time.time() - t0
         
         # Bulk load
-        rows_inserted = bulk_load_table(pg_conn, duck_conn, schema, table, column_names)
+        t0 = time.time()
+        rows_inserted, bulk_timing = bulk_load_table(pg_conn, duck_conn, schema, table, column_names, progress=progress)
+        timing["bulk_load"] = time.time() - t0
         
         # Cleanup temp table
+        t0 = time.time()
         duck_conn.execute("DROP TABLE IF EXISTS _sync_metadata")
+        timing["cleanup"] = time.time() - t0
         
-        return diff['dst_count'], 0, rows_inserted, True
+        timing["total"] = time.time() - total_start
+        
+        logger.info(
+            f"  [{table_name}] SYNC COMPLETE (full):\n"
+            f"    {rows_inserted:,} rows loaded\n"
+            f"    times: download={timing['download_metadata']*1000:.0f}ms, diff={timing['compute_diff']*1000:.0f}ms, "
+            f"clear={timing['clear_dest']*1000:.0f}ms, load={timing['bulk_load']*1000:.0f}ms\n"
+            f"    TOTAL={timing['total']:.1f}s"
+        )
+        
+        return diff['dst_count'], 0, rows_inserted, True, timing
     
     # Step 3.5: Clean up duplicate PKs in destination (if PK exists)
     dups_removed = 0
@@ -1510,6 +1663,7 @@ def sync_table_incremental(
         pk_cols_quoted = ", ".join([f'"{c}"' for c in pk_columns])
         
         # Count PKs with duplicates
+        t0 = time.time()
         dup_count = duck_conn.execute(f"""
             SELECT COUNT(*) FROM (
                 SELECT {pk_cols_quoted}
@@ -1518,12 +1672,14 @@ def sync_table_incremental(
                 HAVING COUNT(*) > 1
             ) sub
         """).fetchone()[0]
+        timing["dedup_check"] = time.time() - t0
         
         if dup_count > 0:
-            print(f"  → Cleaning up {dup_count} duplicate PKs (keeping 1 each)...", flush=True)
+            logger.info(f"  [{table_name}] DEDUP: cleaning up {dup_count} duplicate PKs...")
             
             # Delete all but one row per PK using rowid
             # DuckLake uses rowid internally - find duplicates and delete extras
+            t0 = time.time()
             duck_conn.execute(f"""
                 DELETE FROM ducklake."{schema}"."{table}"
                 WHERE rowid IN (
@@ -1535,9 +1691,10 @@ def sync_table_incremental(
                     WHERE rn > 1
                 )
             """)
+            timing["dedup_delete"] = time.time() - t0
             
             dups_removed = dup_count
-            print(f"  → Cleaned up {dups_removed} duplicate PKs", flush=True)
+            logger.info(f"  [{table_name}] DEDUP: cleaned {dups_removed} duplicates in {timing['dedup_delete']*1000:.0f}ms")
     
     # Step 4: Incremental sync
     rows_deleted = 0
@@ -1559,7 +1716,9 @@ def sync_table_incremental(
         
         # DELETE rows where PK is in dest but not in source
         if diff['to_delete'] > 0:
-            print(f"  → Deleting {diff['to_delete']:,} rows (by PK)...", flush=True)
+            if progress:
+                progress.set_phase(table_name, "deleting", diff['to_delete'])
+            t0 = time.time()
             pk_join_del = " AND ".join([f'dst."{c}" = meta."{c}"' for c in pk_columns])
             duck_conn.execute(f"""
                 DELETE FROM ducklake."{schema}"."{table}" dst
@@ -1568,11 +1727,20 @@ def sync_table_incremental(
                     WHERE {pk_join_del}
                 )
             """)
+            timing["delete_op"] = time.time() - t0
             rows_deleted = diff['to_delete']
+            if progress:
+                progress.update_progress(table_name, rows_deleted)
+            logger.info(
+                f"  [{table_name}] DELETE (PK): {rows_deleted:,} rows in {timing['delete_op']*1000:.0f}ms "
+                f"({rows_deleted/(timing['delete_op']+0.001):.0f} rows/sec)"
+            )
         
         # UPDATE rows where PK is in both but hash differs
         if diff['to_update'] > 0:
-            print(f"  → Updating {diff['to_update']:,} rows (by PK)...", flush=True)
+            if progress:
+                progress.set_phase(table_name, "updating", diff['to_update'])
+            t0 = time.time()
             
             # Build SET clause for all columns
             set_clause = ", ".join([f'"{c}" = src."{c}"' for c in column_names])
@@ -1589,11 +1757,20 @@ def sync_table_incremental(
                     WHERE {pk_join_meta}
                 )
             """)
+            timing["update_op"] = time.time() - t0
             rows_updated = diff['to_update']
+            if progress:
+                progress.update_progress(table_name, rows_updated)
+            logger.info(
+                f"  [{table_name}] UPDATE (PK): {rows_updated:,} rows in {timing['update_op']*1000:.0f}ms "
+                f"({rows_updated/(timing['update_op']+0.001):.0f} rows/sec)"
+            )
         
         # INSERT rows where PK is in source but not in dest
         if diff['to_insert'] > 0:
-            print(f"  → Inserting {diff['to_insert']:,} rows (by PK)...", flush=True)
+            if progress:
+                progress.set_phase(table_name, "inserting", diff['to_insert'])
+            t0 = time.time()
             
             duck_conn.execute(f"""
                 INSERT INTO ducklake."{schema}"."{table}" ({cols_with_hash})
@@ -1609,14 +1786,23 @@ def sync_table_incremental(
                     WHERE {pk_join_dst}
                 )
             """)
+            timing["insert_op"] = time.time() - t0
             rows_inserted = diff['to_insert']
+            if progress:
+                progress.update_progress(table_name, rows_inserted)
+            logger.info(
+                f"  [{table_name}] INSERT (PK): {rows_inserted:,} rows in {timing['insert_op']*1000:.0f}ms "
+                f"({rows_inserted/(timing['insert_op']+0.001):.0f} rows/sec)"
+            )
     
     else:
         # Hash-only sync: DELETE and INSERT (no updates)
         
         # Delete rows not in source
         if diff['to_delete'] > 0:
-            print(f"  → Deleting {diff['to_delete']:,} rows (by hash)...", flush=True)
+            if progress:
+                progress.set_phase(table_name, "deleting", diff['to_delete'])
+            t0 = time.time()
             duck_conn.execute(f"""
                 DELETE FROM ducklake."{schema}"."{table}" dst
                 WHERE NOT EXISTS (
@@ -1624,11 +1810,20 @@ def sync_table_incremental(
                     WHERE src._row_hash = dst._row_hash
                 )
             """)
+            timing["delete_op"] = time.time() - t0
             rows_deleted = diff['to_delete']
+            if progress:
+                progress.update_progress(table_name, rows_deleted)
+            logger.info(
+                f"  [{table_name}] DELETE (hash): {rows_deleted:,} rows in {timing['delete_op']*1000:.0f}ms "
+                f"({rows_deleted/(timing['delete_op']+0.001):.0f} rows/sec)"
+            )
         
         # Insert new rows
         if diff['to_insert'] > 0:
-            print(f"  → Inserting {diff['to_insert']:,} rows (by hash)...", flush=True)
+            if progress:
+                progress.set_phase(table_name, "inserting", diff['to_insert'])
+            t0 = time.time()
             
             # Insert with deduplication
             duck_conn.execute(f"""
@@ -1650,12 +1845,41 @@ def sync_table_incremental(
                 ) sub
                 WHERE rn = 1
             """)
+            timing["insert_op"] = time.time() - t0
             rows_inserted = diff['to_insert']
+            if progress:
+                progress.update_progress(table_name, rows_inserted)
+            logger.info(
+                f"  [{table_name}] INSERT (hash): {rows_inserted:,} rows in {timing['insert_op']*1000:.0f}ms "
+                f"({rows_inserted/(timing['insert_op']+0.001):.0f} rows/sec)"
+            )
     
     # Cleanup temp table
+    t0 = time.time()
     duck_conn.execute("DROP TABLE IF EXISTS _sync_metadata")
+    timing["cleanup"] = time.time() - t0
     
-    return rows_deleted, rows_updated, rows_inserted, False
+    timing["total"] = time.time() - total_start
+    
+    # Summary line
+    ops_summary = []
+    if rows_deleted > 0:
+        ops_summary.append(f"del={rows_deleted:,}")
+    if rows_updated > 0:
+        ops_summary.append(f"upd={rows_updated:,}")
+    if rows_inserted > 0:
+        ops_summary.append(f"ins={rows_inserted:,}")
+    ops_str = ", ".join(ops_summary) if ops_summary else "no changes"
+    
+    logger.info(
+        f"  [{table_name}] SYNC COMPLETE (incr):\n"
+        f"    {ops_str}\n"
+        f"    times: download={timing['download_metadata']*1000:.0f}ms, diff={timing['compute_diff']*1000:.0f}ms, "
+        f"del={timing['delete_op']*1000:.0f}ms, upd={timing['update_op']*1000:.0f}ms, ins={timing['insert_op']*1000:.0f}ms\n"
+        f"    TOTAL={timing['total']:.1f}s"
+    )
+    
+    return rows_deleted, rows_updated, rows_inserted, False, timing
 
 
 def bulk_load_table(
@@ -1665,23 +1889,32 @@ def bulk_load_table(
     table: str,
     column_names: List[str],
     batch_size: int = 10000,  # Not used anymore, kept for API compatibility
-) -> int:
+    progress: Optional[SyncGlobalProgress] = None,
+) -> Tuple[int, dict]:
     """
     Bulk load all rows from PostgreSQL to DuckLake using DuckDB's native PostgreSQL integration.
     Much faster than row-by-row inserts.
     
-    Returns total rows inserted.
+    Returns (total_rows_inserted, timing_info).
     """
+    table_name = f"{schema}.{table}"
+    timing = {"total": 0.0, "count_src": 0.0, "attach": 0.0, "insert": 0.0, "verify": 0.0}
+    total_start = time.time()
+    
     cols_quoted = ", ".join([f'"{c}"' for c in column_names])
     cols_with_hash = cols_quoted + ", _row_hash"
     
     # Count total rows for progress
+    t0 = time.time()
     with pg_conn.cursor() as cur:
         cur.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}" WHERE _row_hash IS NOT NULL')
         total_rows = cur.fetchone()[0]
+    timing["count_src"] = time.time() - t0
     
     if total_rows == 0:
-        return 0
+        timing["total"] = time.time() - total_start
+        logger.info(f"  [{table_name}] BULK LOAD: 0 rows (empty source)")
+        return 0, timing
     
     # Get warehouse connection string
     warehouse_url = os.environ.get("WAREHOUSE_COOLIFY_URL")
@@ -1690,13 +1923,20 @@ def bulk_load_table(
     warehouse_url = warehouse_url.replace('\n', '').replace('\r', '').strip()
     
     # Check if warehouse is already attached
+    t0 = time.time()
     try:
         duck_conn.execute("SELECT 1 FROM warehouse.information_schema.tables LIMIT 1")
     except:
         # Attach PostgreSQL warehouse directly to DuckDB for fast bulk loading
         duck_conn.execute(f"ATTACH '{warehouse_url}' AS warehouse (TYPE postgres, READ_ONLY)")
+    timing["attach"] = time.time() - t0
+    
+    # Set phase for progress tracking
+    if progress:
+        progress.set_phase(table_name, "loading", total_rows)
     
     # Bulk insert directly from PostgreSQL - much faster than row-by-row
+    t0 = time.time()
     insert_sql = f"""
         INSERT INTO ducklake."{schema}"."{table}" ({cols_with_hash})
         SELECT {cols_with_hash} 
@@ -1705,10 +1945,28 @@ def bulk_load_table(
     """
     
     duck_conn.execute(insert_sql)
+    timing["insert"] = time.time() - t0
     
     # Verify count
+    t0 = time.time()
     result = duck_conn.execute(f'SELECT COUNT(*) FROM ducklake."{schema}"."{table}"').fetchone()
-    return result[0] if result else 0
+    rows_inserted = result[0] if result else 0
+    timing["verify"] = time.time() - t0
+    
+    # Mark progress as complete
+    if progress:
+        progress.update_progress(table_name, rows_inserted)
+    
+    timing["total"] = time.time() - total_start
+    
+    rows_per_sec = rows_inserted / (timing["insert"] + 0.001)
+    logger.info(
+        f"  [{table_name}] BULK LOAD:\n"
+        f"    {rows_inserted:,} rows in {timing['insert']*1000:.0f}ms ({rows_per_sec:.0f} rows/sec)\n"
+        f"    verify={timing['verify']*1000:.0f}ms, total={timing['total']:.1f}s"
+    )
+    
+    return rows_inserted, timing
 
 
 def sync_table(
@@ -1729,6 +1987,8 @@ def sync_table(
     4. Otherwise, sync just the changes (delete stale, insert new)
     """
     table_name = f"{schema}.{table}"
+    table_start = time.time()
+    
     stats = {
         "schema": schema,
         "table": table,
@@ -1737,9 +1997,14 @@ def sync_table(
         "error": None,
         "created": False,
         "full_resync": False,
+        "timing": {},
     }
     
     try:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"[Worker {worker_id}] STARTING: {table_name}")
+        logger.info(f"{'='*60}")
+        
         # Update progress: starting
         progress.update_table(
             table_name,
@@ -1749,38 +2014,53 @@ def sync_table(
         )
         
         # Sync schema (create table or add new columns)
-        stats["created"] = sync_table_schema(pg_conn, duck_conn, schema, table)
+        t0 = time.time()
+        was_created, schema_timing = sync_table_schema(pg_conn, duck_conn, schema, table)
+        stats["created"] = was_created
+        stats["timing"]["schema"] = time.time() - t0
         
         # Get column names for data sync
+        t0 = time.time()
         columns = get_table_columns_pg(pg_conn, schema, table)
         column_names = [col[0] for col in columns]
+        stats["timing"]["get_columns"] = time.time() - t0
         
         # Smart incremental sync with metadata comparison
-        rows_deleted, rows_updated, rows_inserted, was_full_resync = sync_table_incremental(
-            pg_conn, duck_conn, schema, table, column_names
+        rows_deleted, rows_updated, rows_inserted, was_full_resync, sync_timing = sync_table_incremental(
+            pg_conn, duck_conn, schema, table, column_names, progress=progress
         )
         
         stats["rows_deleted"] = rows_deleted
         stats["rows_updated"] = rows_updated
         stats["rows_inserted"] = rows_inserted
         stats["full_resync"] = was_full_resync
+        stats["timing"]["sync"] = sync_timing
+        
+        table_total = time.time() - table_start
+        stats["timing"]["total"] = table_total
         
         if rows_deleted == 0 and rows_updated == 0 and rows_inserted == 0:
             # Table is already in sync
             progress.mark_skipped(table_name)
             stats["skipped"] = True
+            logger.info(f"[Worker {worker_id}] DONE: {table_name} - already in sync ({table_total:.1f}s total)")
         else:
             progress.mark_completed(
                 table_name,
                 rows_deleted=rows_deleted,
                 rows_inserted=rows_inserted,
             )
+            sync_type = "FULL" if was_full_resync else "INCREMENTAL"
+            logger.info(f"[Worker {worker_id}] DONE: {table_name} - {sync_type} sync complete ({table_total:.1f}s total)")
+        
+        logger.info(f"{'='*60}\n")
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"[Worker {worker_id}] ERROR: {table_name}")
         stats["error"] = str(e)
+        stats["timing"]["total"] = time.time() - table_start
         progress.mark_completed(table_name, 0, 0, error=str(e))
+        logger.info(f"{'='*60}\n")
     
     return stats
 
@@ -1865,8 +2145,7 @@ def sync_progress_monitor(progress: SyncGlobalProgress, log):
             f"{snapshot['error_count']} errors"
         )
         lines.append(
-            f"Changes: {snapshot['total_partitions_changed']:,} partitions | "
-            f"{snapshot['total_rows_deleted']:,} deleted | "
+            f"Rows: {snapshot['total_rows_deleted']:,} deleted | "
             f"{snapshot['total_rows_inserted']:,} inserted"
         )
         
@@ -1880,11 +2159,29 @@ def sync_progress_monitor(progress: SyncGlobalProgress, log):
             lines.append("")
             lines.append("Currently running:")
             for r in sorted(snapshot['running'], key=lambda x: x['worker_id']):
+                elapsed_str = f"{r['elapsed']:.0f}s" if r['elapsed'] < 60 else f"{r['elapsed']/60:.1f}m"
+                
+                # Build progress info
+                phase = r.get('phase', '')
+                current = r.get('current_rows', 0)
+                total = r.get('total_rows', 0)
+                rps = r.get('rows_per_second', 0)
+                eta = r.get('eta_seconds')
+                pct = r.get('progress_pct', 0)
+                
+                if total > 0:
+                    # Show detailed progress
+                    eta_str = format_duration(eta) if eta and eta > 0 else "..."
+                    progress_str = f"{current:,}/{total:,} ({pct:.0f}%) │ {rps:,.0f}/s │ ETA: {eta_str}"
+                else:
+                    # Show phase only
+                    progress_str = f"{phase}" if phase else "starting..."
+                
                 lines.append(
-                    f"  Worker {r['worker_id']:2d} │ {r['name'][:40]:<40} │ "
-                    f"{r['status']:<12} │ "
-                    f"partitions: {r['partitions_synced']}/{r['partitions_changed']} │ "
-                    f"del: {r['rows_deleted']:,} ins: {r['rows_inserted']:,}"
+                    f"  Worker {r['worker_id']:2d} │ {r['name'][:35]:<35} │ {elapsed_str:>6}"
+                )
+                lines.append(
+                    f"             │ {progress_str}"
                 )
         
         lines.append("=" * 80)
@@ -1959,6 +2256,23 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
         num_workers = get_postgres_worker_count(pg_conn)
     finally:
         pg_conn.close()
+    
+    # Pre-create all unique schemas to avoid transaction conflicts between workers
+    unique_schemas = sorted(set(schema for schema, _ in tables))
+    if unique_schemas:
+        log.info(f"Pre-creating {len(unique_schemas)} schemas: {', '.join(unique_schemas)}")
+        duck_conn = get_ducklake_connection()
+        try:
+            for schema in unique_schemas:
+                try:
+                    duck_conn.execute(f'CREATE SCHEMA IF NOT EXISTS ducklake."{schema}"')
+                    log.info(f"  ✓ Schema: {schema}")
+                except Exception as e:
+                    # Schema might already exist from a previous run
+                    log.warning(f"  Schema {schema}: {str(e)[:50]}")
+        finally:
+            duck_conn.close()
+        log.info("")
     
     # Initialize progress tracker
     progress = SyncGlobalProgress(
