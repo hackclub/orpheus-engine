@@ -1060,6 +1060,25 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     
     conn = duckdb.connect()
     
+    # Configure memory management - spill to disk when memory is full
+    # Use /var/tmp (on disk) not /tmp (often ramdisk)
+    conn.execute("SET temp_directory = '/var/tmp/duckdb_spill'")
+    
+    # Auto-calculate memory limit: (system RAM × 70%) ÷ expected workers
+    # This prevents N workers from each trying to use 80% of RAM
+    try:
+        total_ram_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+        total_ram_gb = total_ram_bytes / (1024 ** 3)
+        # Assume max workers = max_parallel_workers × WORKER_FRACTION
+        # Use conservative estimate of 50 workers if we can't determine
+        estimated_workers = max(int(100 * WORKER_FRACTION), 1)
+        per_worker_gb = (total_ram_gb * 0.7) / estimated_workers
+        per_worker_gb = max(per_worker_gb, 0.5)  # At least 512MB
+        conn.execute(f"SET memory_limit = '{per_worker_gb:.1f}GB'")
+    except (ValueError, OSError):
+        # Fallback if sysconf unavailable (e.g., non-Linux)
+        conn.execute("SET memory_limit = '2GB'")
+    
     # Load required extensions (install only if not already installed)
     for ext in ["ducklake", "postgres", "httpfs"]:
         try:
