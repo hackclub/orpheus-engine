@@ -1031,12 +1031,19 @@ def escape_sql_string(s: str) -> str:
     return s.replace("'", "''")
 
 
+# Track temp directories for each DuckDB connection (keyed by id(conn))
+_ducklake_temp_dirs: Dict[int, str] = {}
+_ducklake_temp_dirs_lock = threading.Lock()
+
+
 def cleanup_ducklake_connection(conn: duckdb.DuckDBPyConnection):
     """
     Clean up a DuckLake connection and its temp directory.
     Call this instead of conn.close() to ensure temp files are removed.
     """
-    temp_dir = getattr(conn, '_temp_directory', None)
+    conn_id = id(conn)
+    with _ducklake_temp_dirs_lock:
+        temp_dir = _ducklake_temp_dirs.pop(conn_id, None)
     try:
         conn.close()
     finally:
@@ -1087,7 +1094,9 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     temp_dir = f"/var/tmp/duckdb_spill_{uuid.uuid4().hex}"
     os.makedirs(temp_dir, exist_ok=True)
     conn.execute(f"SET temp_directory = '{temp_dir}'")
-    conn._temp_directory = temp_dir  # Store for cleanup
+    # Track temp directory for cleanup (can't set attributes on DuckDB connection objects)
+    with _ducklake_temp_dirs_lock:
+        _ducklake_temp_dirs[id(conn)] = temp_dir
     
     # Auto-calculate memory limit: (system RAM × 70%) ÷ expected workers
     # This prevents N workers from each trying to use 80% of RAM
