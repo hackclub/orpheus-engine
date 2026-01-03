@@ -1054,7 +1054,7 @@ def cleanup_ducklake_connection(conn: duckdb.DuckDBPyConnection):
                 pass  # Best effort cleanup
 
 
-def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
+def get_ducklake_connection(num_workers: int = 1) -> duckdb.DuckDBPyConnection:
     """
     Get a connection to DuckLake via DuckDB.
     
@@ -1066,6 +1066,10 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     
     Each connection gets its own temp directory to avoid conflicts between workers.
     Use cleanup_ducklake_connection() instead of conn.close() to clean up temp files.
+    
+    Args:
+        num_workers: Number of concurrent workers sharing system RAM. Used to calculate
+                     per-connection memory limit. Default is 1 (single connection gets full allocation).
     
     Environment variables:
     - DUCKLAKE_S3_URL: Full S3 endpoint URL (e.g., https://xxx.r2.cloudflarestorage.com)
@@ -1098,20 +1102,21 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     with _ducklake_temp_dirs_lock:
         _ducklake_temp_dirs[id(conn)] = temp_dir
     
-    # Auto-calculate memory limit: (system RAM × 70%) ÷ expected workers
+    # Auto-calculate memory limit: (system RAM × 70%) ÷ num_workers
     # This prevents N workers from each trying to use 80% of RAM
     try:
         total_ram_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
         total_ram_gb = total_ram_bytes / (1024 ** 3)
-        # Assume max workers = max_parallel_workers × WORKER_FRACTION
-        # Use conservative estimate of 50 workers if we can't determine
-        estimated_workers = max(int(100 * WORKER_FRACTION), 1)
-        per_worker_gb = (total_ram_gb * 0.7) / estimated_workers
+        per_worker_gb = (total_ram_gb * 0.7) / max(num_workers, 1)
         per_worker_gb = max(per_worker_gb, 0.5)  # At least 512MB
         conn.execute(f"SET memory_limit = '{per_worker_gb:.1f}GB'")
     except (ValueError, OSError):
         # Fallback if sysconf unavailable (e.g., non-Linux)
         conn.execute("SET memory_limit = '2GB'")
+    
+    # Disable insertion order preservation to reduce memory usage for bulk inserts
+    # Row order is irrelevant for analytics - queries should use ORDER BY explicitly
+    conn.execute("SET preserve_insertion_order = false")
     
     # Load required extensions (install only if not already installed)
     for ext in ["ducklake", "postgres", "httpfs"]:
@@ -2358,6 +2363,7 @@ def sync_worker_loop(
     progress: SyncGlobalProgress,
     results: list,
     results_lock: threading.Lock,
+    num_workers: int,
 ):
     """
     Worker loop for syncing tables to DuckLake.
@@ -2368,7 +2374,7 @@ def sync_worker_loop(
     
     try:
         pg_conn = get_warehouse_connection()
-        duck_conn = get_ducklake_connection()
+        duck_conn = get_ducklake_connection(num_workers=num_workers)
         
         # Register connection so it can be interrupted on termination
         progress.register_duck_connection(worker_id, duck_conn)
@@ -2633,7 +2639,7 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
         for worker_id in range(num_workers):
             t = threading.Thread(
                 target=sync_worker_loop,
-                args=(worker_id, table_queue, progress, results, results_lock),
+                args=(worker_id, table_queue, progress, results, results_lock, num_workers),
             )
             t.start()
             workers.append(t)
