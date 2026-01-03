@@ -57,6 +57,9 @@ PROGRESS_UPDATE_INTERVAL = 5.0
 # Batch size for row hash updates
 BATCH_SIZE = 100_000
 
+# Fraction of Postgres max_parallel_workers to use (0.0-1.0)
+WORKER_FRACTION = 0.5
+
 
 @dataclass
 class TableProgress:
@@ -217,19 +220,15 @@ def get_warehouse_connection():
 
 
 def get_postgres_worker_count(conn) -> int:
-    """Get the number of parallel workers available in Postgres."""
+    """Get the number of parallel workers to use based on Postgres settings.
+    
+    Uses WORKER_FRACTION of max_parallel_workers (minimum 1 worker).
+    """
     with conn.cursor() as cur:
-        # Get max_parallel_workers setting
         cur.execute("SHOW max_parallel_workers")
         max_workers = int(cur.fetchone()[0])
         
-        # Also check max_parallel_workers_per_gather for reference
-        cur.execute("SHOW max_parallel_workers_per_gather")
-        per_gather = int(cur.fetchone()[0])
-        
-        # Use the smaller of max_parallel_workers or a reasonable cap
-        # We don't want to overwhelm the database
-        worker_count = min(max_workers, 8)  # Cap at 8 workers
+        worker_count = int(max_workers * WORKER_FRACTION)
         return max(worker_count, 1)  # At least 1 worker
 
 
@@ -594,7 +593,7 @@ def _warehouse_row_hashes_impl(context: dg.AssetExecutionContext) -> dg.Output[N
         
         # Get number of workers
         num_workers = get_postgres_worker_count(conn)
-        log.info(f"✓ Using {num_workers} parallel workers (based on Postgres max_parallel_workers)")
+        log.info(f"✓ Using {num_workers} parallel workers ({WORKER_FRACTION:.0%} of Postgres max_parallel_workers)")
         
         # Get all tables
         tables = get_all_tables(conn)
@@ -2572,7 +2571,7 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
         )
         monitor_thread.start()
         
-        log.info(f"Starting {num_workers} sync workers...")
+        log.info(f"Starting {num_workers} sync workers ({WORKER_FRACTION:.0%} of Postgres max_parallel_workers)...")
         log.info("Progress updates every 5 seconds...")
         log.info("")
         
