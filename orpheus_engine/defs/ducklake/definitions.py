@@ -2254,6 +2254,27 @@ def sync_table(
         logger.info(f"[Worker {worker_id}] STARTING: {table_name}")
         logger.info(f"{'='*60}")
         
+        # Check if table has _row_hash column (required for sync)
+        with pg_conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s AND column_name = '_row_hash'
+            """, (schema, table))
+            has_row_hash = cur.fetchone() is not None
+        
+        if not has_row_hash:
+            logger.warning(f"")
+            logger.warning(f"{'!'*60}")
+            logger.warning(f"[Worker {worker_id}] SKIPPING: {table_name}")
+            logger.warning(f"  Table does not have _row_hash column!")
+            logger.warning(f"  Run warehouse_row_hashes asset first to add _row_hash to all tables.")
+            logger.warning(f"{'!'*60}")
+            logger.warning(f"")
+            stats["error"] = "Missing _row_hash column"
+            stats["skipped"] = True
+            progress.mark_skipped(table_name)
+            return stats
+        
         # Update progress: starting
         progress.update_table(
             table_name,
@@ -2352,6 +2373,11 @@ def sync_table(
         stats["timing"]["total"] = time.time() - table_start
         progress.mark_completed(table_name, 0, 0, error=str(e))
         logger.info(f"{'='*60}\n")
+        # Reset PostgreSQL connection state after error to allow subsequent queries
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
     
     return stats
 
