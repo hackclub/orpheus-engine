@@ -13,6 +13,8 @@ Processing is parallelized across multiple workers based on Postgres max_paralle
 import os
 import re
 import time
+import uuid
+import shutil
 import signal
 import logging
 import threading
@@ -1029,6 +1031,22 @@ def escape_sql_string(s: str) -> str:
     return s.replace("'", "''")
 
 
+def cleanup_ducklake_connection(conn: duckdb.DuckDBPyConnection):
+    """
+    Clean up a DuckLake connection and its temp directory.
+    Call this instead of conn.close() to ensure temp files are removed.
+    """
+    temp_dir = getattr(conn, '_temp_directory', None)
+    try:
+        conn.close()
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except OSError:
+                pass  # Best effort cleanup
+
+
 def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     """
     Get a connection to DuckLake via DuckDB.
@@ -1038,6 +1056,9 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     - PostgreSQL extension (for catalog)
     - S3 credentials from environment
     - PostgreSQL catalog with S3 data storage
+    
+    Each connection gets its own temp directory to avoid conflicts between workers.
+    Use cleanup_ducklake_connection() instead of conn.close() to clean up temp files.
     
     Environment variables:
     - DUCKLAKE_S3_URL: Full S3 endpoint URL (e.g., https://xxx.r2.cloudflarestorage.com)
@@ -1062,7 +1083,11 @@ def get_ducklake_connection() -> duckdb.DuckDBPyConnection:
     
     # Configure memory management - spill to disk when memory is full
     # Use /var/tmp (on disk) not /tmp (often ramdisk)
-    conn.execute("SET temp_directory = '/var/tmp/duckdb_spill'")
+    # Each connection gets a unique temp directory to avoid conflicts between workers
+    temp_dir = f"/var/tmp/duckdb_spill_{uuid.uuid4().hex}"
+    os.makedirs(temp_dir, exist_ok=True)
+    conn.execute(f"SET temp_directory = '{temp_dir}'")
+    conn._temp_directory = temp_dir  # Store for cleanup
     
     # Auto-calculate memory limit: (system RAM × 70%) ÷ expected workers
     # This prevents N workers from each trying to use 80% of RAM
@@ -2364,7 +2389,7 @@ def sync_worker_loop(
         if pg_conn:
             pg_conn.close()
         if duck_conn:
-            duck_conn.close()
+            cleanup_ducklake_connection(duck_conn)
 
 
 def sync_progress_monitor(progress: SyncGlobalProgress, log):
@@ -2498,7 +2523,7 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
         duck_conn.execute("SELECT 1")
         log.info("✓ DuckLake connection verified")
     finally:
-        duck_conn.close()
+        cleanup_ducklake_connection(duck_conn)
     
     log.info("")
     
@@ -2536,7 +2561,7 @@ def _ducklake_sync_impl(context: dg.AssetExecutionContext) -> dg.Output[None]:
                     # Schema might already exist from a previous run
                     log.warning(f"  Schema {schema}: {str(e)[:50]}")
         finally:
-            duck_conn.close()
+            cleanup_ducklake_connection(duck_conn)
         log.info("")
     
     # Initialize progress tracker
