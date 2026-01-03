@@ -1781,7 +1781,7 @@ def sync_table_incremental(
     column_names: List[str],
     full_resync_threshold: float = 80.0,
     progress: Optional[SyncGlobalProgress] = None,
-) -> Tuple[int, int, int, bool, dict]:
+) -> Tuple[int, int, int, bool, dict, bool]:
     """
     Incrementally sync a table from PostgreSQL to DuckLake.
     
@@ -1791,7 +1791,9 @@ def sync_table_incremental(
     3. If change % > threshold, do full resync
     4. Otherwise, sync just the changes using UPDATE for changed rows (if PK exists)
     
-    Returns (rows_deleted, rows_updated, rows_inserted, was_full_resync, timing_info).
+    Returns (rows_deleted, rows_updated, rows_inserted, was_full_resync, timing_info, was_skipped).
+    
+    was_skipped is True if the table was skipped because _row_hash hasn't been computed yet.
     
     Raises TerminatedException if sync is cancelled.
     """
@@ -1816,6 +1818,24 @@ def sync_table_incremental(
     t0 = time.time()
     pk_columns, src_count, download_timing = download_sync_metadata(pg_conn, duck_conn, schema, table, progress=progress)
     timing["download_metadata"] = time.time() - t0
+    
+    # Step 1.5: Check if table has rows but no hashes computed yet
+    # If so, skip the table - it will be picked up on a future run after warehouse_row_hashes runs
+    if src_count == 0:
+        with pg_conn.cursor() as cur:
+            cur.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}"')
+            total_rows = cur.fetchone()[0]
+        
+        if total_rows > 0:
+            logger.info(
+                f"  [{table_name}] SKIPPING: table has {total_rows:,} rows but 0 have _row_hash computed.\n"
+                f"    Run warehouse_row_hashes to compute hashes, then sync will pick up this table."
+            )
+            # Cleanup temp table
+            duck_conn.execute("DROP TABLE IF EXISTS _sync_metadata")
+            timing["total"] = time.time() - total_start
+            # Return 0 changes and mark as not full resync, with special skip flag
+            return 0, 0, 0, False, timing, True  # Added skip flag
     
     # Step 2: Compute diff (PK-aware)
     check_termination(progress)
@@ -1860,7 +1880,7 @@ def sync_table_incremental(
             f"    TOTAL={timing['total']:.1f}s"
         )
         
-        return diff['dst_count'], 0, rows_inserted, True, timing
+        return diff['dst_count'], 0, rows_inserted, True, timing, False
     
     # Step 3.5: Clean up duplicate PKs in destination (if PK exists)
     dups_removed = 0
@@ -2126,7 +2146,7 @@ def sync_table_incremental(
         f"    TOTAL={timing['total']:.1f}s"
     )
     
-    return rows_deleted, rows_updated, rows_inserted, False, timing
+    return rows_deleted, rows_updated, rows_inserted, False, timing, False
 
 
 def bulk_load_table(
@@ -2160,22 +2180,12 @@ def bulk_load_table(
     
     if total_rows == 0:
         timing["total"] = time.time() - total_start
-        logger.info(f"  [{table_name}] BULK LOAD: 0 rows (empty source)")
+        logger.info(f"  [{table_name}] BULK LOAD: 0 rows (source table is empty)")
         return 0, timing
     
-    # Get warehouse connection string
-    warehouse_url = os.environ.get("WAREHOUSE_COOLIFY_URL")
-    if not warehouse_url:
-        raise ValueError("WAREHOUSE_COOLIFY_URL environment variable not set")
-    warehouse_url = warehouse_url.replace('\n', '').replace('\r', '').strip()
-    
-    # Check if warehouse is already attached
+    # Ensure warehouse is attached (uses shared helper)
     t0 = time.time()
-    try:
-        duck_conn.execute("SELECT 1 FROM warehouse.information_schema.tables LIMIT 1")
-    except:
-        # Attach PostgreSQL warehouse directly to DuckDB for fast bulk loading
-        duck_conn.execute(f"ATTACH '{warehouse_url}' AS warehouse (TYPE postgres, READ_ONLY)")
+    ensure_warehouse_attached(duck_conn)
     timing["attach"] = time.time() - t0
     
     # Set phase for progress tracking
@@ -2326,7 +2336,7 @@ def sync_table(
         stats["timing"]["get_columns"] = time.time() - t0
         
         # Smart incremental sync with metadata comparison
-        rows_deleted, rows_updated, rows_inserted, was_full_resync, sync_timing = sync_table_incremental(
+        rows_deleted, rows_updated, rows_inserted, was_full_resync, sync_timing, was_skipped = sync_table_incremental(
             pg_conn, duck_conn, schema, table, column_names, progress=progress
         )
         
@@ -2339,7 +2349,13 @@ def sync_table(
         table_total = time.time() - table_start
         stats["timing"]["total"] = table_total
         
-        if rows_deleted == 0 and rows_updated == 0 and rows_inserted == 0:
+        if was_skipped:
+            # Table skipped because _row_hash not computed yet
+            progress.mark_skipped(table_name)
+            stats["skipped"] = True
+            stats["skipped_reason"] = "no_row_hash"
+            logger.info(f"[Worker {worker_id}] DONE: {table_name} - SKIPPED (no _row_hash computed) ({table_total:.1f}s total)")
+        elif rows_deleted == 0 and rows_updated == 0 and rows_inserted == 0:
             # Table is already in sync
             progress.mark_skipped(table_name)
             stats["skipped"] = True
