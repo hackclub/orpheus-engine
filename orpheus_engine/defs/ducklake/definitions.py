@@ -1483,7 +1483,7 @@ def backfill_columns(
         join_condition = "dst._row_hash = src._row_hash"
     
     t0 = time.time()
-    duck_conn.execute(f"""
+    result = duck_conn.execute(f"""
         UPDATE ducklake."{schema}"."{table}" dst
         SET {set_clause}
         FROM warehouse."{schema}"."{table}" src
@@ -1491,8 +1491,8 @@ def backfill_columns(
     """)
     timing["update"] = time.time() - t0
     
-    result = duck_conn.execute("SELECT changes()").fetchone()
-    rows_updated = result[0] if result else 0
+    # DuckDB UPDATE returns (Count, ) as result
+    rows_updated = result.fetchone()[0]
     
     timing["total"] = time.time() - total_start
     timing["join_type"] = "PK" if pk_columns else "_row_hash"
@@ -2072,7 +2072,7 @@ def sync_table_incremental(
             t0 = time.time()
             
             # Insert with deduplication
-            duck_conn.execute(f"""
+            result = duck_conn.execute(f"""
                 INSERT INTO ducklake."{schema}"."{table}" ({cols_with_hash})
                 SELECT {cols_with_hash}
                 FROM (
@@ -2092,9 +2092,8 @@ def sync_table_incremental(
                 WHERE rn = 1
             """)
             timing["insert_op"] = time.time() - t0
-            # Get actual inserted count (may differ from to_insert due to dedup)
-            result = duck_conn.execute("SELECT changes()").fetchone()
-            rows_inserted = result[0] if result else diff['to_insert']
+            # DuckDB INSERT returns (Count, ) as result
+            rows_inserted = result.fetchone()[0]
             if progress:
                 progress.update_progress(table_name, rows_inserted)
             logger.info(
