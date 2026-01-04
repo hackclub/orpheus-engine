@@ -1320,15 +1320,24 @@ def get_table_columns_ducklake(conn: duckdb.DuckDBPyConnection, schema: str, tab
 def table_exists_in_ducklake(conn: duckdb.DuckDBPyConnection, schema: str, table: str) -> bool:
     """Check if a table exists in DuckLake."""
     try:
-        result = conn.execute(f"""
-            SELECT 1 FROM information_schema.tables
-            WHERE table_catalog = 'ducklake'
-              AND table_schema = '{schema}'
-              AND table_name = '{table}'
-        """).fetchone()
-        return result is not None
-    except Exception:
+        # Try querying the table directly - most reliable way to check existence
+        conn.execute(f'SELECT 1 FROM ducklake."{schema}"."{table}" LIMIT 0')
+        return True
+    except duckdb.CatalogException:
+        # Table doesn't exist
         return False
+    except Exception:
+        # For any other error, fall back to information_schema check
+        try:
+            result = conn.execute(f"""
+                SELECT 1 FROM information_schema.tables
+                WHERE table_catalog = 'ducklake'
+                  AND table_schema = '{schema}'
+                  AND table_name = '{table}'
+            """).fetchone()
+            return result is not None
+        except Exception:
+            return False
 
 
 def ensure_schema_exists_ducklake(conn: duckdb.DuckDBPyConnection, schema: str):
@@ -1381,14 +1390,22 @@ def sync_table_schema(
         col_defs = ", ".join([f'"{col}" {dtype}' for col, dtype in src_columns])
         col_defs += ", _row_hash BLOB"
         
-        duck_conn.execute(f"""
-            CREATE TABLE ducklake."{schema}"."{table}" ({col_defs})
-        """)
-        timing["create_or_alter"] = time.time() - t0
-        timing["total"] = time.time() - total_start
-        # Return with a special change entry to indicate table was created
-        changes.append({"action": "create", "column": "*", "type": f"{len(src_columns)} columns"})
-        return True, [], changes, timing
+        try:
+            duck_conn.execute(f"""
+                CREATE TABLE ducklake."{schema}"."{table}" ({col_defs})
+            """)
+            timing["create_or_alter"] = time.time() - t0
+            timing["total"] = time.time() - total_start
+            # Return with a special change entry to indicate table was created
+            changes.append({"action": "create", "column": "*", "type": f"{len(src_columns)} columns"})
+            return True, [], changes, timing
+        except duckdb.CatalogException as e:
+            if "already exists" in str(e):
+                # Table exists but wasn't detected - fall through to schema comparison
+                logger.warning(f"Table {schema}.{table} already exists (detection failed), proceeding with schema sync")
+                exists = True
+            else:
+                raise
     
     # Table exists - get destination columns for comparison
     dst_columns = get_table_columns_ducklake(duck_conn, schema, table)
