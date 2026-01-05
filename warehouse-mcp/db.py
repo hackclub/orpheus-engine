@@ -408,7 +408,7 @@ class Database:
                 # Truncate long values in sample data to reduce output size
                 result = self._truncate_markdown_values(result, max_cell_length)
                 # Limit number of columns shown for wide tables
-                result = self._limit_markdown_columns(result, max_columns=100)
+                result = self._limit_markdown_columns(result, max_columns=1000)
                 return result
             return f"No description available for schema '{schema_name}'"
         
@@ -503,7 +503,7 @@ class Database:
         
         return columns, total
 
-    def _limit_markdown_columns(self, markdown: str, max_columns: int = 100) -> str:
+    def _limit_markdown_columns(self, markdown: str, max_columns: int = 1000) -> str:
         """
         Limit the number of columns shown in markdown tables.
         

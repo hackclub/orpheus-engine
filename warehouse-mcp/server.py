@@ -280,7 +280,7 @@ async def list_tools() -> list[Tool]:
             name="describe_schema",
             description=(
                 "Get detailed documentation for a schema including tables, columns, "
-                "and sample data. Limited to 100 columns per table. "
+                "and sample data. Limited to 1000 columns per table. "
                 "Use list_columns for tables with more columns."
             ),
             inputSchema={
