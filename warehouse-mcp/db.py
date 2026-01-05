@@ -380,13 +380,26 @@ class Database:
         rows, _ = self.execute_query(sql)
         return [row['schema_name'] for row in rows]
     
-    def describe_schema(self, schema_name: str, max_cell_length: int = 100) -> str:
+    def describe_schema(
+        self, 
+        schema_name: str, 
+        max_columns: int = 1000,
+        max_value_length: int = 80,
+        max_output_bytes: int = 50000,
+        sample_rows: int = 3
+    ) -> str:
         """
-        Get schema description using util_schema_markdown function.
+        Get schema description with tables, columns, and sample data.
+        
+        Generates output directly in Python with truncation at SQL level
+        to avoid transferring large amounts of data from the database.
         
         Args:
             schema_name: Name of the schema to describe
-            max_cell_length: Maximum length for sample data values (default 100)
+            max_columns: Maximum columns to show per table (default 30)
+            max_value_length: Maximum length for sample values (default 80)
+            max_output_bytes: Stop adding tables when output exceeds this (default 50KB)
+            sample_rows: Number of sample rows per table (default 3)
             
         Returns:
             Markdown description of the schema with tables, columns, and sample data
@@ -395,59 +408,103 @@ class Database:
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema_name):
             raise ValueError(f"Invalid schema name: {schema_name}")
         
-        # Use parameterized query to prevent SQL injection
-        rows, _ = self.execute_query_with_params(
-            "SELECT util_schema_markdown(%s);",
-            (schema_name,)
-        )
-        
-        if rows and rows[0]:
-            # Get the first column value (function result)
-            result = list(rows[0].values())[0]
-            if result:
-                # Truncate long values in sample data to reduce output size
-                result = self._truncate_markdown_values(result, max_cell_length)
-                # Limit number of columns shown for wide tables
-                result = self._limit_markdown_columns(result, max_columns=1000)
-                return result
-            return f"No description available for schema '{schema_name}'"
-        
-        return f"Schema '{schema_name}' not found or util_schema_markdown function unavailable"
-    
-    def _truncate_markdown_values(self, markdown: str, max_length: int) -> str:
+        # Get all tables in schema
+        tables_sql = """
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = %s AND table_type = 'BASE TABLE'
+            ORDER BY table_name
         """
-        Truncate long values in markdown table cells.
+        tables, _ = self.execute_query_with_params(tables_sql, (schema_name,))
         
-        Looks for table cells (content between | characters) and truncates
-        values longer than max_length, showing original length.
-        """
-        lines = markdown.split('\n')
-        result_lines = []
+        if not tables:
+            return f"Schema '{schema_name}' not found or has no tables."
         
-        for line in lines:
-            if '|' in line and not line.strip().startswith('|--'):
-                # This looks like a table row
-                parts = line.split('|')
-                truncated_parts = []
-                for part in parts:
-                    stripped = part.strip()
-                    if len(stripped) > max_length:
-                        # Truncate and show how much was cut
-                        omitted = len(stripped) - max_length + 15  # account for suffix
-                        truncated = stripped[:max_length - 15] + f'… [+{omitted} chars]'
-                        # Preserve original spacing
-                        if part.startswith(' '):
-                            truncated = ' ' + truncated
-                        if part.endswith(' ') and len(part) > 1:
-                            truncated = truncated + ' '
-                        truncated_parts.append(truncated)
+        output_parts = [f"# Schema: {schema_name}\n"]
+        current_size = len(output_parts[0])
+        budget_exceeded = False
+        
+        for table_row in tables:
+            table_name = table_row['table_name']
+            is_internal = table_name.startswith('_dlt_')
+            
+            # Get columns for this table
+            columns_sql = """
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s
+                ORDER BY ordinal_position
+            """
+            all_columns, _ = self.execute_query_with_params(
+                columns_sql, (schema_name, table_name)
+            )
+            
+            total_columns = len(all_columns)
+            columns = all_columns[:max_columns]
+            
+            # Build table header
+            table_block = f"\n## {schema_name}.{table_name}\n"
+            table_block += f"Columns ({total_columns} total)"
+            if total_columns > max_columns:
+                table_block += f" - showing first {max_columns}"
+            table_block += ":\n"
+            
+            # Column list
+            col_names = [c['column_name'] for c in columns]
+            table_block += ", ".join(col_names)
+            if total_columns > max_columns:
+                table_block += f", ... (+{total_columns - max_columns} more)"
+            table_block += "\n"
+            
+            # Sample data (skip for internal _dlt_* tables or if budget exceeded)
+            if budget_exceeded:
+                table_block += "(output budget exceeded, samples omitted)\n"
+            elif is_internal:
+                table_block += "(internal table, samples omitted)\n"
+            elif columns:
+                # Build SELECT with LEFT() truncation for each column
+                select_parts = []
+                for col in columns:
+                    col_name = col['column_name']
+                    # Use format() for the identifier, parameterized queries don't work for identifiers
+                    select_parts.append(
+                        f"LEFT({self._quote_ident(col_name)}::text, {max_value_length}) AS {self._quote_ident(col_name)}"
+                    )
+                
+                select_clause = ", ".join(select_parts)
+                # Table name needs quoting too
+                sample_sql = f"SELECT {select_clause} FROM {self._quote_ident(schema_name)}.{self._quote_ident(table_name)} LIMIT {sample_rows}"
+                
+                try:
+                    sample_rows_data, _ = self.execute_query(sample_sql)
+                    if sample_rows_data:
+                        table_block += f"\nSample data ({len(sample_rows_data)} rows):\n"
+                        for row in sample_rows_data:
+                            # Format as comma-separated values
+                            values = [str(row.get(c['column_name'], '')) for c in columns]
+                            table_block += ", ".join(values) + "\n"
                     else:
-                        truncated_parts.append(part)
-                result_lines.append('|'.join(truncated_parts))
-            else:
-                result_lines.append(line)
+                        table_block += "(no rows)\n"
+                except Exception as e:
+                    table_block += f"(error reading samples: {str(e)[:50]})\n"
+            
+            # Check if adding this table would exceed budget
+            block_size = len(table_block.encode('utf-8'))
+            if current_size + block_size > max_output_bytes:
+                remaining_tables = len(tables) - len(output_parts) + 1
+                output_parts.append(f"\n... and {remaining_tables} more tables (output limit reached)\n")
+                budget_exceeded = True
+                break
+            
+            output_parts.append(table_block)
+            current_size += block_size
         
-        return '\n'.join(result_lines)
+        return "".join(output_parts)
+    
+    def _quote_ident(self, identifier: str) -> str:
+        """Quote a PostgreSQL identifier (table/column name)."""
+        # Double any existing double quotes and wrap in double quotes
+        return '"' + identifier.replace('"', '""') + '"'
     
     def list_columns(
         self, 
@@ -502,63 +559,6 @@ class Database:
         )
         
         return columns, total
-
-    def _limit_markdown_columns(self, markdown: str, max_columns: int = 1000) -> str:
-        """
-        Limit the number of columns shown in markdown tables.
-        
-        For tables with more than max_columns, truncates and adds a note
-        about omitted columns.
-        """
-        lines = markdown.split('\n')
-        result_lines = []
-        i = 0
-        
-        while i < len(lines):
-            line = lines[i]
-            
-            # Detect start of a markdown table (header row with |)
-            if '|' in line and i + 1 < len(lines) and '---' in lines[i + 1]:
-                # This is a table header
-                header_parts = [p.strip() for p in line.split('|')]
-                # Filter out empty parts from leading/trailing |
-                header_parts = [p for p in header_parts if p]
-                num_cols = len(header_parts)
-                
-                if num_cols > max_columns:
-                    # Truncate the table
-                    omitted = num_cols - max_columns
-                    
-                    # Process header
-                    truncated_header = '| ' + ' | '.join(header_parts[:max_columns]) + f' | ... ({omitted} more columns) |'
-                    result_lines.append(truncated_header)
-                    
-                    # Process separator
-                    i += 1
-                    sep_parts = lines[i].split('|')
-                    sep_parts = [p for p in sep_parts if p.strip()]
-                    truncated_sep = '|' + '|'.join(sep_parts[:max_columns]) + '|---|'
-                    result_lines.append(truncated_sep)
-                    
-                    # Process data rows
-                    i += 1
-                    while i < len(lines) and '|' in lines[i] and lines[i].strip():
-                        row_parts = lines[i].split('|')
-                        row_parts = [p for p in row_parts if p or row_parts.index(p) in [0, len(row_parts)-1]]
-                        # Keep first max_columns data cells
-                        data_parts = [p.strip() for p in lines[i].split('|')]
-                        data_parts = [p for p in data_parts if p][:max_columns]
-                        truncated_row = '| ' + ' | '.join(data_parts) + ' | ... |'
-                        result_lines.append(truncated_row)
-                        i += 1
-                    continue
-                else:
-                    result_lines.append(line)
-            else:
-                result_lines.append(line)
-            i += 1
-        
-        return '\n'.join(result_lines)
 
 
 # Global database instance
