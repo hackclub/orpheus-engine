@@ -2,7 +2,6 @@
 name = "warehouse-mcp"
 version = "0.1.0"
 description = "HTTP MCP server for read-only data warehouse queries"
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.0.0",
