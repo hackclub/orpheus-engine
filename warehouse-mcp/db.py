@@ -419,7 +419,7 @@ class Database:
         Truncate long values in markdown table cells.
         
         Looks for table cells (content between | characters) and truncates
-        values longer than max_length.
+        values longer than max_length, showing original length.
         """
         lines = markdown.split('\n')
         result_lines = []
@@ -432,8 +432,9 @@ class Database:
                 for part in parts:
                     stripped = part.strip()
                     if len(stripped) > max_length:
-                        # Truncate and add ellipsis
-                        truncated = stripped[:max_length-3] + '...'
+                        # Truncate and show how much was cut
+                        omitted = len(stripped) - max_length + 15  # account for suffix
+                        truncated = stripped[:max_length - 15] + f'… [+{omitted} chars]'
                         # Preserve original spacing
                         if part.startswith(' '):
                             truncated = ' ' + truncated
