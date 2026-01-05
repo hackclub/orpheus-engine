@@ -407,6 +407,8 @@ class Database:
             if result:
                 # Truncate long values in sample data to reduce output size
                 result = self._truncate_markdown_values(result, max_cell_length)
+                # Limit number of columns shown for wide tables
+                result = self._limit_markdown_columns(result, max_columns=100)
                 return result
             return f"No description available for schema '{schema_name}'"
         
@@ -443,6 +445,117 @@ class Database:
                 result_lines.append('|'.join(truncated_parts))
             else:
                 result_lines.append(line)
+        
+        return '\n'.join(result_lines)
+    
+    def list_columns(
+        self, 
+        schema_name: str, 
+        table_name: str,
+        offset: int = 0,
+        limit: int = 100
+    ) -> tuple[list[dict], int]:
+        """
+        List all columns for a specific table with pagination.
+        
+        Args:
+            schema_name: Name of the schema
+            table_name: Name of the table
+            offset: Starting column index
+            limit: Maximum columns to return
+            
+        Returns:
+            Tuple of (columns list, total column count)
+        """
+        # Validate names to prevent SQL injection
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema_name):
+            raise ValueError(f"Invalid schema name: {schema_name}")
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+            raise ValueError(f"Invalid table name: {table_name}")
+        
+        # Get total count
+        count_sql = """
+            SELECT COUNT(*) as total
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+        """
+        count_rows, _ = self.execute_query_with_params(count_sql, (schema_name, table_name))
+        total = count_rows[0]['total'] if count_rows else 0
+        
+        # Get columns with pagination
+        columns_sql = """
+            SELECT 
+                column_name,
+                data_type,
+                is_nullable,
+                column_default,
+                character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+            LIMIT %s OFFSET %s
+        """
+        columns, _ = self.execute_query_with_params(
+            columns_sql, 
+            (schema_name, table_name, limit, offset)
+        )
+        
+        return columns, total
+
+    def _limit_markdown_columns(self, markdown: str, max_columns: int = 100) -> str:
+        """
+        Limit the number of columns shown in markdown tables.
+        
+        For tables with more than max_columns, truncates and adds a note
+        about omitted columns.
+        """
+        lines = markdown.split('\n')
+        result_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            
+            # Detect start of a markdown table (header row with |)
+            if '|' in line and i + 1 < len(lines) and '---' in lines[i + 1]:
+                # This is a table header
+                header_parts = [p.strip() for p in line.split('|')]
+                # Filter out empty parts from leading/trailing |
+                header_parts = [p for p in header_parts if p]
+                num_cols = len(header_parts)
+                
+                if num_cols > max_columns:
+                    # Truncate the table
+                    omitted = num_cols - max_columns
+                    
+                    # Process header
+                    truncated_header = '| ' + ' | '.join(header_parts[:max_columns]) + f' | ... ({omitted} more columns) |'
+                    result_lines.append(truncated_header)
+                    
+                    # Process separator
+                    i += 1
+                    sep_parts = lines[i].split('|')
+                    sep_parts = [p for p in sep_parts if p.strip()]
+                    truncated_sep = '|' + '|'.join(sep_parts[:max_columns]) + '|---|'
+                    result_lines.append(truncated_sep)
+                    
+                    # Process data rows
+                    i += 1
+                    while i < len(lines) and '|' in lines[i] and lines[i].strip():
+                        row_parts = lines[i].split('|')
+                        row_parts = [p for p in row_parts if p or row_parts.index(p) in [0, len(row_parts)-1]]
+                        # Keep first max_columns data cells
+                        data_parts = [p.strip() for p in lines[i].split('|')]
+                        data_parts = [p for p in data_parts if p][:max_columns]
+                        truncated_row = '| ' + ' | '.join(data_parts) + ' | ... |'
+                        result_lines.append(truncated_row)
+                        i += 1
+                    continue
+                else:
+                    result_lines.append(line)
+            else:
+                result_lines.append(line)
+            i += 1
         
         return '\n'.join(result_lines)
 

@@ -280,7 +280,8 @@ async def list_tools() -> list[Tool]:
             name="describe_schema",
             description=(
                 "Get detailed documentation for a schema including tables, columns, "
-                "and sample data. Uses the util_schema_markdown() database function."
+                "and sample data. Limited to 100 columns per table. "
+                "Use list_columns for tables with more columns."
             ),
             inputSchema={
                 "type": "object",
@@ -291,6 +292,37 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["schema_name"]
+            }
+        ),
+        Tool(
+            name="list_columns",
+            description=(
+                "List all columns for a specific table with pagination. "
+                "Use this for wide tables with >100 columns that get truncated in describe_schema."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "schema_name": {
+                        "type": "string",
+                        "description": "Name of the schema"
+                    },
+                    "table_name": {
+                        "type": "string",
+                        "description": "Name of the table"
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Starting column index (default: 0)",
+                        "default": 0
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum columns to return (default: 100)",
+                        "default": 100
+                    }
+                },
+                "required": ["schema_name", "table_name"]
             }
         )
     ]
@@ -395,6 +427,43 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             schema_name = arguments["schema_name"]
             description = db.describe_schema(schema_name)
             return [TextContent(type="text", text=description)]
+        
+        elif name == "list_columns":
+            schema_name = arguments["schema_name"]
+            table_name = arguments["table_name"]
+            offset = arguments.get("offset", 0)
+            limit = arguments.get("limit", 100)
+            
+            columns, total = db.list_columns(schema_name, table_name, offset, limit)
+            
+            if not columns:
+                return [TextContent(
+                    type="text",
+                    text=f"No columns found for {schema_name}.{table_name}"
+                )]
+            
+            # Format as a table
+            lines = [
+                f"Columns for {schema_name}.{table_name} ({offset + 1}-{offset + len(columns)} of {total}):",
+                "",
+                "| Column | Type | Nullable | Default |",
+                "|--------|------|----------|---------|"
+            ]
+            
+            for col in columns:
+                name = col['column_name']
+                dtype = col['data_type']
+                if col.get('character_maximum_length'):
+                    dtype += f"({col['character_maximum_length']})"
+                nullable = "YES" if col['is_nullable'] == 'YES' else "NO"
+                default = str(col['column_default'])[:30] if col['column_default'] else ""
+                lines.append(f"| {name} | {dtype} | {nullable} | {default} |")
+            
+            if offset + len(columns) < total:
+                lines.append("")
+                lines.append(f"More columns available. Use offset={offset + limit} to continue.")
+            
+            return [TextContent(type="text", text="\n".join(lines))]
         
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
