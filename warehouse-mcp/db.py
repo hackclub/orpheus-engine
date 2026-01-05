@@ -480,8 +480,11 @@ class Database:
                     if sample_rows_data:
                         table_block += f"\nSample data ({len(sample_rows_data)} rows):\n"
                         for row in sample_rows_data:
-                            # Format as comma-separated values
-                            values = [str(row.get(c['column_name'], '')) for c in columns]
+                            # Format as comma-separated values (empty string for NULL)
+                            values = []
+                            for c in columns:
+                                val = row.get(c['column_name'])
+                                values.append('' if val is None else str(val))
                             table_block += ", ".join(values) + "\n"
                     else:
                         table_block += "(no rows)\n"
