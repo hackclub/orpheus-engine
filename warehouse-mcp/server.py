@@ -926,7 +926,6 @@ async def app(scope, receive, send):
         token_response = {
             "access_token": access_token,
             "token_type": "Bearer",
-            "expires_in": 86400,  # 24 hours
         }
         
         response_body = json.dumps(token_response).encode()
