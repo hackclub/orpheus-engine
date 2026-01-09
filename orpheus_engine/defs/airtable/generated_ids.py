@@ -441,6 +441,8 @@ class AirtableIDs:
             city_from_address_link = "fldfyPj4sHzg3UN3t"  # Name: City (from Address Link)
             address_line_2_from_address_link = "fldX0ZvNo6ITCB16N"  # Name: Address Line 2 (from Address Link)
             address_line_1_from_addresses = "fldrRSnPtwee0ge1n"  # Name: Address Line 1 (from Addresses)
+            tmp_sofia_s_fillout_vuln_testing = "fld0szDEzsB1MzG08"  # Name: tmp - sofia's fillout vuln testing
+            sofia_s_testing_table = "fldEYcEGWiT5CGG09"  # Name: sofia's testing table
 
 
     class highway:
@@ -480,13 +482,15 @@ class AirtableIDs:
             email = "fld0TaaawpieJ9G2A"  # Name: email
             team = "fldi2PJ5Q2pnm07fB"  # Name: team
             status_change_dm_sent = "fldOk0pb1enRYmYLs"  # Name: status_change_dm_sent
+            send_us_invite_email = "fldYBxycudjD2Uavk"  # Name: Send US Invite Email
             role = "fldQWhQF9Jdo8Sb6Y"  # Name: role
             slack_id = "fldDAgtj5tJnuK6cm"  # Name: slack_id
             track = "fldduIOpBro5oKbdL"  # Name: track
             display_name = "flda5W7GQQ3hoRWEr"  # Name: display_name
             self_reported_partners_from_email_slack_invites = "fldBsOjnM2x6nd9nP"  # Name: self_reported_partners (from Email Slack Invites)
             self_reported_partners_onboarding = "fldYtMpblMK26c6Ns"  # Name: self_reported_partners_onboarding
-            points = "fld782uY9yKgq3qcN"  # Name: points
+            points_projects = "fld782uY9yKgq3qcN"  # Name: points_projects
+            points = "fldLdFsAS6PeLvfcU"  # Name: points
             points_but_short = "fldVhLwKwK3N5Sk5t"  # Name: points_but_short
             send_progress_bump = "fldFItjnxpoC2VKUJ"  # Name: send_progress_bump
             total_time_approved_projects = "fldFJqzcq3PhqhGz0"  # Name: total_time_approved_projects
@@ -500,6 +504,13 @@ class AirtableIDs:
             projects = "fldBRcF2KqPVJdvdS"  # Name: projects
             duration_from_projects = "fldm6vhWLZOctIlIU"  # Name: duration (from projects)
             ysws_project_submission = "fldXnJWsOhQkl2laW"  # Name: ysws_project_submission
+            git_hub_username = "fldkS0oLKHype0mSX"  # Name: GitHub Username
+            address_line_1 = "fldjrBf2Sgo3zLmEM"  # Name: Address (Line 1)
+            address_line_2 = "fldOWgx0O0467oh3V"  # Name: Address (Line 2)
+            city = "fldZE4bcS9unDK6te"  # Name: City
+            state_province = "fldqKieEJLuteTrSo"  # Name: State / Province
+            country = "fldEJsfv3B7b7R9gL"  # Name: Country
+            zip_postal_code = "fldBHdIQt6WBiJhMs"  # Name: ZIP / Postal Code
             address_joined_from_ysws_project_submission = "fldcdqsfjkvqxDGOP"  # Name: address_joined (from ysws_project_submission)
             approved_duration_from_projects = "fldag6JrdejDNjCAS"  # Name: approved_duration (from projects)
             unified_ysws_projects_db = "fldFl0yclGYljU6Wg"  # Name: Unified YSWS Projects DB
@@ -510,7 +521,6 @@ class AirtableIDs:
             phone_number_from_orders = "fld1euXABRRXI92Fg"  # Name: phone_number (from Orders)
             force_refresh_ysws_projects = "fldRvL6FlJ7RDIwTn"  # Name: force_refresh_ysws_projects
             loops_athena_award_first_logged_in_at = "flducWTMuVh0xpXCP"  # Name: Loops - athenaAwardFirstLoggedInAt
-            zapier_added_to_athena_mailing_list_at = "fldQJHbZozaH7MskV"  # Name: Zapier - Added to Athena mailing list at
             referred_users = "fldVqPyWX8ZTuPCAj"  # Name: referred_users
             email_slack_invites = "fldaofojjV18uvAN4"  # Name: Email Slack Invites
             referred_users_account_created = "fldnghkHaGhIKF7o9"  # Name: referred_users_account_created
@@ -521,6 +531,10 @@ class AirtableIDs:
             age = "fldYAKM8AtS3pBGS0"  # Name: age
             last_name_from_ysws_project_submission = "fldD0Xq6rcjWdr9al"  # Name: Last Name (from ysws_project_submission)
             first_name_from_ysws_project_submission = "fldVVqv3at0W3jGAu"  # Name: First Name (from ysws_project_submission)
+            parthenon_form_submission = "fldpue5XkP1Perwnj"  # Name: Parthenon Form Submission
+            address_contains_united_states = "fldCVdOP2QQQwZZpg"  # Name: address_contains_united_states
+            send_invite_reminder_email = "fldXS3DB10laZipGy"  # Name: send_invite_reminder_email
+            submitted_merch = "fldsjfvL6pdyxJKk8"  # Name: submitted_merch
             profile_picture = "fldxLDUvCXQCDxfnr"  # Name: profile_picture
             project_unique_names = "fldxlzRtJrUWuwyKY"  # Name: project_unique_names
             approved_projects = "fldfQp5eDL8IEeVwH"  # Name: approved_projects
@@ -534,6 +548,29 @@ class AirtableIDs:
             notes = "fld5wMQYthcOVbX1W"  # Name: notes
             send_parthenon_invite = "fldMV9GAB9mbCe3sW"  # Name: send parthenon invite
             prize_suggestions = "fldrKBwk6JDCfA9HI"  # Name: Prize Suggestions
+            disregard_submissions = "fldrM1TCaaMa909O8"  # Name: disregard_submissions
+            unqualified_us_invite_sent = "fldSdpo5GKi7aPHSq"  # Name: unqualified_us_invite_sent
+            loops_list_athena = "fldLOj4Uhj5U4gS94"  # Name: Loops List - Athena
+            last_name = "fld72d4VRJc7DhH4T"  # Name: Last Name
+            first_name_legal = "fldWamrY5zBfaqgHh"  # Name: First Name Legal
+            yeah = "fldaevbIgBhtgkCFz"  # Name: yeah
+            total_approved_projects = "fldz2gFbKLmAnCxX2"  # Name: total_approved_projects
+            cert_id = "fldOpFyH1WsQWZ9yA"  # Name: cert_id
+            safe_ysws_project_submission = "fldTZqlVDmuQRqCGU"  # Name: safe_ysws_project_submission
+            playable_url_unified = "fldhcgNJkVIuKM28k"  # Name: Playable URL Unified
+            code_url_unified = "fldbtHF8svieUzkG7"  # Name: Code URL Unified
+            screenshot_cdn_url = "fldTSDScUDO2FMBqm"  # Name: screenshot_cdn_url
+            playable_url = "fldDfSn0u8grm3nC5"  # Name: Playable URL
+            code_url = "fldnnhGZyFa1IXt2y"  # Name: Code URL
+            description = "fldars8K65FY6SWtg"  # Name: Description
+            project_name = "fldXway48zrc6Q50Z"  # Name: Project Name
+            last_name_initial = "fldieUAqdAp0PaShp"  # Name: Last Name Initial
+            created_at = "fldTtDnTTlO4sSYgR"  # Name: created_at
+            approved_duration = "fldB21tQ4JuPVLEqL"  # Name: approved_duration
+            screenshot_cdn_url_unified = "fldiS6S7yLxB9q4iW"  # Name: screenshot_cdn_url_unified
+            first_name_override = "fldmfEejAdLB14umc"  # Name: First Name Override
+            first_name = "fldus0NfvZn1iwDt4"  # Name: First Name
+            certification = "fldP5NYotbKw8fXeV"  # Name: Certification
 
         class email_slack_invites:
             """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
@@ -547,10 +584,10 @@ class AirtableIDs:
             error = "fldTKFomRhiwIZgPx"  # Name: error
             dm_error = "fldCT4uWXH7orBz7Q"  # Name: dm_error
             welcome_message_sent = "fldol2W6BbcbxPZV8"  # Name: welcome_message_sent
-            registered_user = "fldy5QsE0yYmolUpz"  # Name: registered_user
             created = "fld3OFPCqwso8TlPX"  # Name: Created
+            loops_list_athena = "fldQVIH5HZYJJXtpd"  # Name: Loops List - Athena
+            registered_user = "fldy5QsE0yYmolUpz"  # Name: registered_user
             loops_athena_award_slack_invite_requested_at = "fld7hufACh1X4tp42"  # Name: Loops - athenaAwardSlackInviteRequestedAt
-            zapier_added_to_athena_mailing_list_at = "fldGAuFJmK2yb5H3v"  # Name: Zapier - Added to Athena mailing list at
             loops_athena_award_pyramid_scheme_sign_up_ref = "fldY4wcTCAIegtRFo"  # Name: Loops - athenaAwardPyramidSchemeSignUpRef
 
         class free_sticker_form:
@@ -697,6 +734,7 @@ class AirtableIDs:
             state = "flduHp6cOwETXTRnr"  # Name: State 
             county_centralizing = "fldu7bexqqfq3KoZ0"  # Name: County - Centralizing
             email_trimmed_lowercased = "fld20if1DEDgTOpPH"  # Name: Email - Trimmed & Lowercased
+            ysws_name_lookup = "fldLpxfl6aHEm5F40"  # Name: YSWS Name - Lookup
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -770,7 +808,7 @@ class AirtableIDs:
             weights_grants_jan_2025 = "fld3Gdn4SFPUNTnuK"  # Name: Weights Grants–Jan 2025
             weights_grants_dec_2024 = "fldNxopvpzYH3FOjk"  # Name: Weights Grants–Dec 2024
             weights_grants_nov_2024 = "fldxJPpCMOsEmDoVx"  # Name: Weights Grants–Nov 2024
-            weights_grants_oct_2024 = "fldBOI0n9BtDxHLm0"  # Name: Weights Grants–Oct 2024
+            weights_grants_oct_2025 = "fldBOI0n9BtDxHLm0"  # Name: Weights Grants–Oct 2025
             weighted_grants_last_month = "fldFfOt7PBDs7zc9Z"  # Name: Weighted Grants Last Month
             weights_grants_sep_2024 = "fldHARrmhE7Q19lzu"  # Name: Weights Grants–Sep 2024
             weighted_grants_2024 = "fld2wxB7twgaNTPBZ"  # Name: Weighted Grants–2024
@@ -798,12 +836,14 @@ class AirtableIDs:
             prize_winner = "fldxFR7tBNzQBMpFT"  # Name: Prize Winner?
             override_created_at = "fldXSYurztepXkeCc"  # Name: Override Created At
             created_at = "fldr50yArbZc0w3YL"  # Name: Created At
+            tags_comma_separated = "fldfHBS1zukxXg9oK"  # Name: Tags (Comma Separated)
 
         class ysws_project_mentions:
             """IDs for Table 'ysws_project_mentions' (ID: tbl5SU7OcPeZMaDOs)"""
             TABLE_ID = "tbl5SU7OcPeZMaDOs"
 
             id = "fldizbzyosiUHlaf5"  # Name: ID
+            project_id = "fldRGSPOwCzQvnK7L"  # Name: Project ID
             ysws_approved_project = "fldWCs3fjJ6Tnw10T"  # Name: YSWS Approved Project
             project_url = "fldRqywkrPXW3wtpA"  # Name: Project URL
             date = "fldEIIGc5hs9EQmmb"  # Name: Date
@@ -878,6 +918,21 @@ class AirtableIDs:
             start_time = "fld8r59hCI2ApspVh"  # Name: Start Time
             end_time = "fldFNstKhvejUgdrb"  # Name: End Time
             ysws_spot_checks = "fld2OIOCpgU2MMtxT"  # Name: YSWS Spot Checks
+
+
+    class slack_nps:
+        """IDs for Base 'slack_nps' (ID: appvetUwHQTgkNel3)"""
+        BASE_ID = "appvetUwHQTgkNel3"
+
+        class nps:
+            """IDs for Table 'nps' (ID: tbl9iohVeaOd6ovDI)"""
+            TABLE_ID = "tbl9iohVeaOd6ovDI"
+
+            email = "fld0LhokE9Uru9YUC"  # Name: Email
+            tags = "fldiu2Y5gZCdMAQIH"  # Name: Tags
+            on_a_scale_from_1_to_10_how_likely_are_you_to_recommend_the_hack_club_slack_to_a_friend = "fldyKlRP6iNt3i1lv"  # Name: On a scale from 1 to 10, how likely are you to recommend the Hack Club Slack to a friend?
+            have_you_made_a_friend_on_the_hack_club_slack = "fldycpVCLrUHz72ki"  # Name: Have you made a friend on the Hack Club Slack?
+            how_can_we_improve_the_slack = "fldgIepjaWVgCYWQ2"  # Name: How can we improve the Slack?
 
 
 # fmt: on

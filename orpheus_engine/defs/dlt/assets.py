@@ -1,10 +1,11 @@
 import dlt
 from dlt.destinations import postgres # Import the specific destination class
 
+import hashlib
 import os
 from typing import Iterable, Dict, Any
 import orpheus_engine.defs.loops.definitions as loops_defs
-import polars as pl # <-- Add polars import
+import polars as pl
 
 from dagster import AssetExecutionContext, asset, Output, MetadataValue, AssetIn
 # Removed DagsterDltResource, dlt_assets imports as they are no longer used
@@ -67,9 +68,8 @@ def sanitize_postgres_column_name(col_name: str) -> str:
     # If the name is too long, truncate it and add a hash suffix
     if len(sanitized) > 63:
         # Create a hash of the original name for uniqueness
-        import hashlib
         name_hash = hashlib.md5(col_name.encode('utf-8')).hexdigest()[:8]
-        
+
         # For mailing list columns, try to preserve the ID part
         if 'loopsMailingList' in col_name and '-' in col_name:
             # Extract the ID part (between the first and second dash)
@@ -79,17 +79,35 @@ def sanitize_postgres_column_name(col_name: str) -> str:
                 # Create a shorter name: loopsMailingList_ID_hash
                 sanitized = f"loopsMailingList_{mailing_list_id}_{name_hash}"
             else:
-                # Fallback to normal truncation
-                truncated = sanitized[:55]
+                # Fallback to normal truncation (54 chars + _ + 8 char hash = 63)
+                truncated = sanitized[:54]
                 truncated = truncated.rstrip('_')
                 sanitized = f"{truncated}_{name_hash}"
         else:
-            # Normal truncation for non-mailing list columns
-            truncated = sanitized[:55]
+            # Normal truncation for non-mailing list columns (54 chars + _ + 8 char hash = 63)
+            truncated = sanitized[:54]
             truncated = truncated.rstrip('_')
             sanitized = f"{truncated}_{name_hash}"
-    
+
     return sanitized
+
+
+def sanitize_df_columns_for_postgres(df: pl.DataFrame, context: AssetExecutionContext) -> pl.DataFrame:
+    """
+    Sanitize all column names in a DataFrame for PostgreSQL compatibility.
+    Logs any column name changes and returns the renamed DataFrame.
+    """
+    column_name_mapping = {col: sanitize_postgres_column_name(col) for col in df.columns}
+    changed_columns = {k: v for k, v in column_name_mapping.items() if k != v}
+
+    if changed_columns:
+        context.log.info(f"Sanitizing {len(changed_columns)} column names for PostgreSQL compatibility:")
+        for original, sanitized in changed_columns.items():
+            context.log.info(f"  '{original}' -> '{sanitized}'")
+        return df.rename(column_name_mapping)
+
+    return df
+
 
 def create_airtable_sync_assets(
     base_name: str,
@@ -365,7 +383,10 @@ def create_airtable_sync_assets(
                             .str.strip_chars()
                             .alias(col)
                         )
-                
+
+                # Sanitize column names for PostgreSQL compatibility (63 char limit, special chars)
+                renamed_df = sanitize_df_columns_for_postgres(renamed_df, context)
+
                 # Make DLT pipeline name unique per table to avoid state conflicts
                 dlt_pipeline_name = f"{pipeline_name_base}_{specific_table_name}"
 
@@ -538,6 +559,12 @@ athena_award_assets = create_airtable_sync_assets(
     description="Loads athena_award.registered_users, athena_award.email_slack_invites, athena_award.free_sticker_form, and athena_award.projects data into the warehouse.athena_award schema."
 )
 
+slack_nps_assets = create_airtable_sync_assets(
+    base_name="slack_nps",
+    tables=["nps"],
+    description="Loads slack_nps.nps data into the warehouse.airtable_slack_nps schema."
+)
+
 # --- DLT Asset: Loads Data into Warehouse using DLT ---
 @asset(
     compute_kind="dlt", # Tagging the compute type for UI clarity
@@ -559,23 +586,8 @@ def loops_audience(
     context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name}'")
 
     # Apply column name sanitization for PostgreSQL compatibility
-    original_columns = loops_processed_audience.columns
-    sanitized_df = loops_processed_audience.rename({col: sanitize_postgres_column_name(col) for col in original_columns})
-    
-    # Log the column name changes for debugging
-    changed_columns = {col: sanitize_postgres_column_name(col) for col in original_columns if col != sanitize_postgres_column_name(col)}
-    if changed_columns:
-        context.log.info(f"Sanitized {len(changed_columns)} column names for PostgreSQL compatibility:")
-        for original, sanitized in changed_columns.items():
-            context.log.info(f"  '{original}' -> '{sanitized}'")
-    
-    # Log mailing list columns specifically for debugging
-    mailing_list_cols = [col for col in original_columns if 'loopsMailingList' in col]
-    context.log.info(f"Found {len(mailing_list_cols)} mailing list columns:")
-    for col in mailing_list_cols:
-        sanitized_col = sanitize_postgres_column_name(col)
-        context.log.info(f"  '{col}' -> '{sanitized_col}'")
-    
+    sanitized_df = sanitize_df_columns_for_postgres(loops_processed_audience, context)
+
     # Check for potential data type issues
     context.log.info(f"DataFrame schema:")
     for col, dtype in sanitized_df.schema.items():

@@ -128,6 +128,14 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblJCBhT1pYJcrQjV"
                 )
             }
+        ),
+        "slack_nps": AirtableBaseConfig(
+            base_id="appvetUwHQTgkNel3",
+            tables={
+                "nps": AirtableTableConfig(
+                    table_id="tbl9iohVeaOd6ovDI"
+                )
+            }
         )
     }
 )
