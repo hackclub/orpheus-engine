@@ -148,42 +148,55 @@ mcp = Server("warehouse-mcp")
 sse_transport = SseServerTransport("/")
 
 
-def format_rows_for_display(rows: list[dict[str, Any]], columns: list[str]) -> str:
-    """Format rows as a readable table string."""
+def format_rows_for_display(rows: list[dict[str, Any]], columns: list[str], truncate_values: bool = False) -> str:
+    """Format rows as a readable table string.
+
+    Args:
+        rows: List of row dictionaries
+        columns: Column names in display order
+        truncate_values: If True, truncate cell values to 100 characters (for previews)
+    """
     if not rows:
         return "(no rows)"
-    
-    # Convert all values to strings, handling None
+
+    max_value_len = 100 if truncate_values else None
+
+    # Convert all values to strings, handling None and optional truncation
     str_rows = []
     for row in rows:
-        str_row = {k: str(v) if v is not None else "NULL" for k, v in row.items()}
+        str_row = {}
+        for k, v in row.items():
+            if v is None:
+                str_row[k] = "NULL"
+            else:
+                s = str(v)
+                if max_value_len and len(s) > max_value_len:
+                    s = s[:max_value_len] + "..."
+                str_row[k] = s
         str_rows.append(str_row)
-    
-    # Calculate column widths
+
+    # Calculate column widths based on actual content
     widths = {col: len(col) for col in columns}
     for row in str_rows:
         for col in columns:
             widths[col] = max(widths[col], len(row.get(col, "")))
-    
-    # Cap column widths at 50 chars
-    widths = {col: min(w, 50) for col, w in widths.items()}
-    
+
     # Build table
     lines = []
-    
+
     # Header
-    header = " | ".join(col.ljust(widths[col])[:widths[col]] for col in columns)
+    header = " | ".join(col.ljust(widths[col]) for col in columns)
     lines.append(header)
     lines.append("-" * len(header))
-    
+
     # Rows
     for row in str_rows:
         line = " | ".join(
-            str(row.get(col, ""))[:widths[col]].ljust(widths[col]) 
+            str(row.get(col, "")).ljust(widths[col])
             for col in columns
         )
         lines.append(line)
-    
+
     return "\n".join(lines)
 
 
@@ -347,7 +360,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             
             # Format response
             preview = rows[:preview_rows]
-            table = format_rows_for_display(preview, columns)
+            table = format_rows_for_display(preview, columns, truncate_values=True)
             
             result = (
                 f"Query ID: {entry.query_id}\n"
