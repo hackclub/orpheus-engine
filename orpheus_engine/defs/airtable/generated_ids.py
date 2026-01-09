@@ -933,6 +933,8 @@ class AirtableIDs:
             on_a_scale_from_1_to_10_how_likely_are_you_to_recommend_the_hack_club_slack_to_a_friend = "fldyKlRP6iNt3i1lv"  # Name: On a scale from 1 to 10, how likely are you to recommend the Hack Club Slack to a friend?
             have_you_made_a_friend_on_the_hack_club_slack = "fldycpVCLrUHz72ki"  # Name: Have you made a friend on the Hack Club Slack?
             how_can_we_improve_the_slack = "fldgIepjaWVgCYWQ2"  # Name: How can we improve the Slack?
+            submitted_at = "fld7Ihoq41nQGPbsI"  # Name: Submitted At
+            loops_slack_feedback_given_at = "fldMWzdfoCGgvEkBr"  # Name: Loops - slackFeedbackGivenAt
 
 
 # fmt: on
