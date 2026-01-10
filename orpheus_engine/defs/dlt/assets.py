@@ -92,10 +92,13 @@ def sanitize_postgres_column_name(col_name: str) -> str:
     return sanitized
 
 
-def sanitize_df_columns_for_postgres(df: pl.DataFrame, context: AssetExecutionContext) -> pl.DataFrame:
+def sanitize_df_columns_for_postgres(df: pl.DataFrame, context: AssetExecutionContext) -> tuple[pl.DataFrame, dict[str, str]]:
     """
     Sanitize all column names in a DataFrame for PostgreSQL compatibility.
-    Logs any column name changes and returns the renamed DataFrame.
+    Logs any column name changes and returns the renamed DataFrame along with the mapping of changed columns.
+
+    Returns:
+        A tuple of (sanitized_dataframe, changed_columns_dict)
     """
     column_name_mapping = {col: sanitize_postgres_column_name(col) for col in df.columns}
     changed_columns = {k: v for k, v in column_name_mapping.items() if k != v}
@@ -104,9 +107,9 @@ def sanitize_df_columns_for_postgres(df: pl.DataFrame, context: AssetExecutionCo
         context.log.info(f"Sanitizing {len(changed_columns)} column names for PostgreSQL compatibility:")
         for original, sanitized in changed_columns.items():
             context.log.info(f"  '{original}' -> '{sanitized}'")
-        return df.rename(column_name_mapping)
+        return df.rename(column_name_mapping), changed_columns
 
-    return df
+    return df, changed_columns
 
 
 def create_airtable_sync_assets(
@@ -385,7 +388,7 @@ def create_airtable_sync_assets(
                         )
 
                 # Sanitize column names for PostgreSQL compatibility (63 char limit, special chars)
-                renamed_df = sanitize_df_columns_for_postgres(renamed_df, context)
+                renamed_df, _ = sanitize_df_columns_for_postgres(renamed_df, context)
 
                 # Make DLT pipeline name unique per table to avoid state conflicts
                 dlt_pipeline_name = f"{pipeline_name_base}_{specific_table_name}"
@@ -585,8 +588,11 @@ def loops_audience(
     context.log.info(f"Starting DLT pipeline '{pipeline_name}' to load data.")
     context.log.info(f"Destination: Postgres, Dataset (Schema): '{dataset_name}', Table: '{table_name}'")
 
+    # Store original columns for error handling
+    original_columns = loops_processed_audience.columns
+
     # Apply column name sanitization for PostgreSQL compatibility
-    sanitized_df = sanitize_df_columns_for_postgres(loops_processed_audience, context)
+    sanitized_df, changed_columns = sanitize_df_columns_for_postgres(loops_processed_audience, context)
 
     # Check for potential data type issues
     context.log.info(f"DataFrame schema:")
