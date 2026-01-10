@@ -56,8 +56,24 @@ unified_ysws_15min_schedule = dg.ScheduleDefinition(
     execution_timezone="America/New_York",                 # keeps logs in local time
 )
 
-# 5. Wrap in a Definitions so Dagster can find it
+# 5. Slack NPS job and schedule (every 15 minutes)
+materialize_slack_nps_job = dg.define_asset_job(
+    name="materialize_slack_nps_job",
+    selection=(
+        dg.AssetSelection.assets("airtable/slack_nps/nps") |
+        dg.AssetSelection.assets("slack_nps_nps_warehouse")
+    ),
+)
+
+slack_nps_15min_schedule = dg.ScheduleDefinition(
+    name="slack_nps_15min_schedule",
+    job=materialize_slack_nps_job,
+    cron_schedule="*/15 * * * *",                          # every 15 minutes
+    execution_timezone="America/New_York",
+)
+
+# 6. Wrap in a Definitions so Dagster can find it
 defs = dg.Definitions(
-    jobs=[materialize_all_assets_job, materialize_unified_ysws_job],
-    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule],
+    jobs=[materialize_all_assets_job, materialize_unified_ysws_job, materialize_slack_nps_job],
+    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule, slack_nps_15min_schedule],
 ) 
