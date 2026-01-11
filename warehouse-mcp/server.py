@@ -315,7 +315,14 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_schemas",
-            description="List all available schemas in the data warehouse.",
+            description=(
+                "List all available schemas in the data warehouse.\n\n"
+                "Key schemas:\n"
+                "- airtable_unified_ysws_projects_db: Shipped projects and NPS on programs\n"
+                "- public_unified_analytics: User histories and events on users\n"
+                "- loops.audience: User profile fields (geocoded country, etc.)\n"
+                "- public_hackatime_analytics: Coding activity (preferred over hackatime schema)"
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {},
