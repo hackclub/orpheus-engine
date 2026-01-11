@@ -10,6 +10,7 @@ Provides tools for:
 """
 
 import base64
+import contextvars
 import hashlib
 import json
 import logging
@@ -63,6 +64,8 @@ AUTH_TOKEN = get_auth_token()
 _oauth_codes: dict[str, dict] = {}
 # Maps pending auth requests (before user enters token)
 _pending_auth: dict[str, dict] = {}
+# Current user context (firstname, lastname) for SQL query attribution
+_current_user: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar('current_user', default=None)
 
 
 def generate_pending_auth(client_id: str, redirect_uri: str, code_challenge: str, state: str) -> str:
@@ -78,25 +81,25 @@ def generate_pending_auth(client_id: str, redirect_uri: str, code_challenge: str
     return session_id
 
 
-def complete_auth(session_id: str, provided_token: str) -> tuple[str, str, str] | None:
+def complete_auth(session_id: str, provided_token: str, firstname: str, lastname: str) -> tuple[str, str, str] | None:
     """
-    Complete auth after user provides token.
+    Complete auth after user provides token and name.
     Returns (code, redirect_uri, state) if valid, None otherwise.
     """
     pending = _pending_auth.pop(session_id, None)
     if not pending:
         return None
-    
+
     # Check session hasn't expired (10 minute validity)
     if time.time() - pending["created_at"] > 600:
         return None
-    
+
     # Validate provided token matches AUTH_TOKEN
     if not secrets.compare_digest(provided_token, AUTH_TOKEN):
         # Put back in pending so user can retry
         _pending_auth[session_id] = pending
         return None
-    
+
     # Generate authorization code
     code = secrets.token_urlsafe(32)
     _oauth_codes[code] = {
@@ -104,8 +107,10 @@ def complete_auth(session_id: str, provided_token: str) -> tuple[str, str, str] 
         "redirect_uri": pending["redirect_uri"],
         "code_challenge": pending["code_challenge"],
         "created_at": time.time(),
+        "firstname": firstname,
+        "lastname": lastname,
     }
-    
+
     return code, pending["redirect_uri"], pending["state"]
 
 
@@ -132,14 +137,42 @@ def exchange_code_for_token(code: str, code_verifier: str, client_id: str) -> st
     if challenge != code_data["code_challenge"]:
         logger.warning(f"PKCE verification failed: expected {code_data['code_challenge']}, got {challenge}")
         return None
-    
-    # Return the AUTH_TOKEN itself as the access token
-    return AUTH_TOKEN
+
+    # Encode AUTH_TOKEN with user info: base64("{AUTH_TOKEN}:{firstname}:{lastname}")
+    firstname = code_data.get("firstname", "")
+    lastname = code_data.get("lastname", "")
+    token_data = f"{AUTH_TOKEN}:{firstname}:{lastname}"
+    encoded_token = base64.b64encode(token_data.encode('utf-8')).decode('utf-8')
+    return encoded_token
+
+
+def decode_access_token(token: str) -> tuple[bool, str | None, str | None]:
+    """
+    Decode and validate an access token.
+
+    Token format: base64("{AUTH_TOKEN}:{firstname}:{lastname}")
+
+    Returns:
+        (is_valid, firstname, lastname) or (False, None, None) if invalid
+    """
+    try:
+        decoded = base64.b64decode(token).decode('utf-8')
+        parts = decoded.split(':', 2)
+        if len(parts) != 3:
+            return (False, None, None)
+
+        auth_token, firstname, lastname = parts
+        if secrets.compare_digest(auth_token, AUTH_TOKEN):
+            return (True, firstname, lastname)
+        return (False, None, None)
+    except Exception:
+        return (False, None, None)
 
 
 def validate_access_token(token: str) -> bool:
-    """Validate an access token (must match AUTH_TOKEN)."""
-    return secrets.compare_digest(token, AUTH_TOKEN)
+    """Validate an access token."""
+    is_valid, _, _ = decode_access_token(token)
+    return is_valid
 
 # Create MCP server
 mcp = Server("warehouse-mcp")
@@ -346,14 +379,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Handle tool calls."""
     db = get_database()
     cache = get_cache()
-    
+    user_info = _current_user.get()
+
     try:
         if name == "query":
             sql = arguments["sql"]
             preview_rows = arguments.get("preview_rows", 50)
-            
-            # Execute query
-            rows, columns = db.execute_query(sql)
+
+            # Execute query with user attribution
+            rows, columns = db.execute_query(sql, user_info=user_info)
             
             # Cache results
             entry = cache.store(sql, rows, columns)
@@ -711,6 +745,17 @@ async def app(scope, receive, send):
             font-weight: 500;
             color: #333;
         }}
+        .form-group {{
+            margin-bottom: 16px;
+        }}
+        .name-row {{
+            display: flex;
+            gap: 12px;
+        }}
+        .name-row .form-group {{
+            flex: 1;
+        }}
+        input[type="text"],
         input[type="password"] {{
             width: 100%;
             padding: 12px 16px;
@@ -719,6 +764,7 @@ async def app(scope, receive, send):
             font-size: 16px;
             transition: border-color 0.2s;
         }}
+        input[type="text"]:focus,
         input[type="password"]:focus {{
             outline: none;
             border-color: #4f46e5;
@@ -752,17 +798,29 @@ async def app(scope, receive, send):
 <body>
     <div class="container">
         <h1>🏭 Warehouse MCP</h1>
-        <p class="subtitle">Enter your authentication token to connect</p>
+        <p class="subtitle">Enter your name and API key to connect</p>
         <form method="POST" action="/authorize">
             <input type="hidden" name="session_id" value="{session_id}">
-            <label for="token">Auth Token</label>
-            <input type="password" id="token" name="token" placeholder="Enter AUTH_TOKEN" required autofocus>
+            <div class="name-row">
+                <div class="form-group">
+                    <label for="firstname">First Name</label>
+                    <input type="text" id="firstname" name="firstname" placeholder="First name" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="lastname">Last Name</label>
+                    <input type="text" id="lastname" name="lastname" placeholder="Last name" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="token">API Key</label>
+                <input type="password" id="token" name="token" placeholder="Enter API key" required>
+            </div>
             <button type="submit">Authenticate</button>
         </form>
     </div>
 </body>
 </html>"""
-        
+
         await send({
             "type": "http.response.start",
             "status": 200,
@@ -778,11 +836,13 @@ async def app(scope, receive, send):
     if path == "/authorize" and method == "POST":
         body = await read_body(receive)
         form_data = dict(urllib.parse.parse_qsl(body.decode()))
-        
+
         session_id = form_data.get("session_id", "")
         provided_token = form_data.get("token", "")
-        
-        result = complete_auth(session_id, provided_token)
+        firstname = form_data.get("firstname", "")
+        lastname = form_data.get("lastname", "")
+
+        result = complete_auth(session_id, provided_token, firstname, lastname)
         
         if not result:
             # Show error and let user retry
@@ -833,6 +893,17 @@ async def app(scope, receive, send):
             font-weight: 500;
             color: #333;
         }}
+        .form-group {{
+            margin-bottom: 16px;
+        }}
+        .name-row {{
+            display: flex;
+            gap: 12px;
+        }}
+        .name-row .form-group {{
+            flex: 1;
+        }}
+        input[type="text"],
         input[type="password"] {{
             width: 100%;
             padding: 12px 16px;
@@ -841,6 +912,7 @@ async def app(scope, receive, send):
             font-size: 16px;
             transition: border-color 0.2s;
         }}
+        input[type="text"]:focus,
         input[type="password"]:focus {{
             outline: none;
             border-color: #4f46e5;
@@ -874,18 +946,30 @@ async def app(scope, receive, send):
 <body>
     <div class="container">
         <h1>🏭 Warehouse MCP</h1>
-        <p class="subtitle">Enter your authentication token to connect</p>
-        <div class="error">Invalid token. Please try again.</div>
+        <p class="subtitle">Enter your name and API key to connect</p>
+        <div class="error">Invalid API key. Please try again.</div>
         <form method="POST" action="/authorize">
             <input type="hidden" name="session_id" value="{session_id}">
-            <label for="token">Auth Token</label>
-            <input type="password" id="token" name="token" placeholder="Enter AUTH_TOKEN" required autofocus>
+            <div class="name-row">
+                <div class="form-group">
+                    <label for="firstname">First Name</label>
+                    <input type="text" id="firstname" name="firstname" placeholder="First name" value="{firstname}" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="lastname">Last Name</label>
+                    <input type="text" id="lastname" name="lastname" placeholder="Last name" value="{lastname}" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="token">API Key</label>
+                <input type="password" id="token" name="token" placeholder="Enter API key" required>
+            </div>
             <button type="submit">Authenticate</button>
         </form>
     </div>
 </body>
 </html>"""
-            
+
             await send({
                 "type": "http.response.start",
                 "status": 200,
@@ -970,7 +1054,16 @@ async def app(scope, receive, send):
             "body": body,
         })
         return
-    
+
+    # Extract user context from auth token for SQL attribution
+    headers = dict(scope.get("headers", []))
+    auth_header = headers.get(b"authorization", b"").decode()
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        is_valid, firstname, lastname = decode_access_token(token)
+        if is_valid and firstname and lastname:
+            _current_user.set((firstname, lastname))
+
     # MCP SSE endpoint at root path (/) for Streamable HTTP transport
     if path == "/" and method == "GET":
         async with sse_transport.connect_sse(scope, receive, send) as streams:
@@ -980,12 +1073,12 @@ async def app(scope, receive, send):
                 mcp.create_initialization_options()
             )
         return
-    
+
     # MCP messages endpoint at root path
     if path == "/" and method == "POST":
         await sse_transport.handle_post_message(scope, receive, send)
         return
-    
+
     # 404 for unknown routes
     await send_error(send, 404, "Not found")
 

@@ -299,38 +299,49 @@ class Database:
             self._conn.close()
             self._conn = None
     
-    def execute_query(self, sql: str, max_rows: int = 10000) -> tuple[List[Dict[str, Any]], List[str]]:
+    def execute_query(
+        self,
+        sql: str,
+        max_rows: int = 10000,
+        user_info: tuple[str, str] | None = None
+    ) -> tuple[List[Dict[str, Any]], List[str]]:
         """
         Execute a read-only SQL query and return results.
-        
+
         Args:
             sql: The SQL query to execute
             max_rows: Maximum number of rows to return (default 10000)
-        
+            user_info: Optional (firstname, lastname) tuple for SQL attribution
+
         Returns:
             Tuple of (rows as list of dicts, column names)
-        
+
         Raises:
             SQLValidationError: If SQL contains forbidden statements
         """
         # Validate SQL before execution
         validate_sql(sql)
-        
+
+        # Prefix SQL with user attribution comment
+        if user_info:
+            firstname, lastname = user_info
+            sql = f"-- warehouse-mcp {firstname} {lastname}\n{sql}"
+
         self.connect()
-        
+
         with self._conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(sql)
-            
+
             # Fetch results
             if cursor.description is None:
                 return [], []
-            
+
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchmany(max_rows)
-            
+
             # Convert to regular dicts
             rows = [dict(row) for row in rows]
-            
+
             return rows, columns
     
     def execute_query_with_params(
