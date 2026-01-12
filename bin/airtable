@@ -1,0 +1,528 @@
+#!/usr/bin/env python3
+"""
+Airtable CLI tool for exploring and modifying Airtable bases.
+
+Usage:
+  ./bin/airtable bases                                    # List all bases
+  ./bin/airtable tables BASE_ID                           # List tables with fields and sample rows
+  ./bin/airtable rows BASE_ID TABLE                       # List rows in a table
+  ./bin/airtable rows BASE_ID TABLE --limit N             # Limit number of rows
+  ./bin/airtable rows BASE_ID TABLE --view VIEW           # Use specific view
+  ./bin/airtable create-field BASE_ID TABLE_ID FIELD_DEF  # Create a field (DANGEROUS, requires table ID)
+  ./bin/airtable create-row BASE_ID TABLE FIELD=VALUE ... # Create a row (DANGEROUS)
+  ./bin/airtable update-row BASE_ID TABLE RECORD_ID ...   # Update a row (DANGEROUS)
+  ./bin/airtable delete-row BASE_ID TABLE RECORD_ID       # Delete a row (DANGEROUS)
+
+Environment:
+  AIRTABLE_PERSONAL_ACCESS_TOKEN - Personal access token from Airtable
+
+Field definition format for create-field:
+  '{"name": "Field Name", "type": "singleLineText"}'
+  '{"name": "Status", "type": "singleSelect", "options": {"choices": [{"name": "Todo"}, {"name": "Done"}]}}'
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+# Load .env file
+env_file = Path(".env")
+if env_file.exists():
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            value = value.strip()
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            os.environ.setdefault(key.strip(), value)
+
+AIRTABLE_TOKEN = os.environ.get("AIRTABLE_PERSONAL_ACCESS_TOKEN")
+
+if not AIRTABLE_TOKEN:
+    print("Error: AIRTABLE_PERSONAL_ACCESS_TOKEN is not set in .env", file=sys.stderr)
+    sys.exit(1)
+
+API_URL = "https://api.airtable.com/v0"
+
+# Airtable ID patterns - these are alphanumeric with specific prefixes
+BASE_ID_PATTERN = re.compile(r"^app[a-zA-Z0-9]{14,17}$")
+TABLE_ID_PATTERN = re.compile(r"^tbl[a-zA-Z0-9]{14,17}$")
+RECORD_ID_PATTERN = re.compile(r"^rec[a-zA-Z0-9]{14,17}$")
+
+
+def validate_base_id(base_id: str) -> str:
+    """Validate and return a base ID. Raises ValueError if invalid."""
+    if not BASE_ID_PATTERN.match(base_id):
+        raise ValueError(
+            f"Invalid base ID format: {base_id!r}. "
+            "Base IDs should start with 'app' followed by 14-17 alphanumeric characters."
+        )
+    return base_id
+
+
+def validate_table_id(table_id: str) -> str:
+    """Validate and return a table ID. Raises ValueError if invalid."""
+    if not TABLE_ID_PATTERN.match(table_id):
+        raise ValueError(
+            f"Invalid table ID format: {table_id!r}. "
+            "Table IDs should start with 'tbl' followed by 14-17 alphanumeric characters."
+        )
+    return table_id
+
+
+def validate_record_id(record_id: str) -> str:
+    """Validate and return a record ID. Raises ValueError if invalid."""
+    if not RECORD_ID_PATTERN.match(record_id):
+        raise ValueError(
+            f"Invalid record ID format: {record_id!r}. "
+            "Record IDs should start with 'rec' followed by 14-17 alphanumeric characters."
+        )
+    return record_id
+
+
+def validate_table_name_or_id(table: str) -> str:
+    """
+    Validate a table name or ID.
+    Table names are user-defined strings; table IDs start with 'tbl'.
+    Returns the validated string.
+    """
+    # If it looks like an ID, validate as ID
+    if table.startswith("tbl"):
+        return validate_table_id(table)
+    # Otherwise treat as a table name - just ensure it's not trying path traversal
+    if ".." in table or "/" in table or "\\" in table or "\x00" in table:
+        raise ValueError(
+            f"Invalid table name: {table!r}. "
+            "Table names cannot contain path separators or null bytes."
+        )
+    if not table.strip():
+        raise ValueError("Table name cannot be empty.")
+    return table
+
+
+def parse_field_values(field_values: list[str]) -> dict[str, Any]:
+    """Parse field=value pairs into a dictionary."""
+    fields: dict[str, Any] = {}
+    for fv in field_values:
+        if "=" not in fv:
+            raise ValueError(
+                f"Invalid field value format: {fv!r}. Use: FIELD=VALUE format"
+            )
+        key, _, value = fv.partition("=")
+        key = key.strip()
+        if not key:
+            raise ValueError(f"Empty field name in: {fv!r}")
+        # Try to parse as JSON for complex values
+        try:
+            fields[key] = json.loads(value)
+        except json.JSONDecodeError:
+            fields[key] = value  # Keep as string
+    return fields
+
+
+def api_request(endpoint: str, method: str = "GET", data: dict[str, Any] | None = None) -> dict[str, Any] | list[Any] | None:
+    """Make API request to Airtable."""
+    url = f"{API_URL}{endpoint}"
+
+    req = urllib.request.Request(url, method=method)
+    req.add_header("Authorization", f"Bearer {AIRTABLE_TOKEN}")
+    req.add_header("Content-Type", "application/json")
+
+    body = None
+    if data:
+        body = json.dumps(data).encode("utf-8")
+
+    try:
+        with urllib.request.urlopen(req, body, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        try:
+            error_data = json.loads(error_body)
+            if isinstance(error_data, dict):
+                error_obj = error_data.get("error", {})
+                if isinstance(error_obj, dict):
+                    error_msg = error_obj.get("message", error_body)
+                else:
+                    error_msg = str(error_obj)
+            else:
+                error_msg = error_body
+        except json.JSONDecodeError:
+            error_msg = error_body
+        print(f"API Error ({e.code}): {error_msg}", file=sys.stderr)
+        return None
+    except urllib.error.URLError as e:
+        print(f"Network Error: {e.reason}", file=sys.stderr)
+        return None
+
+
+def list_bases() -> None:
+    """List all accessible Airtable bases."""
+    print("Fetching bases...", file=sys.stderr)
+
+    result = api_request("/meta/bases")
+    if not result:
+        sys.exit(1)
+
+    bases = result.get("bases", [])
+
+    if not bases:
+        print("No bases found.")
+        return
+
+    print(f"\n{'ID':<20} {'Name':<40} {'Permission':<15}")
+    print("-" * 75)
+
+    for base in bases:
+        base_id = base.get("id", "")
+        name = base.get("name", "")
+        permission = base.get("permissionLevel", "")
+        print(f"{base_id:<20} {name:<40} {permission:<15}")
+
+
+def list_tables(base_id: str, samples: int = 3) -> None:
+    """List tables in a base with their fields and sample rows."""
+    base_id = validate_base_id(base_id)
+    print(f"Fetching tables for base {base_id}...", file=sys.stderr)
+
+    result = api_request(f"/meta/bases/{base_id}/tables")
+    if not result:
+        sys.exit(1)
+
+    tables = result.get("tables", [])
+
+    if not tables:
+        print("No tables found.")
+        return
+
+    for table in tables:
+        table_id = table.get("id", "")
+        table_name = table.get("name", "")
+        fields = table.get("fields", [])
+
+        print(f"\n{'='*60}")
+        print(f"TABLE: {table_name}")
+        print(f"ID: {table_id}")
+        print(f"{'='*60}")
+
+        # Print fields
+        print("\nFields:")
+        for field in fields:
+            field_name = field.get("name", "")
+            field_type = field.get("type", "")
+            field_id = field.get("id", "")
+            print(f"  - {field_name} ({field_type}) [{field_id}]")
+
+        # Fetch sample rows
+        if samples > 0:
+            print(f"\nSample rows (up to {samples}):")
+            rows_result = api_request(f"/{base_id}/{table_id}?maxRecords={samples}")
+            if rows_result:
+                records = rows_result.get("records", [])
+                if records:
+                    for i, record in enumerate(records, 1):
+                        record_id = record.get("id", "")
+                        record_fields = record.get("fields", {})
+                        print(f"\n  [{i}] {record_id}")
+                        for key, value in record_fields.items():
+                            # Truncate long values
+                            str_value = str(value)
+                            if len(str_value) > 80:
+                                str_value = str_value[:77] + "..."
+                            print(f"      {key}: {str_value}")
+                else:
+                    print("  (no rows)")
+            else:
+                print("  (failed to fetch samples)")
+
+
+def list_rows(base_id: str, table: str, limit: int = 100, view: str | None = None, offset: str | None = None) -> None:
+    """List rows in a table."""
+    base_id = validate_base_id(base_id)
+    table = validate_table_name_or_id(table)
+
+    params = [f"maxRecords={limit}"]
+    if view:
+        params.append(f"view={urllib.parse.quote(view)}")
+    if offset:
+        params.append(f"offset={urllib.parse.quote(offset)}")
+
+    query = "&".join(params)
+    table_encoded = urllib.parse.quote(table, safe="")
+    result = api_request(f"/{base_id}/{table_encoded}?{query}")
+
+    if not result:
+        sys.exit(1)
+
+    records = result.get("records", [])
+    next_offset = result.get("offset")
+
+    if not records:
+        print("No rows found.")
+        return
+
+    # Get all field names from records
+    all_fields = set()
+    for record in records:
+        all_fields.update(record.get("fields", {}).keys())
+
+    # Print records
+    for record in records:
+        record_id = record.get("id", "")
+        record_fields = record.get("fields", {})
+        created_time = record.get("createdTime", "")
+
+        print(f"\n{'='*60}")
+        print(f"Record: {record_id}")
+        print(f"Created: {created_time}")
+        print("-" * 60)
+
+        for key, value in record_fields.items():
+            str_value = str(value)
+            if len(str_value) > 100:
+                str_value = str_value[:97] + "..."
+            print(f"  {key}: {str_value}")
+
+    if next_offset:
+        print(f"\n--- More records available. Use --offset '{next_offset}' to continue ---")
+
+    print(f"\nTotal shown: {len(records)}")
+
+
+def confirm_dangerous_action(action: str, details: str) -> bool:
+    """Prompt user to confirm a dangerous action."""
+    print(f"\n{'!'*60}", file=sys.stderr)
+    print(f"WARNING: You are about to {action}", file=sys.stderr)
+    print(f"{'!'*60}", file=sys.stderr)
+    print(f"\n{details}\n", file=sys.stderr)
+
+    try:
+        response = input("Type 'yes' to confirm: ")
+        return response.strip().lower() == "yes"
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.", file=sys.stderr)
+        return False
+
+
+def create_field(base_id: str, table_id: str, field_def: str) -> None:
+    """Create a new field in a table. Requires table ID (not name)."""
+    base_id = validate_base_id(base_id)
+    table_id = validate_table_id(table_id)  # create-field requires table ID, not name
+
+    try:
+        field_data = json.loads(field_def)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing field definition: {e}", file=sys.stderr)
+        print("\nField definition must be valid JSON. Examples:", file=sys.stderr)
+        print('  \'{"name": "My Field", "type": "singleLineText"}\'', file=sys.stderr)
+        print('  \'{"name": "Status", "type": "singleSelect", "options": {"choices": [{"name": "Todo"}]}}\'', file=sys.stderr)
+        sys.exit(1)
+
+    details = f"Base: {base_id}\nTable: {table_id}\nField: {json.dumps(field_data, indent=2)}"
+
+    if not confirm_dangerous_action("CREATE A NEW FIELD", details):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+    result = api_request(f"/meta/bases/{base_id}/tables/{table_id}/fields", method="POST", data=field_data)
+
+    if result:
+        print("\nField created successfully!")
+        print(json.dumps(result, indent=2))
+    else:
+        sys.exit(1)
+
+
+def create_row(base_id: str, table: str, field_values: list[str]) -> None:
+    """Create a new row in a table."""
+    base_id = validate_base_id(base_id)
+    table = validate_table_name_or_id(table)
+
+    try:
+        fields = parse_field_values(field_values)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    details = f"Base: {base_id}\nTable: {table}\nFields:\n{json.dumps(fields, indent=2)}"
+
+    if not confirm_dangerous_action("CREATE A NEW ROW", details):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+    data = {"fields": fields}
+    table_encoded = urllib.parse.quote(table, safe="")
+    result = api_request(f"/{base_id}/{table_encoded}", method="POST", data=data)
+
+    if result:
+        print("\nRow created successfully!")
+        print(f"Record ID: {result.get('id')}")
+        print(json.dumps(result, indent=2))
+    else:
+        sys.exit(1)
+
+
+def update_row(base_id: str, table: str, record_id: str, field_values: list[str]) -> None:
+    """Update an existing row."""
+    base_id = validate_base_id(base_id)
+    table = validate_table_name_or_id(table)
+    record_id = validate_record_id(record_id)
+
+    try:
+        fields = parse_field_values(field_values)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Fetch current record to show what we're changing
+    print(f"Fetching current record {record_id}...", file=sys.stderr)
+    table_encoded = urllib.parse.quote(table, safe="")
+    current = api_request(f"/{base_id}/{table_encoded}/{record_id}")
+
+    if not current:
+        print("Error: Could not fetch current record", file=sys.stderr)
+        sys.exit(1)
+
+    current_fields = current.get("fields", {})
+
+    # Show diff
+    changes = []
+    for key, new_value in fields.items():
+        old_value = current_fields.get(key, "(not set)")
+        changes.append(f"  {key}:\n    OLD: {old_value}\n    NEW: {new_value}")
+
+    details = f"Base: {base_id}\nTable: {table}\nRecord: {record_id}\n\nChanges:\n" + "\n".join(changes)
+
+    if not confirm_dangerous_action("UPDATE AN EXISTING ROW", details):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+    data = {"fields": fields}
+    result = api_request(f"/{base_id}/{table_encoded}/{record_id}", method="PATCH", data=data)
+
+    if result:
+        print("\nRow updated successfully!")
+        print(json.dumps(result, indent=2))
+    else:
+        sys.exit(1)
+
+
+def delete_row(base_id: str, table: str, record_id: str) -> None:
+    """Delete a row from a table."""
+    base_id = validate_base_id(base_id)
+    table = validate_table_name_or_id(table)
+    record_id = validate_record_id(record_id)
+
+    # Fetch current record to show what we're deleting
+    print(f"Fetching record {record_id}...", file=sys.stderr)
+    table_encoded = urllib.parse.quote(table, safe="")
+    current = api_request(f"/{base_id}/{table_encoded}/{record_id}")
+
+    if not current:
+        print("Error: Could not fetch record", file=sys.stderr)
+        sys.exit(1)
+
+    current_fields = current.get("fields", {})
+
+    # Show what we're deleting
+    field_summary = "\n".join(f"  {k}: {v}" for k, v in current_fields.items())
+    details = f"Base: {base_id}\nTable: {table}\nRecord: {record_id}\n\nFields:\n{field_summary}"
+
+    if not confirm_dangerous_action("DELETE A ROW (IRREVERSIBLE)", details):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+    result = api_request(f"/{base_id}/{table_encoded}/{record_id}", method="DELETE")
+
+    if result is not None:
+        print("\nRow deleted successfully!")
+        print(f"Deleted record: {result.get('id', record_id)}")
+    else:
+        sys.exit(1)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # bases command
+    subparsers.add_parser("bases", help="List all accessible bases")
+
+    # tables command
+    tables_parser = subparsers.add_parser("tables", help="List tables in a base")
+    tables_parser.add_argument("base_id", help="Base ID (e.g., appXXXXXXXXX)")
+    tables_parser.add_argument("--samples", type=int, default=3, help="Number of sample rows (default: 3)")
+
+    # rows command
+    rows_parser = subparsers.add_parser("rows", help="List rows in a table")
+    rows_parser.add_argument("base_id", help="Base ID")
+    rows_parser.add_argument("table", help="Table name or ID")
+    rows_parser.add_argument("--limit", type=int, default=100, help="Max rows to fetch (default: 100)")
+    rows_parser.add_argument("--view", help="View name to use")
+    rows_parser.add_argument("--offset", help="Pagination offset")
+
+    # create-field command
+    create_field_parser = subparsers.add_parser("create-field", help="Create a new field (DANGEROUS)")
+    create_field_parser.add_argument("base_id", help="Base ID")
+    create_field_parser.add_argument("table", help="Table ID (use 'tables' command to find IDs)")
+    create_field_parser.add_argument("field_def", help="Field definition as JSON")
+
+    # create-row command
+    create_row_parser = subparsers.add_parser("create-row", help="Create a new row (DANGEROUS)")
+    create_row_parser.add_argument("base_id", help="Base ID")
+    create_row_parser.add_argument("table", help="Table name or ID")
+    create_row_parser.add_argument("fields", nargs="+", help="Field values as FIELD=VALUE")
+
+    # update-row command
+    update_row_parser = subparsers.add_parser("update-row", help="Update an existing row (DANGEROUS)")
+    update_row_parser.add_argument("base_id", help="Base ID")
+    update_row_parser.add_argument("table", help="Table name or ID")
+    update_row_parser.add_argument("record_id", help="Record ID to update")
+    update_row_parser.add_argument("fields", nargs="+", help="Field values as FIELD=VALUE")
+
+    # delete-row command
+    delete_row_parser = subparsers.add_parser("delete-row", help="Delete a row (DANGEROUS - IRREVERSIBLE)")
+    delete_row_parser.add_argument("base_id", help="Base ID")
+    delete_row_parser.add_argument("table", help="Table name or ID")
+    delete_row_parser.add_argument("record_id", help="Record ID to delete")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    try:
+        if args.command == "bases":
+            list_bases()
+        elif args.command == "tables":
+            list_tables(args.base_id, args.samples)
+        elif args.command == "rows":
+            list_rows(args.base_id, args.table, args.limit, args.view, args.offset)
+        elif args.command == "create-field":
+            create_field(args.base_id, args.table, args.field_def)
+        elif args.command == "create-row":
+            create_row(args.base_id, args.table, args.fields)
+        elif args.command == "update-row":
+            update_row(args.base_id, args.table, args.record_id, args.fields)
+        elif args.command == "delete-row":
+            delete_row(args.base_id, args.table, args.record_id)
+    except ValueError as e:
+        print(f"Validation error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
