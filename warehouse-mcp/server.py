@@ -25,6 +25,7 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import Tool, TextContent
 
+import psycopg2
 from db import get_database, SQLValidationError
 from cache import get_cache
 
@@ -528,6 +529,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     except ValueError as e:
         # Safe to expose - argument validation errors
         return [TextContent(type="text", text=f"Invalid argument: {e}")]
+    except psycopg2.Error as e:
+        # Safe to expose - PostgreSQL errors help users fix their queries
+        # e.pgerror contains the full error message from PostgreSQL
+        error_msg = e.pgerror if e.pgerror else str(e)
+        return [TextContent(type="text", text=f"Database error: {error_msg}")]
     except Exception as e:
         # Log full exception for debugging, but don't expose details to client
         logger.exception("Tool execution error")
