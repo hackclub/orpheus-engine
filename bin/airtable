@@ -11,6 +11,7 @@ Usage:
   ./bin/airtable create-field BASE_ID TABLE_ID FIELD_DEF  # Create a field (DANGEROUS, requires table ID)
   ./bin/airtable create-row BASE_ID TABLE FIELD=VALUE ... # Create a row (DANGEROUS)
   ./bin/airtable update-row BASE_ID TABLE RECORD_ID ...   # Update a row (DANGEROUS)
+  ./bin/airtable update-rows BASE_ID TABLE IDS ...        # Update multiple rows (DANGEROUS)
   ./bin/airtable delete-row BASE_ID TABLE RECORD_ID       # Delete a row (DANGEROUS)
 
 Environment:
@@ -415,6 +416,61 @@ def update_row(base_id: str, table: str, record_id: str, field_values: list[str]
         sys.exit(1)
 
 
+def update_rows(base_id: str, table: str, record_ids_csv: str, field_values: list[str]) -> None:
+    """Update multiple existing rows with the same field values."""
+    base_id = validate_base_id(base_id)
+    table = validate_table_name_or_id(table)
+
+    # Parse comma-separated record IDs
+    record_ids = [rid.strip() for rid in record_ids_csv.split(",")]
+    for record_id in record_ids:
+        validate_record_id(record_id)
+
+    try:
+        fields = parse_field_values(field_values)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    details = (
+        f"Base: {base_id}\n"
+        f"Table: {table}\n"
+        f"Records ({len(record_ids)}): {', '.join(record_ids)}\n\n"
+        f"Fields to update:\n{json.dumps(fields, indent=2)}"
+    )
+
+    if not confirm_dangerous_action(f"UPDATE {len(record_ids)} ROWS", details):
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+
+    table_encoded = urllib.parse.quote(table, safe="")
+
+    # Airtable batch API accepts up to 10 records per request
+    batch_size = 10
+    success_count = 0
+    failed_ids = []
+
+    for i in range(0, len(record_ids), batch_size):
+        batch = record_ids[i : i + batch_size]
+        records = [{"id": rid, "fields": fields} for rid in batch]
+        data = {"records": records}
+
+        result = api_request(f"/{base_id}/{table_encoded}", method="PATCH", data=data)
+
+        if result:
+            updated = result.get("records", [])
+            success_count += len(updated)
+            print(f"Updated batch {i // batch_size + 1}: {len(updated)} records", file=sys.stderr)
+        else:
+            failed_ids.extend(batch)
+            print(f"Failed batch {i // batch_size + 1}: {batch}", file=sys.stderr)
+
+    print(f"\nUpdate complete: {success_count}/{len(record_ids)} records updated")
+    if failed_ids:
+        print(f"Failed records: {', '.join(failed_ids)}")
+        sys.exit(1)
+
+
 def delete_row(base_id: str, table: str, record_id: str) -> None:
     """Delete a row from a table."""
     base_id = validate_base_id(base_id)
@@ -492,6 +548,13 @@ def main() -> None:
     update_row_parser.add_argument("record_id", help="Record ID to update")
     update_row_parser.add_argument("fields", nargs="+", help="Field values as FIELD=VALUE")
 
+    # update-rows command
+    update_rows_parser = subparsers.add_parser("update-rows", help="Update multiple rows (DANGEROUS)")
+    update_rows_parser.add_argument("base_id", help="Base ID")
+    update_rows_parser.add_argument("table", help="Table name or ID")
+    update_rows_parser.add_argument("record_ids", help="Comma-separated record IDs to update")
+    update_rows_parser.add_argument("fields", nargs="+", help="Field values as FIELD=VALUE")
+
     # delete-row command
     delete_row_parser = subparsers.add_parser("delete-row", help="Delete a row (DANGEROUS - IRREVERSIBLE)")
     delete_row_parser.add_argument("base_id", help="Base ID")
@@ -517,6 +580,8 @@ def main() -> None:
             create_row(args.base_id, args.table, args.fields)
         elif args.command == "update-row":
             update_row(args.base_id, args.table, args.record_id, args.fields)
+        elif args.command == "update-rows":
+            update_rows(args.base_id, args.table, args.record_ids, args.fields)
         elif args.command == "delete-row":
             delete_row(args.base_id, args.table, args.record_id)
     except ValueError as e:
