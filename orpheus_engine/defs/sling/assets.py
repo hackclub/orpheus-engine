@@ -48,6 +48,12 @@ flavortown_db_connection = SlingConnectionResource(
     connection_string=EnvVar("FLAVORTOWN_COOLIFY_URL"),
 )
 
+flavortown_ahoy_db_connection = SlingConnectionResource(
+    name="FLAVORTOWN_AHOY_DB",
+    type="postgres",
+    connection_string=EnvVar("FLAVORTOWN_AHOY_COOLIFY_URL"),
+)
+
 # 2. Target Connection (Warehouse Database)
 warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
@@ -65,6 +71,7 @@ sling_replication_resource = SlingResource(
         summer_of_making_2025_db_connection,
         hackatime_legacy_db_connection,
         flavortown_db_connection,
+        flavortown_ahoy_db_connection,
         warehouse_db_connection,
     ]
 )
@@ -264,6 +271,30 @@ flavortown_replication_config = {
     }
 }
 
+# --- FlavorTown Ahoy Database Replication Configuration ---
+flavortown_ahoy_replication_config = {
+    "source": "FLAVORTOWN_AHOY_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "flavortown_ahoy.{stream_table}",
+    },
+
+    "streams": {
+        "public.ahoy_visits": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "started_at",
+        },
+        "public.ahoy_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "time",
+        },
+    }
+}
+
 # --- Single Assets per Database ---
 
 @dg.asset(
@@ -415,6 +446,28 @@ def flavortown_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=flavortown_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="flavortown_ahoy_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def flavortown_ahoy_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates FlavorTown Ahoy analytics DB → warehouse with incremental sync."""
+    context.log.info("Starting FlavorTown Ahoy → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=flavortown_ahoy_replication_config,
     ):
         pass
 
