@@ -73,22 +73,35 @@ hackatime_replication_config = {
     },
 
     "streams": {
-        "public.*": {
-            "exclude": [
-                "pg_stat_statements",
-                "pg_stat_statements_info"
-            ]
+        "public.*": None,
+        "public.pg_stat_statements": {"disabled": True},
+        "public.pg_stat_statements_info": {"disabled": True},
+        # Large tables configured for incremental sync
+        "public.heartbeats": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
         },
         "public.leaderboard_entries": {
             "mode": "incremental",
             "primary_key": ["id"],
             "update_key": "updated_at",
         },
-        "public.heartbeats": {
+        "public.raw_heartbeat_uploads": {
             "mode": "incremental",
             "primary_key": ["id"],
-            "update_key": "updated_at"
-        }
+            "update_key": "updated_at",
+        },
+        "public.ahoy_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "time",
+        },
+        "public.ahoy_visits": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "started_at",
+        },
     }
 }
 
@@ -149,6 +162,62 @@ summer_of_making_2025_replication_config = {
 
     "streams": {
         "public.*": None,
+        # Large tables configured for incremental sync
+        "public.active_insights_requests": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 87M rows
+        },
+        "public.active_insights_jobs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 8.6M rows
+        },
+        "public.vote_changes": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 290K rows
+        },
+        "public.ahoy_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "time",  # 274K rows
+        },
+        "public.hackatime_projects": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 192K rows
+        },
+        "public.view_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 161K rows
+        },
+        "public.votes": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 149K rows
+        },
+        "public.ahoy_visits": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "started_at",  # 46K rows
+        },
+        "public.devlogs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 48K rows
+        },
+        "public.users": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 39K rows
+        },
+        "public.activities": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",  # 30K rows
+        },
     }
 }
 
@@ -164,6 +233,12 @@ hackatime_legacy_replication_config = {
 
     "streams": {
         "public.*": None,
+        # Large tables configured for incremental sync
+        "public.heartbeats": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "time",  # 52M rows - heartbeat timestamp
+        },
     }
 }
 
