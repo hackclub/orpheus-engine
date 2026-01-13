@@ -9,6 +9,7 @@ Provides tools for:
 - describe_schema: Get schema documentation with sample data
 """
 
+import contextlib
 import base64
 import contextvars
 import hashlib
@@ -22,7 +23,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from mcp.server import Server
-from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
 
 import psycopg2
@@ -179,7 +180,7 @@ def validate_access_token(token: str) -> bool:
 mcp = Server("warehouse-mcp")
 
 # HTTP transport - messages path (root for Streamable HTTP compatibility)
-sse_transport = SseServerTransport("/")
+session_manager = StreamableHTTPSessionManager(app=mcp, stateless=True)
 
 
 def format_rows_for_display(rows: list[dict[str, Any]], columns: list[str], truncate_values: bool = False) -> str:
@@ -1077,23 +1078,49 @@ async def app(scope, receive, send):
         if is_valid and firstname and lastname:
             _current_user.set((firstname, lastname))
 
-    # MCP SSE endpoint at root path (/) for Streamable HTTP transport
-    if path == "/" and method == "GET":
-        async with sse_transport.connect_sse(scope, receive, send) as streams:
-            await mcp.run(
-                streams[0],
-                streams[1],
-                mcp.create_initialization_options()
-            )
-        return
-
-    # MCP messages endpoint at root path
-    if path == "/" and method == "POST":
-        await sse_transport.handle_post_message(scope, receive, send)
+    # MCP endpoint at root path (/) for Streamable HTTP transport
+    if path == "/" and method in ("GET", "POST", "DELETE"):
+        await session_manager.handle_request(scope, receive, send)
         return
 
     # 404 for unknown routes
     await send_error(send, 404, "Not found")
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    """Manage the session manager lifecycle."""
+    async with session_manager.run():
+        logger.info("StreamableHTTP session manager started")
+        yield
+    logger.info("StreamableHTTP session manager stopped")
+
+
+def create_app():
+    """Create the ASGI app with lifespan support."""
+    from starlette.applications import Starlette
+    from starlette.routing import Route, Mount
+    
+    # Create a Starlette app that wraps our ASGI handler
+    async def handle_all(request):
+        # This won't be used - we handle everything in the ASGI middleware
+        pass
+    
+    starlette_app = Starlette(
+        lifespan=lifespan,
+        routes=[]
+    )
+    
+    # Wrap to use our custom ASGI handler
+    original_app = starlette_app
+    
+    async def wrapped_app(scope, receive, send):
+        if scope["type"] == "lifespan":
+            await original_app(scope, receive, send)
+        else:
+            await app(scope, receive, send)
+    
+    return wrapped_app
 
 
 if __name__ == "__main__":
@@ -1103,4 +1130,4 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     
     logger.info(f"Starting warehouse-mcp server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(create_app(), host=host, port=port)
