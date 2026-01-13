@@ -568,6 +568,18 @@ slack_nps_assets = create_airtable_sync_assets(
     description="Loads slack_nps.nps data into the warehouse.airtable_slack_nps schema."
 )
 
+campfire_assets = create_airtable_sync_assets(
+    base_name="campfire",
+    tables=["event", "organizer", "hcb", "regions", "rsvp", "regional_managers", "organizer_interest", "daydream_events"],
+    description="Loads campfire data into the warehouse.airtable_campfire schema."
+)
+
+campfire_flagship_assets = create_airtable_sync_assets(
+    base_name="campfire_flagship",
+    tables=["rsvps", "hour_estimation", "cool_game_hour_reduction"],
+    description="Loads campfire_flagship data into the warehouse.airtable_campfire_flagship schema."
+)
+
 # --- DLT Asset: Loads Data into Warehouse using DLT ---
 @asset(
     compute_kind="dlt", # Tagging the compute type for UI clarity
