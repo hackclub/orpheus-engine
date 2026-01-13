@@ -5699,45 +5699,11 @@ wheels = [
 
 [[package]]
 name = "sling"
-version = "1.4.4"
+version = "1.5.4"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "sling-linux-amd64", marker = "platform_machine != 'aarch64' and sys_platform == 'linux'" },
-    { name = "sling-linux-arm64", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "sling-mac-amd64", marker = "platform_machine != 'arm64' and sys_platform == 'darwin'" },
-    { name = "sling-mac-arm64", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "sling-windows-amd64", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/71/33/ed01a96b59841bb5c6e7647141421313c9072632e26403f5b302debe3c29/sling-1.4.4.tar.gz", hash = "sha256:8ea316df8eafbad3a2b45fd1fc1a3e6bc7d4c7e746030a9ea9d3885002722e65", size = 10582, upload-time = "2025-03-15T22:52:25.685Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/fd/329d5bf36dc97d80ede67e8ae08c1d3a40ee2900eb8011a6a1256dedd048/sling-1.5.4.tar.gz", hash = "sha256:0bd8d06e652318d4fb8acdc56d76cdb83eff9b96dc7c00d56c9008b517c2901b", size = 41139, upload-time = "2026-01-05T21:20:23.576Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/2c/acf92656b20924bfbe3eebf4d606c238ad465560fa66d34870885836de40/sling-1.4.4-py3-none-any.whl", hash = "sha256:05fa3a40d19b1dcfd4ac761e1dfd988912e24ac1d5ab73eaab5874725ff2de53", size = 7585, upload-time = "2025-03-15T22:52:24.369Z" },
-]
-
-[[package]]
-name = "sling-linux-amd64"
-version = "1.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/47/7a/debdca0ff6630c6cc645144112b9aedb3ce4072c832ce0fd0f5672978377/sling_linux_amd64-1.4.4.tar.gz", hash = "sha256:6e4da6e2d31fe2963e793ccd617f030bb6097dd11e2d32be038626a284247b72", size = 63907585, upload-time = "2025-03-15T22:48:22.066Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/d1/96476f21e443b89d68e30381ca0dbb2d8acf709d64a132195e29ebcf7e76/sling_linux_amd64-1.4.4-py3-none-any.whl", hash = "sha256:ced2ce2b6bb427cff3099d713ed7a69010675ae192f3351d1dcfe62c57867ce7", size = 64216764, upload-time = "2025-03-15T22:48:17.144Z" },
-]
-
-[[package]]
-name = "sling-linux-arm64"
-version = "1.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c0/13/0788bfd7939fa678d1e666d384fb1326a4bc23a4e27d2617150627004612/sling_linux_arm64-1.4.4.tar.gz", hash = "sha256:ad7e96a2773be652f9385033536cacd9fc9d954935422ed43228e1040758752f", size = 59495358, upload-time = "2025-03-15T22:49:09.774Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/52/544fc1c3101b3f6ce8ac13f4401ead7217802ae68b0ed9b6770f295cc6b4/sling_linux_arm64-1.4.4-py3-none-any.whl", hash = "sha256:41479d1ec204a3f879a99f081f72964feee591b7344fde1ffcfce7b867ee4058", size = 59700465, upload-time = "2025-03-15T22:49:05.698Z" },
-]
-
-[[package]]
-name = "sling-mac-amd64"
-version = "1.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e5/c5/f499d800c7a7a3b0e5e1452ef9e6020ec26733eeec795e4488d57235efe2/sling_mac_amd64-1.4.4.tar.gz", hash = "sha256:0c9fabe671ba0858b0054506f947b1ac14f45782f4a872c7208c39c3e81e2fa6", size = 71130190, upload-time = "2025-03-15T22:50:03.283Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/66/3e5fcbaa94e14a74dc0b4e7b677aa5d96b63c02b9ecdc610d361110786da/sling_mac_amd64-1.4.4-py3-none-any.whl", hash = "sha256:ece6405e8271eab1224f31f0f05af3f1dabf096ee09fb9ccbf8717fa8c05c381", size = 71422847, upload-time = "2025-03-15T22:49:57.768Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/2a/01177a849c1d634c45c6f0e189efab62b96a5a14b2128cbbde48b9cb8ab1/sling-1.5.4-py3-none-any.whl", hash = "sha256:c8bbe764c5a039e9f7e34075072de0e203fe70f84ab156d8fce441ff23db2007", size = 24909, upload-time = "2026-01-05T21:20:22.466Z" },
 ]
 
 [[package]]
@@ -5747,15 +5713,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c5/31/eea4a2955e2d883a6ba58801935fc112fa77c8f3993bf8db07b9986e5fe4/sling_mac_arm64-1.4.4.tar.gz", hash = "sha256:de82b29ce745828ef36b793ea095ecffeeb54dc32468e992d8df249ea5f4efd1", size = 66088413, upload-time = "2025-03-15T22:50:52.245Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b9/6b/bc2815c35cd4152bc4650067482fe890b957ebc39219fb6c58537789dca1/sling_mac_arm64-1.4.4-py3-none-any.whl", hash = "sha256:694771844f52b32191e857afce2593e5f4871ba59b7c8a87f5e52d0e5ad3298b", size = 66295010, upload-time = "2025-03-15T22:50:47.834Z" },
-]
-
-[[package]]
-name = "sling-windows-amd64"
-version = "1.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6b/15/048637705b0bb370ab206d23ecb29d42e1cebff4d186e465fd9374f56f8c/sling_windows_amd64-1.4.4.tar.gz", hash = "sha256:6d94e611ed3ac48d08cfad5815ba38787133da5ece670eb523e5425a7e1a8859", size = 64459415, upload-time = "2025-03-15T22:52:14.302Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/bd/dbf154f95b8e4bf78cfd05db25a9dbe48223b68db606c8ba85b24e0acac8/sling_windows_amd64-1.4.4-py3-none-any.whl", hash = "sha256:ce17b643c5bd8548b863e83859e979e55ae21d8e6c56844f042f38408f9f220f", size = 65262769, upload-time = "2025-03-15T22:52:10.175Z" },
 ]
 
 [[package]]
