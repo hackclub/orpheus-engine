@@ -4,6 +4,7 @@ import dagster as dg
 # These are either run manually or have special scheduling
 EXCLUDED_FROM_MAIN_JOB: set[dg.AssetKey] = {
     dg.AssetKey("slack_member_analytics"),  # Run manually
+    dg.AssetKey("slack_member_metadata_enrichment"),  # Takes too long
 }
 
 # 1. "All assets" job (excluding assets in EXCLUDED_FROM_MAIN_JOB)
