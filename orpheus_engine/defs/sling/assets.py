@@ -42,6 +42,12 @@ hackatime_legacy_db_connection = SlingConnectionResource(
     connection_string=EnvVar("HACKATIME_LEGACY_COOLIFY_URL"),
 )
 
+flavortown_db_connection = SlingConnectionResource(
+    name="FLAVORTOWN_DB",
+    type="postgres",
+    connection_string=EnvVar("FLAVORTOWN_COOLIFY_URL"),
+)
+
 # 2. Target Connection (Warehouse Database)
 warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
@@ -58,6 +64,7 @@ sling_replication_resource = SlingResource(
         journey_db_connection,
         summer_of_making_2025_db_connection,
         hackatime_legacy_db_connection,
+        flavortown_db_connection,
         warehouse_db_connection,
     ]
 )
@@ -242,6 +249,21 @@ hackatime_legacy_replication_config = {
     }
 }
 
+# --- FlavorTown Database Replication Configuration ---
+flavortown_replication_config = {
+    "source": "FLAVORTOWN_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "flavortown.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+    }
+}
+
 # --- Single Assets per Database ---
 
 @dg.asset(
@@ -371,6 +393,28 @@ def hackatime_legacy_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=hackatime_legacy_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="flavortown_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def flavortown_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire FlavorTown DB → warehouse in a single shot."""
+    context.log.info("Starting FlavorTown → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=flavortown_replication_config,
     ):
         pass
 
