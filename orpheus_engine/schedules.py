@@ -58,7 +58,7 @@ unified_ysws_15min_schedule = dg.ScheduleDefinition(
 )
 
 # 5. Frequent Airtable job and schedule (every 15 minutes)
-# Includes: Slack NPS, Campfire, Campfire Flagship
+# Includes: Slack NPS, Campfire, Campfire Flagship (sources + warehouse mirrors)
 frequent_airtable_job = dg.define_asset_job(
     name="frequent_airtable_job",
     selection=(
@@ -69,6 +69,10 @@ frequent_airtable_job = dg.define_asset_job(
         dg.AssetSelection.assets("airtable/campfire_flagship/rsvps") |
         dg.AssetSelection.assets("airtable/campfire_flagship/hour_estimation") |
         dg.AssetSelection.assets("airtable/campfire_flagship/cool_game_hour_reduction") |
+        # Campfire Flagship warehouse mirrors
+        dg.AssetSelection.assets("campfire_flagship_rsvps_warehouse") |
+        dg.AssetSelection.assets("campfire_flagship_hour_estimation_warehouse") |
+        dg.AssetSelection.assets("campfire_flagship_cool_game_hour_reduction_warehouse") |
         # Campfire tables
         dg.AssetSelection.assets("airtable/campfire/event") |
         dg.AssetSelection.assets("airtable/campfire/organizer") |
@@ -77,7 +81,16 @@ frequent_airtable_job = dg.define_asset_job(
         dg.AssetSelection.assets("airtable/campfire/rsvp") |
         dg.AssetSelection.assets("airtable/campfire/regional_managers") |
         dg.AssetSelection.assets("airtable/campfire/organizer_interest") |
-        dg.AssetSelection.assets("airtable/campfire/daydream_events")
+        dg.AssetSelection.assets("airtable/campfire/daydream_events") |
+        # Campfire warehouse mirrors
+        dg.AssetSelection.assets("campfire_event_warehouse") |
+        dg.AssetSelection.assets("campfire_organizer_warehouse") |
+        dg.AssetSelection.assets("campfire_hcb_warehouse") |
+        dg.AssetSelection.assets("campfire_regions_warehouse") |
+        dg.AssetSelection.assets("campfire_rsvp_warehouse") |
+        dg.AssetSelection.assets("campfire_regional_managers_warehouse") |
+        dg.AssetSelection.assets("campfire_organizer_interest_warehouse") |
+        dg.AssetSelection.assets("campfire_daydream_events_warehouse")
     ),
 )
 
