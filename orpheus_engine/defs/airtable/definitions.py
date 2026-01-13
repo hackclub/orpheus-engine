@@ -136,6 +136,49 @@ airtable_config = AirtableServiceConfig(
                     table_id="tbl9iohVeaOd6ovDI"
                 )
             }
+        ),
+        "campfire_flagship": AirtableBaseConfig(
+            base_id="appPtca0Gx3KGw7oJ",
+            tables={
+                "rsvps": AirtableTableConfig(
+                    table_id="tblOgqbg3Y7Wdu4k9"
+                ),
+                "hour_estimation": AirtableTableConfig(
+                    table_id="tblJ8oDsRaXyTNlN6"
+                ),
+                "cool_game_hour_reduction": AirtableTableConfig(
+                    table_id="tblPXLNU7inCr55KC"
+                )
+            }
+        ),
+        "campfire": AirtableBaseConfig(
+            base_id="appNV5AaqOvyDryyQ",
+            tables={
+                "event": AirtableTableConfig(
+                    table_id="tbl5O03v6jl2FfWu4"
+                ),
+                "organizer": AirtableTableConfig(
+                    table_id="tbldqdX0voIpuM56s"
+                ),
+                "hcb": AirtableTableConfig(
+                    table_id="tblGt0gBpeoZ6oei7"
+                ),
+                "regions": AirtableTableConfig(
+                    table_id="tblVx5rx6PzH7x6EJ"
+                ),
+                "rsvp": AirtableTableConfig(
+                    table_id="tbl6zIZaoGnD3j6bb"
+                ),
+                "regional_managers": AirtableTableConfig(
+                    table_id="tblnCXwP5OVDczHsf"
+                ),
+                "organizer_interest": AirtableTableConfig(
+                    table_id="tblC3nSz8kpczayGR"
+                ),
+                "daydream_events": AirtableTableConfig(
+                    table_id="tblriNbP6J6W2tEob"
+                )
+            }
         )
     }
 )

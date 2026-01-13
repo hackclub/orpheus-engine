@@ -792,6 +792,7 @@ class AirtableIDs:
             nps_needs_more_feedback = "fldoZgzdBXxT4WZJV"  # Name: NPS–Needs More Feedback?
             total_sign_ups_likely_missing_loops_events = "fldQedY9tfUy704jK"  # Name: Total Sign-Ups–Likely Missing Loops Events?
             total_sign_ups_override_confirm_has_loops_events_set = "fldzHpRUSrV1IPKFP"  # Name: Total Sign-Ups–Override, Confirm Has Loops Events Set
+            nps_copy = "fldjIZTQUjeWinpeF"  # Name: NPS copy
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
@@ -935,6 +936,269 @@ class AirtableIDs:
             how_can_we_improve_the_slack = "fldgIepjaWVgCYWQ2"  # Name: How can we improve the Slack?
             submitted_at = "fld7Ihoq41nQGPbsI"  # Name: Submitted At
             loops_slack_feedback_given_at = "fldMWzdfoCGgvEkBr"  # Name: Loops - slackFeedbackGivenAt
+
+
+    class campfire_flagship:
+        """IDs for Base 'campfire_flagship' (ID: appPtca0Gx3KGw7oJ)"""
+        BASE_ID = "appPtca0Gx3KGw7oJ"
+
+        class rsvps:
+            """IDs for Table 'rsvps' (ID: tblOgqbg3Y7Wdu4k9)"""
+            TABLE_ID = "tblOgqbg3Y7Wdu4k9"
+
+            email = "flddpzgoWkEJI3rg3"  # Name: email
+            submitted_at = "fldkGDPUHPphZEkRs"  # Name: submitted_at
+            loops_campfire_flagship_sign_up_at = "fldATIGfnwGuISoPr"  # Name: Loops - campfireFlagshipSignUpAt
+            loops_list_campfire_flagship = "fld6Mg90vOxBFKP1z"  # Name: Loops List - Campfire Flagship
+            cool_game_application_link = "fldbC7iANVTYt5PQc"  # Name: Cool Game Application Link
+
+        class hour_estimation:
+            """IDs for Table 'hour_estimation' (ID: tblJ8oDsRaXyTNlN6)"""
+            TABLE_ID = "tblJ8oDsRaXyTNlN6"
+
+            email = "fldUnT6IvjHUJiscA"  # Name: email
+            hours = "fldXavX6JeMsjFA7G"  # Name: hours
+
+        class cool_game_hour_reduction:
+            """IDs for Table 'cool_game_hour_reduction' (ID: tblPXLNU7inCr55KC)"""
+            TABLE_ID = "tblPXLNU7inCr55KC"
+
+            email = "fldsCKZnQTnfgBpgP"  # Name: Email
+            first_name = "fldIp1Q37SzdNXWt2"  # Name: First Name
+            last_name = "fldHXQaAMGahgwgvj"  # Name: Last Name
+            slack_id = "fldl7gR2NU3TGAWGb"  # Name: Slack ID
+            demo_link = "fldbcLN0zHyp2Rfa1"  # Name: Demo Link
+            repo_link = "fld0Y3GvuXXUlZuTJ"  # Name: Repo Link
+            git_hub_username = "fldd963m4CK8ePMyW"  # Name: GitHub Username
+            game_title = "fldeMm4DLjv3Xqxnp"  # Name: Game Title
+            game_description = "flduO0P4hJwLTBrdE"  # Name: Game Description
+            screenshot = "fldsGPqj5i03bCv69"  # Name: Screenshot
+            rsvps = "fldfnl6K1UovVj2XU"  # Name: RSVPs
+
+
+    class campfire:
+        """IDs for Base 'campfire' (ID: appNV5AaqOvyDryyQ)"""
+        BASE_ID = "appNV5AaqOvyDryyQ"
+
+        class event:
+            """IDs for Table 'event' (ID: tbl5O03v6jl2FfWu4)"""
+            TABLE_ID = "tbl5O03v6jl2FfWu4"
+
+            id = "fldrxENNqWTyMvbg9"  # Name: id
+            event_name = "fldGfUiPVNVpkBex6"  # Name: event_name
+            ref_organizer = "fldGEMC1IuFbEMSDk"  # Name: ref_organizer
+            poc_name = "fldKhsfOowy1rfMll"  # Name: poc_name
+            poc_email = "fld6JMV6dy3fpF72Q"  # Name: poc_email
+            format = "fldVG2uUgf2Ixrn2s"  # Name: format
+            estimated_attendees_count = "fldzHptCFfUE7rFdC"  # Name: estimated_attendees_count
+            poc_slack_id = "fld11zaBj95wVxvtL"  # Name: poc_slack_id
+            slug = "fldz8TDjZxV5YpuGX"  # Name: slug
+            lat = "fldd2YvtCTgaL5Ux6"  # Name: lat
+            long = "fld1MyHudR7XEDoGV"  # Name: long
+            city = "fldBVS4L1hd3aXstL"  # Name: city
+            country = "fld7mudYGwrVKxBuZ"  # Name: country
+            hcb = "fldaE3erFMiI3udq8"  # Name: HCB
+            record_id = "fldU1sKhsQyNdOdpD"  # Name: record_id
+            is_test = "fldB7wOHfhoYiExeN"  # Name: is_test
+            rel_region = "fldSnFLO5AwhTp6b2"  # Name: rel_region
+            rel_rm = "fldn36T6plpMhTwoP"  # Name: rel_rm
+            rm_name = "fldX1efAAxbPcxfO8"  # Name: rm_name
+            rm_email = "fldplH6K9dFRFOw30"  # Name: rm_email
+            status_hcb = "fldux4OZIbjhrWnXo"  # Name: status_hcb
+            lat_lng = "fldrZmTQ633HjNIoB"  # Name: lat_lng
+            geocode_cache = "fld5XSkKhsOZEqQHH"  # Name: geocode_cache
+            invite_to_hcb = "fldnH5VhfCfyrg6a7"  # Name: invite_to_hcb?
+            website_json = "fldCwNqlYGSix9iUZ"  # Name: website_json
+            has_venue = "fldst4buh52WjFdnM"  # Name: has_venue?
+            venue_address_line_1 = "fldD5Do2tY439nicL"  # Name: venue__address_line_1
+            venue_address_line_2 = "fld65Z6gIqFUAemUX"  # Name: venue__address_line_2
+            venue_city = "flddDPXVYz6JXSJEz"  # Name: venue__city
+            venue_country = "fldllPA4vBkmQY9CT"  # Name: venue__country
+            venue_zip = "fld9kVsz3OuroKfv6"  # Name: venue__zip
+            venue_state = "fldlSyl2B6XOdacPw"  # Name: venue__state
+            venue_proof = "flduBifrGjKvZUcUT"  # Name: venue_proof
+            venue_contact_name = "fldJpbGTQzv3VcmBq"  # Name: venue__contact_name
+            venue_contact_email = "fldBcn6SXFUPIF4pO"  # Name: venue__contact_email
+            venue_max_participants = "fldzMU3cARPrFACdr"  # Name: venue__max_participants
+            venue_update_form = "fld7JydFuuRxWtB7C"  # Name: venue__update_form
+            venue_name = "flde6ElJ0WRDsPdrN"  # Name: venue_name
+
+        class organizer:
+            """IDs for Table 'organizer' (ID: tbldqdX0voIpuM56s)"""
+            TABLE_ID = "tbldqdX0voIpuM56s"
+
+            id = "fldgXE6Lx5dY9F3Jp"  # Name: id
+            status_triage = "fldiS0mJmtOi66bvh"  # Name: status_triage
+            first_name = "fld3CyygyqJqzaMEO"  # Name: first_name
+            preferred_name = "fldLK2QKOppSPtLAs"  # Name: preferred_name
+            last_name = "fldznZnnjQWzlSUoK"  # Name: last_name
+            email = "fldQ3DJcxRGnKPlo2"  # Name: email
+            phone_number = "fldWBDdq0ti56cBnK"  # Name: phone_number
+            address_line_1 = "fldFKO0WT3p0xefeS"  # Name: address_line_1
+            address_line_2 = "fldPbhONT2331NTgf"  # Name: address_line_2
+            address_city = "fldqNamXW0GTwz6XR"  # Name: address_city
+            address_state = "fldbPt2MjrwWC3qqO"  # Name: address_state
+            address_country = "fldOu9V3q7hxP1gum"  # Name: address_country
+            address_postal_code = "fldpi8CYhoPmT470L"  # Name: address_postal_code
+            slack_id = "fldah1DEeETOjlzDk"  # Name: slack_id
+            date_of_birth = "fldk8RuSyS8p6h7Wh"  # Name: date_of_birth
+            calc_age = "fldj6XGC9i3Lzff4E"  # Name: calc_age
+            proposal_location = "fldCfCV2Oz5pEfvkX"  # Name: proposal_location
+            proposal_length = "fldO1gbtXSVBE0xxa"  # Name: proposal_length
+            proposal_attendees = "fldJEc1coHH0R9vgF"  # Name: proposal_attendees
+            has_made_game = "fldoeJnzOwOAQyvuU"  # Name: has_made_game
+            game_repo_url = "fldBQS4tda3MWRBSg"  # Name: game_repo_url
+            game_description = "fldb7vbaSwni3civL"  # Name: game_description
+            is_point_of_contact = "fldroMmtrjNLk0o8B"  # Name: is_point_of_contact
+            record_id = "fld4zfIh1MjsiHlbT"  # Name: record_id
+            has_hackathon_xp = "fldiiK9YpL0n7xGhb"  # Name: has_hackathon_xp
+            hackathon_xp = "fldVDStvmdEVCO5Iz"  # Name: hackathon_xp
+            is_location_different = "fldaZzUNytFoSFXHG"  # Name: is_location_different
+            proposal_city = "fld6hktk3XGMFOzuc"  # Name: proposal_city
+            proposal_country = "flduogmuQ16mtapKh"  # Name: proposal_country
+            github_username = "fldgyfKLpA3XFC1nX"  # Name: github_username
+            latitude = "fldvPvaovy1XEuKaa"  # Name: latitude
+            longitude = "fldZMUXh5Snj0UjX2"  # Name: longitude
+            loops_campfire_applied_to_organize_at = "fldrOB6liTtbJLDXM"  # Name: Loops - campfireAppliedToOrganizeAt
+            loops_special_set_full_name = "fldVAyZnyCKaIHC8m"  # Name: Loops - Special - setFullName
+            loops_phone_number = "fld1BBqUP41vRtcm7"  # Name: Loops - phoneNumber
+            loops_birthday = "fldtcKveePqgiEmY1"  # Name: Loops - birthday
+            loops_special_set_full_address = "fldDd41yhLxCtb0qk"  # Name: Loops - Special - setFullAddress
+            is_idv_eligible = "fldcLjk2xmVW8L4Zs"  # Name: is_idv_eligible
+            event = "fld1YwZVrxxZk46n5"  # Name: Event
+            hcb = "fldzYlDM6WLtGSEnQ"  # Name: HCB
+            rollup_address = "fldwVKUTeSSYmOaGQ"  # Name: rollup_address
+            geocode_cache = "fldXWrXz8oOzULBrC"  # Name: geocode_cache
+
+        class hcb:
+            """IDs for Table 'hcb' (ID: tblGt0gBpeoZ6oei7)"""
+            TABLE_ID = "tblGt0gBpeoZ6oei7"
+
+            id = "fld2hpihcyH48AXtt"  # Name: id
+            ref_event = "fldcPysFtNSkYAKgs"  # Name: ref_event
+            rel_region = "fld3Pw8hT9jpJKer4"  # Name: rel_region
+            rel_region_hcb = "fldmnQksoh0rO1FXt"  # Name: rel_region_hcb
+            rel_region_hcb_id = "fld0kB2cNMecpuCUy"  # Name: rel_region_hcb_id
+            event_name = "fld2LTEqZy3Mp2tF1"  # Name: event_name
+            ref_organzer = "fldjTntr46C9RZKxl"  # Name: ref_organzer
+            poc_first_name = "fldRDw3Z9nedx2Olr"  # Name: poc_first_name
+            poc_email = "fldTRIMzZfz6gcZZ4"  # Name: poc_email
+            poc_preferred_name = "fldZU6CBjFVUM480y"  # Name: poc_preferred_name
+            poc_parent_name = "fldJKa3foqY84JbUa"  # Name: poc_parent_name
+            poc_parent_email = "fldavujdLANXZMr32"  # Name: poc_parent_email
+            poc_slack_id = "fldkGIFow3sRF8ffR"  # Name: poc_slack_id
+            calc_poc_age = "fldW9MZozfMqioZL5"  # Name: calc_poc_age
+            is_poc_adult = "fldEcynyIMOHJcBjJ"  # Name: is_poc_adult
+            calc_form_url = "fld9sFmqc6apfdiUT"  # Name: calc_form_url
+            hcb_org_id = "fld6OJg8hhZymaLZe"  # Name: hcb_org_id
+            is_done = "fldNa58DtlicVRYqJ"  # Name: is_done
+            lookup_slug_from_ref_event = "fldRuy6HBWWhgrN8r"  # Name: lookup_slug_from_ref_event
+
+        class regions:
+            """IDs for Table 'regions' (ID: tblVx5rx6PzH7x6EJ)"""
+            TABLE_ID = "tblVx5rx6PzH7x6EJ"
+
+            id = "fldbSUB4PCmi1xD11"  # Name: id
+            region_area = "fldpE8Q2t2q8fL2WU"  # Name: region_area
+            rm_name = "fldL4OnBYvFWAYtW2"  # Name: rm_name
+            metrics_health = "fldhoPd8fWWEHYKP9"  # Name: metrics_health
+            count_of_events = "fldIZwTkrt0fFlBVM"  # Name: count_of_events
+            rel_events = "fld52xi2nah41kfBP"  # Name: rel_events
+            rel_rm = "fldcOdpWGZ4A30l7b"  # Name: rel_rm
+            hcb_cf_id_from_rel_rm = "fld4734YRZPctmjyl"  # Name: hcb_cf_id (from rel_rm)
+            hcb_id = "fldQX7zZ6eLCVWuvu"  # Name: hcb_id
+            rel_hcb = "fld475SHijlchxHYC"  # Name: rel_hcb
+            rm_city = "fldXxo5P7LQAODUY8"  # Name: rm_city
+            rm_country = "fldIuF0A0PXADx8jm"  # Name: rm_country
+            rm_email = "fld94bELas2QCkBmT"  # Name: rm_email
+
+        class rsvp:
+            """IDs for Table 'rsvp' (ID: tbl6zIZaoGnD3j6bb)"""
+            TABLE_ID = "tbl6zIZaoGnD3j6bb"
+
+            id = "fldRPWbLY9zsFWkNf"  # Name: id
+            email = "fldsDDBX1TsYO3osM"  # Name: email
+            preferred_name = "fldADsddzeXt9wXlj"  # Name: preferred_name
+            address_city = "fldZN1bDx3nQEWq3t"  # Name: address_city
+            address_country = "fld6yJT8EtnBFdpDN"  # Name: address_country
+
+        class regional_managers:
+            """IDs for Table 'regional_managers' (ID: tblnCXwP5OVDczHsf)"""
+            TABLE_ID = "tblnCXwP5OVDczHsf"
+
+            id = "fldzQ2LT51qpohPVQ"  # Name: id
+            email = "fld9nfL5355CpUMJ1"  # Name: email
+            preferred_name = "fldAI3zQCIBPH6ND6"  # Name: preferred_name
+            slack_id = "fld9uBPO44SE1fzhg"  # Name: slack_id
+            hq_email = "fldiLyh8nblTCTfbi"  # Name: hq_email
+            hcb_email = "fldODMFF50laxStDb"  # Name: hcb_email
+            record_id = "fldv0zLr3Wg7ei99Q"  # Name: record_id
+            rel_region = "fldX8wtaDr1fRoIoV"  # Name: rel_region
+            rel_events = "fld1Ei5A4O0Agbkwr"  # Name: rel_events
+            hcb_rm_id = "fldh5WAJP04br55ZR"  # Name: hcb_rm_id
+            hcb_cf_id = "fldYdK0UriUGyWoXz"  # Name: hcb_cf_id
+            city = "fldibVNEXLpvvZH1k"  # Name: city
+            country = "fld6pcexyNKYpOyLA"  # Name: country
+
+        class organizer_interest:
+            """IDs for Table 'organizer_interest' (ID: tblC3nSz8kpczayGR)"""
+            TABLE_ID = "tblC3nSz8kpczayGR"
+
+            submission_id = "fld7jH3hIBmiDg0tO"  # Name: Submission ID
+            created_records = "fldekk1icLpBtKJ7A"  # Name: Created records
+            first_name = "fld6vMOkywlsfsLRp"  # Name: First Name
+            last_name = "fldbt8y6jbIRVXDiH"  # Name: Last Name
+            email = "fldglOW6gEcgJ0nzg"  # Name: Email
+            dob = "fldUGnHEMoZwJ9wL0"  # Name: DOB
+            address = "fldA8jmTvLetQJ8Dj"  # Name: Address
+
+        class daydream_events:
+            """IDs for Table 'daydream_events' (ID: tblriNbP6J6W2tEob)"""
+            TABLE_ID = "tblriNbP6J6W2tEob"
+
+            event_name = "fldqGseGjVgIHkY1I"  # Name: event_name
+            poc_preferred_name = "fldmIhdYLs49J04vt"  # Name: poc_preferred_name
+            poc_last_name = "fldvG7KjBBZYO3fQq"  # Name: poc_last_name
+            email = "fldd29kdv6fstp37A"  # Name: email
+            location = "fldJdUWJvMColXddy"  # Name: location
+            slug = "fldXRb26nWEEeToR4"  # Name: slug
+            state = "fldL2IozM6lxnDAqC"  # Name: state
+            country = "fld8zdJCS1ogqu8PO"  # Name: country
+            check_in_5_done = "fldu9eolNrdKlwS3l"  # Name: check-in_5_done
+            event_format = "fldNFnb77eYGKhztS"  # Name: event_format
+            sub_organizers = "fldxtDH65uypYZkiG"  # Name: sub_organizers
+            poc_slack_id = "flddYuABZkFY72vTD"  # Name: poc_slack_id
+            poc_phone = "fld5VGIOwKIJlHaEu"  # Name: poc_phone
+            poc_age = "fldpoRTcQUSxX8bOi"  # Name: poc_age
+            poc_dob = "fld0e4K0nIGzgJmHw"  # Name: poc_dob
+            estimated_attendee_count = "fldecOBtIUu0y0iKX"  # Name: estimated_attendee_count
+            signup_amount = "fld0dNns4wD1DQ2B7"  # Name: signup_amount
+            start_date = "fldEgHhN3Qu5TONGV"  # Name: start_date
+            address_override = "fldx9aaQ677dUU6cr"  # Name: address_override
+            org_emails = "fldlKYnm8z5SW17WQ"  # Name: org_emails
+            org_emails_2 = "fldtcsFcdcqNxJ3GP"  # Name: org_emails 2
+            jumpstart_status = "fldIeta5O9ABoErYG"  # Name: jumpstart_status
+            unique_participant_rsvp_amount = "flddOkps40FTcX21B"  # Name: unique_participant_rsvp_amount
+            has_confirmed_venue = "fldbuVDOdAkKWSEJD"  # Name: has_confirmed_venue
+            checked_in_attendee_count = "fldIVEEI9put6RMfi"  # Name: checked_in_attendee_count
+            scanned_in_participants_only = "flddIZ4FTzLy76fV3"  # Name: scanned_in_participants_only
+            percentage_checked_in = "fldO1nurwdMaQNZKd"  # Name: percentage_checked_in
+            percentage_scanned = "fldeBOSpjtyhCKMxW"  # Name: percentage_scanned
+            percentage_scanned_by_checkin = "fldCNGNP8XNGCqzPH"  # Name: percentage_scanned_by_checkin
+            has_website = "fldJecvv81QkzBKXO"  # Name: has_website
+            sent_you_re_inactive_and_we_might_cancel_your_event_email = "flddgJpCOqRuG5JqQ"  # Name: Sent "you're inactive and we might cancel your event" email
+            test_event = "fldj0PlppiLARRPjS"  # Name: test_event?
+            percent_signup_goal = "fldEhQkaOAenHMbUk"  # Name: percent_signup_goal
+            event_language = "fld3mFeagjwR9N1YH"  # Name: event_language
+            event_postponed = "fldnNI2vbbp9Va1NH"  # Name: event_postponed
+            sunday_start = "fldKpVR3rqUkuoxQE"  # Name: sunday_start
+            nps_total_responses = "fldLg2Wxnk5dhJeJP"  # Name: nps_total_responses
+            nps_promoters = "fldZ0bcU06ajLFkWw"  # Name: nps_promoters
+            nps_detractors = "fldmfFSfSAbvitS7D"  # Name: nps_detractors
+            nps_score = "fldt2NSfUm5BvAnlI"  # Name: nps_score
+            nps_response_rate = "fld8IYmB3l7MNU6di"  # Name: nps_response_rate
+            triage_status = "fldpXAMrzmToCovBs"  # Name: triage_status
+            notes = "fld2DjbLp0QxQKt6n"  # Name: notes
 
 
 # fmt: on

@@ -56,24 +56,39 @@ unified_ysws_15min_schedule = dg.ScheduleDefinition(
     execution_timezone="America/New_York",                 # keeps logs in local time
 )
 
-# 5. Slack NPS job and schedule (every 15 minutes)
-materialize_slack_nps_job = dg.define_asset_job(
-    name="materialize_slack_nps_job",
+# 5. Frequent Airtable job and schedule (every 15 minutes)
+# Includes: Slack NPS, Campfire, Campfire Flagship
+frequent_airtable_job = dg.define_asset_job(
+    name="frequent_airtable_job",
     selection=(
+        # Slack NPS
         dg.AssetSelection.assets("airtable/slack_nps/nps") |
-        dg.AssetSelection.assets("slack_nps_nps_warehouse")
+        dg.AssetSelection.assets("slack_nps_nps_warehouse") |
+        # Campfire Flagship tables
+        dg.AssetSelection.assets("airtable/campfire_flagship/rsvps") |
+        dg.AssetSelection.assets("airtable/campfire_flagship/hour_estimation") |
+        dg.AssetSelection.assets("airtable/campfire_flagship/cool_game_hour_reduction") |
+        # Campfire tables
+        dg.AssetSelection.assets("airtable/campfire/event") |
+        dg.AssetSelection.assets("airtable/campfire/organizer") |
+        dg.AssetSelection.assets("airtable/campfire/hcb") |
+        dg.AssetSelection.assets("airtable/campfire/regions") |
+        dg.AssetSelection.assets("airtable/campfire/rsvp") |
+        dg.AssetSelection.assets("airtable/campfire/regional_managers") |
+        dg.AssetSelection.assets("airtable/campfire/organizer_interest") |
+        dg.AssetSelection.assets("airtable/campfire/daydream_events")
     ),
 )
 
-slack_nps_15min_schedule = dg.ScheduleDefinition(
-    name="slack_nps_15min_schedule",
-    job=materialize_slack_nps_job,
+frequent_airtable_schedule = dg.ScheduleDefinition(
+    name="frequent_airtable_schedule",
+    job=frequent_airtable_job,
     cron_schedule="*/15 * * * *",                          # every 15 minutes
     execution_timezone="America/New_York",
 )
 
 # 6. Wrap in a Definitions so Dagster can find it
 defs = dg.Definitions(
-    jobs=[materialize_all_assets_job, materialize_unified_ysws_job, materialize_slack_nps_job],
-    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule, slack_nps_15min_schedule],
+    jobs=[materialize_all_assets_job, materialize_unified_ysws_job, frequent_airtable_job],
+    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule, frequent_airtable_schedule],
 ) 
