@@ -9,6 +9,7 @@ import orpheus_engine.defs.loops_campaign_and_metrics_export.definitions as loop
 import orpheus_engine.defs.slack.definitions as slack_defs
 import orpheus_engine.defs.sling.definitions as sling_defs
 import orpheus_engine.defs.unified_ysws_db.definitions as ysws_defs
+import orpheus_engine.defs.agh_fulfillment_zenventory.definitions as zenventory_defs
 import orpheus_engine.schedules as schedules
 
 # Import analytics asset separately (it doesn't export defs)
@@ -36,6 +37,7 @@ def _build_definitions() -> dg.Definitions:
         slack_defs.defs,
         sling_defs.defs,
         ysws_defs.defs,
+        zenventory_defs.defs,
         schedules.defs,
         dg.Definitions(assets=[analytics_hack_clubbers])
     )
