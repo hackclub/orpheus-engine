@@ -2,6 +2,8 @@ from dagster import EnvVar, AssetExecutionContext, Nothing
 from dagster_sling import SlingResource, SlingConnectionResource
 from typing import Mapping, Any
 import dagster as dg
+import os
+import base64
 
 # --- Define Connections ---
 
@@ -54,6 +56,25 @@ flavortown_ahoy_db_connection = SlingConnectionResource(
     connection_string=EnvVar("FLAVORTOWN_AHOY_COOLIFY_URL"),
 )
 
+def _get_hcb_ssh_private_key() -> str:
+    """Decode base64-encoded SSH private key from env var."""
+    key_b64 = os.getenv("HCB_SSH_PRIVATE_KEY_B64", "")
+    if not key_b64:
+        return ""
+    return base64.b64decode(key_b64).decode("utf-8")
+
+hcb_db_connection = SlingConnectionResource(
+    name="HCB_DB",
+    type="postgres",
+    host=EnvVar("HCB_DB_HOST"),
+    port=EnvVar("HCB_DB_PORT"),
+    database=EnvVar("HCB_DB_DATABASE"),
+    user=EnvVar("HCB_DB_USER"),
+    password=EnvVar("HCB_DB_PASSWORD"),
+    ssh_tunnel=EnvVar("HCB_SSH_TUNNEL"),
+    ssh_private_key=_get_hcb_ssh_private_key(),
+)
+
 # 2. Target Connection (Warehouse Database)
 warehouse_db_connection = SlingConnectionResource(
     name="WAREHOUSE_DB",  # This name MUST match the 'target' key in replication_config
@@ -72,6 +93,7 @@ sling_replication_resource = SlingResource(
         hackatime_legacy_db_connection,
         flavortown_db_connection,
         flavortown_ahoy_db_connection,
+        hcb_db_connection,
         warehouse_db_connection,
     ]
 )
@@ -295,6 +317,24 @@ flavortown_ahoy_replication_config = {
     }
 }
 
+# --- HCB Database Replication Configuration ---
+hcb_replication_config = {
+    "source": "HCB_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "incremental",
+        "primary_key": ["id"],
+        "update_key": "updated_at",
+        "object": "hcb.{stream_table}",
+    },
+
+    "streams": {
+        "public.users": None,
+        "public.user_seen_at_histories": None,
+    }
+}
+
 # --- Single Assets per Database ---
 
 @dg.asset(
@@ -468,6 +508,28 @@ def flavortown_ahoy_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=flavortown_ahoy_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="hcb_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def hcb_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates HCB users and user_seen_at_histories → warehouse via SSH tunnel."""
+    context.log.info("Starting HCB → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=hcb_replication_config,
     ):
         pass
 

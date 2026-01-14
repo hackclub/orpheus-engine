@@ -6,6 +6,7 @@ from .assets import (
     shipwrecked_the_bay_warehouse_mirror,
     summer_of_making_2025_warehouse_mirror,
     hackatime_legacy_warehouse_mirror,
+    hcb_warehouse_mirror,
     sling_replication_resource,
 )
 
@@ -17,6 +18,7 @@ defs = Definitions(
         shipwrecked_the_bay_warehouse_mirror,
         summer_of_making_2025_warehouse_mirror,
         hackatime_legacy_warehouse_mirror,
+        hcb_warehouse_mirror,
     ],
     resources={
         "sling": sling_replication_resource,
