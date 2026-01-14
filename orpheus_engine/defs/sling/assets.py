@@ -56,6 +56,28 @@ flavortown_ahoy_db_connection = SlingConnectionResource(
     connection_string=EnvVar("FLAVORTOWN_AHOY_COOLIFY_URL"),
 )
 
+# Auth DB connection - absolute minimum permissions to generate events for monthly
+# active stats (e.g. "logged in at", "created oauth app"). No tokens or secrets.
+def _get_auth_ssh_private_key() -> str:
+    """Decode base64-encoded SSH private key from env var."""
+    key_b64 = os.getenv("AUTH_SSH_PRIVATE_KEY_B64", "")
+    if not key_b64:
+        return ""
+    return base64.b64decode(key_b64).decode("utf-8")
+
+auth_db_connection = SlingConnectionResource(
+    name="AUTH_DB",
+    type="postgres",
+    host=EnvVar("AUTH_DB_HOST"),
+    port=EnvVar("AUTH_DB_PORT"),
+    database=EnvVar("AUTH_DB_DATABASE"),
+    user=EnvVar("AUTH_DB_USER"),
+    password=EnvVar("AUTH_DB_PASSWORD"),
+    sslmode="disable",  # SSL not needed through SSH tunnel
+    ssh_tunnel=EnvVar("AUTH_SSH_TUNNEL"),
+    ssh_private_key=_get_auth_ssh_private_key(),
+)
+
 def _get_hcb_ssh_private_key() -> str:
     """Decode base64-encoded SSH private key from env var."""
     key_b64 = os.getenv("HCB_SSH_PRIVATE_KEY_B64", "")
@@ -93,6 +115,7 @@ sling_replication_resource = SlingResource(
         hackatime_legacy_db_connection,
         flavortown_db_connection,
         flavortown_ahoy_db_connection,
+        auth_db_connection,
         hcb_db_connection,
         warehouse_db_connection,
     ]
@@ -335,6 +358,42 @@ hcb_replication_config = {
     }
 }
 
+# --- Auth Database Replication Configuration ---
+# Absolute minimum permissions - only columns needed to generate events for monthly
+# active stats (e.g. "logged in at"). SELECT * is blocked, explicit columns only.
+auth_replication_config = {
+    "source": "AUTH_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "incremental",
+        "primary_key": ["id"],
+    },
+
+    "streams": {
+        "public.activities": {
+            "object": "auth.activities",
+            "select": ["id", "owner_id", "owner_type", "key", "trackable_type", "trackable_id", "parameters", "created_at", "updated_at"],
+            "update_key": "updated_at",
+        },
+        "public.identities": {
+            "object": "auth.identities",
+            "select": ["id", "primary_email", "updated_at"],
+            "update_key": "updated_at",
+        },
+        "public.oauth_access_tokens": {
+            "object": "auth.oauth_access_tokens",
+            "select": ["id", "application_id", "resource_owner_id", "created_at"],
+            "update_key": "created_at",
+        },
+        "public.oauth_applications": {
+            "object": "auth.oauth_applications",
+            "select": ["id", "name", "trust_level", "updated_at"],
+            "update_key": "updated_at",
+        },
+    }
+}
+
 # --- Single Assets per Database ---
 
 @dg.asset(
@@ -530,6 +589,28 @@ def hcb_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=hcb_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="auth_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def auth_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates Auth DB tables → warehouse with explicit column selection."""
+    context.log.info("Starting Auth → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=auth_replication_config,
     ):
         pass
 

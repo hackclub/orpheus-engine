@@ -41,3 +41,20 @@ sources:
       - name: member_analytics
         description: "Slack member analytics data."
         meta: { dagster: { asset_key: ['slack_member_analytics'] } }
+
+  # Absolute minimum permissions - only columns needed to generate events for monthly active stats
+  - name: auth
+    schema: auth
+    tables:
+      - name: activities
+        description: "Auth activity log (logins, profile updates, etc.). Minimal columns only."
+        meta: { dagster: { asset_key: ['auth_warehouse_mirror'] } }
+      - name: identities
+        description: "Auth identities - only id and primary_email accessible."
+        meta: { dagster: { asset_key: ['auth_warehouse_mirror'] } }
+      - name: oauth_access_tokens
+        description: "OAuth access tokens - only id, application_id, resource_owner_id accessible."
+        meta: { dagster: { asset_key: ['auth_warehouse_mirror'] } }
+      - name: oauth_applications
+        description: "OAuth applications - only id, name, trust_level accessible."
+        meta: { dagster: { asset_key: ['auth_warehouse_mirror'] } }
