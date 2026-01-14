@@ -27,10 +27,10 @@ sources:
     tables:
       - name: users
         description: "HCB users table (warehouse mirror)."
-        meta: { dagster: { asset_key: ['hcb_users'] } }
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
       - name: user_seen_at_histories
         description: "HCB user session windows (period_start_at/period_end_at)."
-        meta: { dagster: { asset_key: ['hcb_user_seen_at_histories'] } }
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
 
   - name: slack
     schema: slack
