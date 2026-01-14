@@ -38,3 +38,6 @@ sources:
       - name: member_analytics_csv
         description: "Slack member analytics data from CSV export."
         meta: { dagster: { asset_key: ['slack_member_analytics_csv'] } }
+      - name: member_analytics
+        description: "Slack member analytics data."
+        meta: { dagster: { asset_key: ['slack_member_analytics'] } }

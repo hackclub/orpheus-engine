@@ -37,6 +37,7 @@ loops_unpivoted AS (
       )
       AND e.key NOT LIKE 'calculated%'
       AND e.key <> 'high_seas_last_synced_from_airtable'
+      AND e.key NOT LIKE '%row_hash_at'
 ),
 
 loops_final AS (
@@ -125,6 +126,14 @@ slack_parsed AS (
     END AS event_date,
     NULLIF(btrim(s.email), '') AS s_email
   FROM {{ source('slack', 'member_analytics_csv') }} AS s
+  UNION ALL
+  SELECT
+    s.user_id AS user_id,
+    (s.date::timestamp AT TIME ZONE 'UTC') + INTERVAL '23 hours 59 minutes' AS event_date,
+    NULLIF(btrim(s.email_address), '') AS s_email
+  FROM {{ source('slack', 'member_analytics') }} AS s
+  WHERE s.date IS NOT NULL
+    AND s.is_active = true
 ),
 
 slack_joined_people AS (
@@ -135,24 +144,27 @@ slack_joined_people AS (
   FROM {{ source('loops', 'audience') }} AS p
 ),
 
-slack_ranked AS (
+slack_with_email AS (
   SELECT
     p.event_date,
     COALESCE(j.p_email, p.s_email) AS email,
-    'slackSeenAt' AS event,
-    'slack' AS event_type,
-    'slack' AS source_system,
-    p.user_id,
-    row_number() OVER (
-      PARTITION BY p.user_id, p.event_date
-      ORDER BY
-        (j.p_email IS NULL),
-        j.updated_at DESC NULLS LAST
-    ) AS rn
+    p.user_id
   FROM slack_parsed AS p
   LEFT JOIN slack_joined_people AS j
     ON j.slack_id = p.user_id
   WHERE p.event_date IS NOT NULL
+),
+
+slack_ranked AS (
+  SELECT
+    event_date,
+    email,
+    row_number() OVER (
+      PARTITION BY email, event_date::date
+      ORDER BY event_date DESC
+    ) AS rn
+  FROM slack_with_email
+  WHERE email IS NOT NULL
 ),
 
 slack_events AS (
