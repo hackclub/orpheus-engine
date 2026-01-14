@@ -5,7 +5,10 @@ Provides a Dagster resource for interacting with the Zenventory REST API.
 Used for syncing AGH Fulfillment warehouse data.
 """
 
+import csv
+import io
 import time
+from datetime import datetime
 from typing import Any, ClassVar, Dict, Generator, List, Optional
 
 import requests
@@ -327,3 +330,100 @@ class ZenventoryResource(ConfigurableResource):
         """
         data = self._make_request("/customer-orders", params={"page": page, "limit": per_page})
         return data.get("customerOrders", [])
+
+    def get_shipment_report(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        timeout: int = 120,
+        max_retries: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch shipment report from Zenventory.
+
+        This report contains shipping costs (Shipping & Handling) for each shipment,
+        which is not available through the regular customer-orders endpoint.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format (default: 2024-01-01)
+            end_date: End date in YYYY-MM-DD format (default: today)
+            timeout: Request timeout in seconds
+            max_retries: Maximum number of retries on failure
+
+        Returns:
+            List of shipment records with fields like:
+            - order_number: The Airtable record ID
+            - client, customer, city, state, zip, country
+            - tracking_number, shipped_date
+            - carrier, service, weight, package
+            - shipping_handling: The postage cost
+            - buyer_paid_shipping, total_misc_charges
+        """
+        log = get_dagster_logger()
+
+        if not start_date:
+            start_date = "2024-01-01"
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+
+        url = f"{self.BASE_URL}/reports/shipment/ship_client"
+        params = {
+            "csv": "true",
+            "startDate": start_date,
+            "endDate": end_date,
+        }
+
+        for attempt in range(max_retries):
+            try:
+                log.info(f"Fetching shipment report from {start_date} to {end_date}...")
+                response = requests.get(
+                    url,
+                    auth=self._get_auth(),
+                    params=params,
+                    timeout=timeout,
+                )
+
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    if attempt < max_retries - 1:
+                        log.warning(f"Rate limited, sleeping {retry_after}s...")
+                        time.sleep(retry_after)
+                        continue
+                    raise ZenventoryRateLimitError(
+                        "Rate limited on shipment report",
+                        retry_after=retry_after
+                    )
+
+                response.raise_for_status()
+
+                # Parse CSV response
+                csv_text = response.text
+                reader = csv.DictReader(io.StringIO(csv_text))
+
+                # Convert to list of dicts with snake_case keys
+                records = []
+                for row in reader:
+                    record = {}
+                    for key, value in row.items():
+                        # Convert column names to snake_case
+                        snake_key = key.lower().replace(" ", "_").replace("&", "and")
+                        record[snake_key] = value
+                    records.append(record)
+
+                log.info(f"Fetched {len(records)} shipment records")
+                return records
+
+            except requests.exceptions.Timeout:
+                if attempt < max_retries - 1:
+                    log.warning("Request timeout on shipment report, retrying...")
+                    time.sleep(5)
+                    continue
+                raise ZenventoryApiError(f"Shipment report request timed out after {max_retries} attempts")
+            except ZenventoryApiError:
+                raise
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    log.warning(f"Request error on shipment report: {e}, retrying...")
+                    time.sleep(5)
+                    continue
+                raise ZenventoryApiError(f"Shipment report request failed: {e}") from e

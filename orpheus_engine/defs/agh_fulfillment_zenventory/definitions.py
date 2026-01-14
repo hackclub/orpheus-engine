@@ -9,7 +9,7 @@ import io
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psycopg2
@@ -32,6 +32,8 @@ TABLE_ITEMS = "items"
 TABLE_INVENTORY = "inventory"
 TABLE_CUSTOMER_ORDERS = "customer_orders"
 TABLE_PURCHASE_ORDERS = "purchase_orders"
+TABLE_SHIPMENTS = "shipments"
+TABLE_LABOR_COSTS = "labor_costs"
 
 
 def get_db_connection() -> "psycopg2.extensions.connection":
@@ -403,6 +405,35 @@ PURCHASE_ORDERS_SCHEMA = {
     "items": "JSONB",
 }
 
+# Shipments from the /reports/shipment/ship_client endpoint
+# Uses composite key (order_number, tracking_number) since orders can have multiple shipments
+SHIPMENTS_SCHEMA = {
+    "order_number": "TEXT",
+    "tracking_number": "TEXT",
+    "client": "TEXT",
+    "customer": "TEXT",
+    "city": "TEXT",
+    "state": "TEXT",
+    "zip": "TEXT",
+    "country": "TEXT",
+    "shipped_date": "DATE",
+    "carrier": "TEXT",
+    "service": "TEXT",
+    "weight": "DOUBLE PRECISION",
+    "package": "TEXT",
+    "shipping_handling": "DOUBLE PRECISION",
+    "buyer_paid_shipping": "DOUBLE PRECISION",
+    "total_misc_charges": "DOUBLE PRECISION",
+}
+
+# Labor costs - calculated from customer_orders data (not raw Zenventory data)
+# $1.80 base + $0.20 per SKU
+LABOR_COSTS_SCHEMA = {
+    "order_number": "TEXT",  # Links to customer_orders.order_number and shipments.order_number (Airtable record ID)
+    "item_count": "INTEGER",
+    "labor_cost": "NUMERIC(10,2)",  # Use NUMERIC to avoid floating point issues
+}
+
 
 def transform_item(record: Dict[str, Any]) -> Dict[str, Any]:
     """Transform an item record for database storage."""
@@ -631,6 +662,34 @@ def transform_purchase_order(record: Dict[str, Any]) -> Dict[str, Any]:
             # Handle empty date strings
             if db_key.endswith("_date") and value == "":
                 value = None
+            result[db_key] = value
+
+    return result
+
+
+def transform_shipment(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a shipment record from the CSV report for database storage."""
+    # Fields that need renaming (csv_key -> db_key)
+    renames = {
+        "shipping_and_handling": "shipping_handling",
+        "total_miscellaneous_charges": "total_misc_charges",
+    }
+    numeric_fields = {"weight", "shipping_handling", "buyer_paid_shipping", "total_misc_charges"}
+
+    result = {}
+    for csv_key, value in record.items():
+        db_key = renames.get(csv_key, csv_key)
+
+        if value is None or value == "":
+            result[db_key] = None
+        elif db_key in numeric_fields:
+            try:
+                result[db_key] = float(value)
+            except (ValueError, TypeError):
+                result[db_key] = None
+        elif db_key == "shipped_date" and " " in value:
+            result[db_key] = value.split(" ")[0]
+        else:
             result[db_key] = value
 
     return result
@@ -1094,6 +1153,173 @@ def agh_fulfillment_zenventory_purchase_orders(
         conn.close()
 
 
+def get_max_shipped_date(conn) -> Optional[str]:
+    """Get the maximum shipped_date from the shipments table for incremental sync."""
+    try:
+        with conn.cursor() as cur:
+            query = sql.SQL("SELECT MAX(shipped_date) FROM {}.{}").format(
+                sql.Identifier(SCHEMA_NAME),
+                sql.Identifier(TABLE_SHIPMENTS),
+            )
+            cur.execute(query)
+            result = cur.fetchone()
+            if result and result[0]:
+                return result[0].strftime("%Y-%m-%d")
+            return None
+    except psycopg2.errors.UndefinedTable:
+        conn.rollback()
+        return None
+
+
+@asset(
+    compute_kind="zenventory_api",
+    group_name="agh_fulfillment_zenventory",
+    description="Syncs shipment report from Zenventory to agh_fulfillment_zenventory.shipments"
+)
+def agh_fulfillment_zenventory_shipments(
+    context: AssetExecutionContext,
+    zenventory: ZenventoryResource,
+) -> Output[None]:
+    """
+    Fetch shipment report from Zenventory and upsert to the warehouse.
+
+    This syncs the /reports/shipment/ship_client endpoint which contains
+    the actual shipping costs (Shipping & Handling) per order.
+
+    Uses incremental sync: only fetches shipments from (max_shipped_date - 7 days)
+    to today, rather than fetching all historical data.
+    """
+    log = context.log
+
+    conn = get_db_connection()
+    try:
+        ensure_schema_exists(conn)
+        create_table_with_schema(conn, TABLE_SHIPMENTS, SHIPMENTS_SCHEMA, ["order_number", "tracking_number"])
+
+        # Get max shipped_date for incremental sync
+        max_shipped = get_max_shipped_date(conn)
+
+        if max_shipped:
+            # Incremental sync: fetch from 7 days before max_shipped_date
+            # (buffer for late-arriving data or corrections)
+            start_date = (datetime.strptime(max_shipped, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+            log.info(f"Incremental sync: fetching shipments from {start_date} (max_shipped_date was {max_shipped})")
+        else:
+            # Full sync: no existing data
+            start_date = None
+            log.info("Full sync: no existing data found")
+
+        raw_shipments = zenventory.get_shipment_report(start_date=start_date)
+        log.info(f"Fetched {len(raw_shipments)} shipment records")
+
+        # Transform records
+        transformed = [transform_shipment(s) for s in raw_shipments]
+
+        # Filter out records with no order_number and ensure tracking_number has a value
+        # (use empty string for NULL tracking numbers to satisfy composite key)
+        for t in transformed:
+            if t.get("tracking_number") is None:
+                t["tracking_number"] = ""
+        transformed = [t for t in transformed if t.get("order_number")]
+
+        # Deduplicate by (order_number, tracking_number), keeping the record with highest shipping cost
+        # This handles cases where the same shipment appears twice in the report
+        seen = {}
+        for t in transformed:
+            key = (t["order_number"], t["tracking_number"])
+            if key not in seen:
+                seen[key] = t
+            else:
+                # Keep the one with higher shipping cost
+                existing_cost = seen[key].get("shipping_handling") or 0
+                new_cost = t.get("shipping_handling") or 0
+                if new_cost > existing_cost:
+                    seen[key] = t
+        transformed = list(seen.values())
+        log.info(f"After deduplication: {len(transformed)} unique shipments")
+
+        # Upsert to database
+        upserted = upsert_records(
+            conn, TABLE_SHIPMENTS, transformed, SHIPMENTS_SCHEMA, ["order_number", "tracking_number"]
+        )
+        log.info(f"Upserted {upserted} shipment records")
+
+        return Output(
+            value=None,
+            metadata={
+                "sync_type": MetadataValue.text("incremental" if max_shipped else "full"),
+                "start_date": MetadataValue.text(start_date or "2024-01-01"),
+                "total_fetched": MetadataValue.int(len(raw_shipments)),
+                "total_upserted": MetadataValue.int(upserted),
+                "table": MetadataValue.text(f"{SCHEMA_NAME}.{TABLE_SHIPMENTS}"),
+            }
+        )
+    finally:
+        conn.close()
+
+
+@asset(
+    compute_kind="calculation",
+    group_name="agh_fulfillment_zenventory",
+    deps=[agh_fulfillment_zenventory_customer_orders],
+    description="Calculates labor costs from customer_orders data. $1.80 base + $0.20 per SKU."
+)
+def agh_fulfillment_labor_costs(
+    context: AssetExecutionContext,
+) -> Output[None]:
+    """
+    Calculate labor costs for each order based on item count.
+
+    Labor cost formula: $1.80 base + ($0.20 × number of SKUs)
+
+    This is a calculated table derived from customer_orders, not raw Zenventory data.
+    """
+    log = context.log
+
+    conn = get_db_connection()
+    try:
+        ensure_schema_exists(conn)
+        create_table_with_schema(conn, TABLE_LABOR_COSTS, LABOR_COSTS_SCHEMA, "order_number")
+
+        # Calculate and upsert labor costs in a single SQL statement
+        # This is much faster than fetching to Python, calculating, and upserting back
+        # Formula: $1.80 base + $0.20 per SKU
+        upsert_query = sql.SQL("""
+            INSERT INTO {schema}.{table} (order_number, item_count, labor_cost)
+            SELECT
+                order_number,
+                COALESCE(jsonb_array_length(items), 0) AS item_count,
+                1.80 + (COALESCE(jsonb_array_length(items), 0) * 0.20) AS labor_cost
+            FROM {schema}.{source_table}
+            WHERE order_number IS NOT NULL AND order_number != ''
+            ON CONFLICT (order_number) DO UPDATE SET
+                item_count = EXCLUDED.item_count,
+                labor_cost = EXCLUDED.labor_cost,
+                _synced_at = NOW()
+        """).format(
+            schema=sql.Identifier(SCHEMA_NAME),
+            table=sql.Identifier(TABLE_LABOR_COSTS),
+            source_table=sql.Identifier(TABLE_CUSTOMER_ORDERS),
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(upsert_query)
+            upserted = cur.rowcount
+            conn.commit()
+
+        log.info(f"Upserted {upserted} labor cost records")
+
+        return Output(
+            value=None,
+            metadata={
+                "total_upserted": MetadataValue.int(upserted),
+                "table": MetadataValue.text(f"{SCHEMA_NAME}.{TABLE_LABOR_COSTS}"),
+            }
+        )
+    finally:
+        conn.close()
+
+
 # Create the resource instance
 zenventory_resource = ZenventoryResource()
 
@@ -1103,6 +1329,8 @@ defs = Definitions(
         agh_fulfillment_zenventory_inventory,
         agh_fulfillment_zenventory_customer_orders,
         agh_fulfillment_zenventory_purchase_orders,
+        agh_fulfillment_zenventory_shipments,
+        agh_fulfillment_labor_costs,
     ],
     resources={
         "zenventory": zenventory_resource,
