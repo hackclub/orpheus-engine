@@ -341,6 +341,7 @@ flavortown_ahoy_replication_config = {
 }
 
 # --- HCB Database Replication Configuration ---
+# For calculating monthly actives and transaction ledger
 hcb_replication_config = {
     "source": "HCB_DB",
     "target": "WAREHOUSE_DB",
@@ -353,8 +354,55 @@ hcb_replication_config = {
     },
 
     "streams": {
+        # --- Users & Activity ---
         "public.users": None,
         "public.user_seen_at_histories": None,
+        "public.organizer_positions": None,
+
+        # --- Core Financial Tables ---
+        "public.events": None,
+        "public.event_plans": None,
+        "public.canonical_transactions": None,
+        "public.canonical_event_mappings": None,
+        "public.canonical_pending_transactions": None,
+        "public.canonical_pending_event_mappings": None,
+        "public.canonical_pending_settled_mappings": None,
+        "public.canonical_pending_declined_mappings": None,
+        "public.hcb_codes": None,
+        "public.fees": None,
+
+        # --- Payment/Vendor Tables ---
+        "public.disbursements": None,
+        "public.ach_transfers": None,
+        "public.donations": None,
+        "public.wires": None,
+        "public.checks": None,
+        "public.increase_checks": None,
+
+        # --- Card/Authorization Tables ---
+        "public.stripe_cards": None,
+        "public.stripe_cardholders": None,
+        "public.stripe_authorizations": None,
+        "public.card_grants": None,
+
+        # --- Tags/Metadata ---
+        "public.tags": None,
+        "public.event_tags": None,
+        "public.hcb_codes_tags": {
+            "primary_key": ["hcb_code_id", "tag_id"],  # Join table, no id column
+        },
+
+        # --- Receipts ---
+        "public.receipts": {
+            "select": [
+                "id", "user_id", "receiptable_type", "receiptable_id",
+                "upload_method", "suggested_memo", "data_extracted",
+                "extracted_subtotal_amount_cents", "extracted_total_amount_cents",
+                "extracted_date", "extracted_merchant_name", "extracted_merchant_url",
+                "extracted_merchant_zip_code", "extracted_currency",
+                "textual_content_source", "created_at", "updated_at"
+            ],  # Excludes *_ciphertext and *_bidx columns
+        },
     }
 }
 

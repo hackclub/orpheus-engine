@@ -25,11 +25,92 @@ sources:
   - name: hcb
     schema: hcb
     tables:
+      # Users & Activity
       - name: users
-        description: "HCB users table (warehouse mirror)."
+        description: "HCB users table."
         meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
       - name: user_seen_at_histories
         description: "HCB user session windows (period_start_at/period_end_at)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: organizer_positions
+        description: "User-to-event permission mappings. Has deleted_at for soft deletes."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      # Core Financial Tables
+      - name: events
+        description: "Organizations/accounts on HCB. Has deleted_at for soft deletes."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: event_plans
+        description: "Plan types for events - used to identify HQ orgs."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_transactions
+        description: "Main transaction ledger - all financial transactions."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_event_mappings
+        description: "Links transactions to events (and optionally users)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_pending_transactions
+        description: "Pending/unsettled transactions (checks awaiting deposit, etc.)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_pending_event_mappings
+        description: "Links pending transactions to events."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_pending_settled_mappings
+        description: "Links pending transactions to their settled canonical transaction."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: canonical_pending_declined_mappings
+        description: "Marks pending transactions that were declined/cancelled."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: fees
+        description: "Fee records for transactions (10% HCB fee, etc.)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: hcb_codes
+        description: "Unique transaction group identifiers (HCB-XXX-XXXXX format)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      # Payment/Vendor Tables
+      - name: disbursements
+        description: "Internal transfers between HCB accounts."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: ach_transfers
+        description: "Outgoing ACH payments to external accounts."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: donations
+        description: "Incoming donations to HCB organizations."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: wires
+        description: "Outgoing wire transfers."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: checks
+        description: "Legacy check payments (deprecated, use increase_checks)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: increase_checks
+        description: "Check payments via Increase."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      # Card/Authorization Tables
+      - name: stripe_cards
+        description: "Physical and virtual cards issued to users."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: stripe_cardholders
+        description: "Card holder records linked to users."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: stripe_authorizations
+        description: "Card authorization/transaction records."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: card_grants
+        description: "Card grants issued to users - funding for cards from org balance."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      # Tags/Metadata
+      - name: tags
+        description: "User-defined tags for transactions (per-event)."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: event_tags
+        description: "Global event tag definitions."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      - name: hcb_codes_tags
+        description: "Join table linking hcb_codes to tags."
+        meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
+      # Receipts
+      - name: receipts
+        description: "Receipt attachments with AI-extracted merchant names, amounts, and memos."
         meta: { dagster: { asset_key: ['hcb_warehouse_mirror'] } }
 
   - name: slack
