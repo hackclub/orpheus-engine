@@ -57,10 +57,10 @@ unified_ysws_15min_schedule = dg.ScheduleDefinition(
     execution_timezone="America/New_York",                 # keeps logs in local time
 )
 
-# 5. Frequent Airtable job and schedule (every 15 minutes)
-# Includes: Slack NPS, Campfire, Campfire Flagship (sources + warehouse mirrors)
-frequent_airtable_job = dg.define_asset_job(
-    name="frequent_airtable_job",
+# 5. Frequent sync job and schedule (every 15 minutes)
+# Includes: Slack NPS, Campfire, Campfire Flagship (sources + warehouse mirrors), Zenventory
+materialize_frequent_job = dg.define_asset_job(
+    name="materialize_frequent_job",
     selection=(
         # Slack NPS
         dg.AssetSelection.assets("airtable/slack_nps/nps") |
@@ -90,19 +90,26 @@ frequent_airtable_job = dg.define_asset_job(
         dg.AssetSelection.assets("campfire_rsvp_warehouse") |
         dg.AssetSelection.assets("campfire_regional_managers_warehouse") |
         dg.AssetSelection.assets("campfire_organizer_interest_warehouse") |
-        dg.AssetSelection.assets("campfire_daydream_events_warehouse")
+        dg.AssetSelection.assets("campfire_daydream_events_warehouse") |
+        # Zenventory (AGH Fulfillment)
+        dg.AssetSelection.assets("agh_fulfillment_zenventory_items") |
+        dg.AssetSelection.assets("agh_fulfillment_zenventory_inventory") |
+        dg.AssetSelection.assets("agh_fulfillment_zenventory_customer_orders") |
+        dg.AssetSelection.assets("agh_fulfillment_zenventory_purchase_orders") |
+        dg.AssetSelection.assets("agh_fulfillment_zenventory_shipments") |
+        dg.AssetSelection.assets("agh_fulfillment_labor_costs")
     ),
 )
 
-frequent_airtable_schedule = dg.ScheduleDefinition(
-    name="frequent_airtable_schedule",
-    job=frequent_airtable_job,
+frequent_15min_schedule = dg.ScheduleDefinition(
+    name="frequent_15min_schedule",
+    job=materialize_frequent_job,
     cron_schedule="*/15 * * * *",                          # every 15 minutes
     execution_timezone="America/New_York",
 )
 
 # 6. Wrap in a Definitions so Dagster can find it
 defs = dg.Definitions(
-    jobs=[materialize_all_assets_job, materialize_unified_ysws_job, frequent_airtable_job],
-    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule, frequent_airtable_schedule],
+    jobs=[materialize_all_assets_job, materialize_unified_ysws_job, materialize_frequent_job],
+    schedules=[materialize_all_assets_schedule, unified_ysws_15min_schedule, frequent_15min_schedule],
 ) 
