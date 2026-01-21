@@ -246,7 +246,7 @@ def list_tables(base_id: str, samples: int = 3) -> None:
                 print("  (failed to fetch samples)")
 
 
-def list_rows(base_id: str, table: str, limit: int = 100, view: str | None = None, offset: str | None = None, filter_formula: str | None = None) -> None:
+def list_rows(base_id: str, table: str, limit: int = 100, view: str | None = None, offset: str | None = None, filter_formula: str | None = None, output_format: str = "text") -> None:
     """List rows in a table."""
     base_id = validate_base_id(base_id)
     table = validate_table_name_or_id(table)
@@ -270,36 +270,79 @@ def list_rows(base_id: str, table: str, limit: int = 100, view: str | None = Non
     next_offset = result.get("offset")
 
     if not records:
-        print("No rows found.")
+        if output_format == "text":
+            print("No rows found.")
+        elif output_format == "csv":
+            pass  # No output for empty CSV
+        elif output_format == "json":
+            print("[]")
         return
 
-    # Get all field names from records
-    all_fields = set()
+    # Get all field names from records (sorted for consistent column order)
+    all_fields: set[str] = set()
     for record in records:
         all_fields.update(record.get("fields", {}).keys())
+    sorted_fields = sorted(all_fields)
 
-    # Print records
-    for record in records:
-        record_id = record.get("id", "")
-        record_fields = record.get("fields", {})
-        created_time = record.get("createdTime", "")
+    if output_format == "json":
+        # JSON output - include record ID and created time
+        output_records = []
+        for record in records:
+            output_records.append({
+                "id": record.get("id", ""),
+                "createdTime": record.get("createdTime", ""),
+                "fields": record.get("fields", {})
+            })
+        print(json.dumps(output_records, indent=2, default=str))
 
-        print(f"\n{'='*60}")
-        print(f"Record: {record_id}")
-        print(f"Created: {created_time}")
-        print("-" * 60)
+    elif output_format == "csv":
+        # CSV output - flatten fields into columns
+        import csv
+        import io
+        output = io.StringIO()
+        # Include record_id and created_time as first columns
+        fieldnames = ["record_id", "created_time"] + sorted_fields
+        writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
 
-        for key, value in record_fields.items():
-            str_value = str(value)
-            if len(str_value) > 100:
-                str_value = str_value[:97] + "..."
-            print(f"  {key}: {str_value}")
+        for record in records:
+            row = {
+                "record_id": record.get("id", ""),
+                "created_time": record.get("createdTime", "")
+            }
+            # Add all fields, converting complex types to JSON strings
+            for key, value in record.get("fields", {}).items():
+                if isinstance(value, (list, dict)):
+                    row[key] = json.dumps(value, default=str)
+                else:
+                    row[key] = value
+            writer.writerow(row)
 
-    print(f"\nShowing {len(records)} record(s)")
-    if next_offset:
-        print(f"\nMore records available. To fetch the next page, run:")
-        print(f"  ./bin/airtable rows {base_id} '{table}' --offset '{next_offset}'")
-        print(f"\nNote: Airtable returns up to 100 records per request. Use --limit to control batch size.")
+        print(output.getvalue(), end="")
+
+    else:
+        # Text output (default) - human readable format
+        for record in records:
+            record_id = record.get("id", "")
+            record_fields = record.get("fields", {})
+            created_time = record.get("createdTime", "")
+
+            print(f"\n{'='*60}")
+            print(f"Record: {record_id}")
+            print(f"Created: {created_time}")
+            print("-" * 60)
+
+            for key, value in record_fields.items():
+                str_value = str(value)
+                if len(str_value) > 100:
+                    str_value = str_value[:97] + "..."
+                print(f"  {key}: {str_value}")
+
+        print(f"\nShowing {len(records)} record(s)")
+        if next_offset:
+            print(f"\nMore records available. To fetch the next page, run:")
+            print(f"  ./bin/airtable rows {base_id} '{table}' --offset '{next_offset}'")
+            print(f"\nNote: Airtable returns up to 100 records per request. Use --limit to control batch size.")
 
 
 def confirm_dangerous_action(action: str, details: str) -> bool:
@@ -533,6 +576,7 @@ def main() -> None:
     rows_parser.add_argument("--view", help="View name to use")
     rows_parser.add_argument("--offset", help="Pagination offset from previous request")
     rows_parser.add_argument("--filter", dest="filter_formula", help="Airtable formula to filter rows (e.g., \"{Status}='Active'\")")
+    rows_parser.add_argument("--format", choices=["text", "csv", "json"], default="text", help="Output format (default: text)")
 
     # create-field command
     create_field_parser = subparsers.add_parser("create-field", help="Create a new field (DANGEROUS)")
@@ -578,7 +622,7 @@ def main() -> None:
         elif args.command == "tables":
             list_tables(args.base_id, args.samples)
         elif args.command == "rows":
-            list_rows(args.base_id, args.table, args.limit, args.view, args.offset, args.filter_formula)
+            list_rows(args.base_id, args.table, args.limit, args.view, args.offset, args.filter_formula, args.format)
         elif args.command == "create-field":
             create_field(args.base_id, args.table, args.field_def)
         elif args.command == "create-row":
