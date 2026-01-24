@@ -551,7 +551,7 @@ class AirtableIDs:
             disregard_submissions = "fldrM1TCaaMa909O8"  # Name: disregard_submissions
             unqualified_us_invite_sent = "fldSdpo5GKi7aPHSq"  # Name: unqualified_us_invite_sent
             loops_list_athena = "fldLOj4Uhj5U4gS94"  # Name: Loops List - Athena
-            last_name = "fld72d4VRJc7DhH4T"  # Name: Last Name
+            last_name_legal = "fld72d4VRJc7DhH4T"  # Name: Last Name Legal
             first_name_legal = "fldWamrY5zBfaqgHh"  # Name: First Name Legal
             yeah = "fldaevbIgBhtgkCFz"  # Name: yeah
             total_approved_projects = "fldz2gFbKLmAnCxX2"  # Name: total_approved_projects
@@ -571,6 +571,12 @@ class AirtableIDs:
             first_name_override = "fldmfEejAdLB14umc"  # Name: First Name Override
             first_name = "fldus0NfvZn1iwDt4"  # Name: First Name
             certification = "fldP5NYotbKw8fXeV"  # Name: Certification
+            action_send_certification = "fld1zB64j14CCHpJA"  # Name: action_send_certification
+            approved_duration_unified = "fldt4yPfaaHEpRyRq"  # Name: approved_duration_unified
+            project_name_unified = "fldFZ1XCm1E6xKYVi"  # Name: Project Name Unified
+            created_at_unified = "fldnyocTguHWaDCdt"  # Name: created_at_unified
+            last_name_override = "fldtmGOCr1j4SKkzl"  # Name: Last Name Override
+            last_name = "fldyYKeAabYDNYPuD"  # Name: Last Name
 
         class email_slack_invites:
             """IDs for Table 'email_slack_invites' (ID: tblmiCs66Oy9ux6eN)"""
@@ -746,6 +752,7 @@ class AirtableIDs:
             cost_per_hour = "fldwSYLyCEVfHhkwK"  # Name: Cost Per Hour
             weighted_projects_this_month = "flddWQbhmy3oytww2"  # Name: Weighted Projects This Month
             weighted_projects_2025 = "fldPVrNUdWKGiqv68"  # Name: Weighted Projects–2025
+            weighted_projects_2026 = "fldmLLL18U9fw1H61"  # Name: Weighted Projects–2026
             weighted_total = "fldgfs70478BwFFBj"  # Name: Weighted–Total
             unweighted_total = "fldPV2UvmrSrML24w"  # Name: Unweighted–Total
             nps_score = "fldrWoUZtmFe3BIEF"  # Name: NPS Score
@@ -793,6 +800,7 @@ class AirtableIDs:
             total_sign_ups_likely_missing_loops_events = "fldQedY9tfUy704jK"  # Name: Total Sign-Ups–Likely Missing Loops Events?
             total_sign_ups_override_confirm_has_loops_events_set = "fldzHpRUSrV1IPKFP"  # Name: Total Sign-Ups–Override, Confirm Has Loops Events Set
             nps_copy = "fldjIZTQUjeWinpeF"  # Name: NPS copy
+            unweighted_projects_2026 = "fldyWAYrguKjzb9a3"  # Name: Unweighted Projects–2026
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
@@ -801,7 +809,9 @@ class AirtableIDs:
             name = "fldlE95RqYyq8DJW4"  # Name: Name
             slack_url = "fldb79ToRvdcXeqze"  # Name: Slack URL
             slack_id = "fldojyNhEYyuZSo35"  # Name: Slack ID
+            weighted_grants_total = "fldllCyssGiFPi5mS"  # Name: Weighted Grants–Total
             hcb_budget_fund = "fldStVwvzbzx7Ambm"  # Name: HCB Budget Fund
+            weighted_grants_2026 = "fldhTYpmDLsoDtyTy"  # Name: Weighted Grants–2026
             weighted_grants_this_month = "fldPfA6UkbmKoKPE5"  # Name: Weighted Grants This Month
             weighted_grants_2025 = "fldhG2hMtQ73KZ0qq"  # Name: Weighted Grants–2025
             weights_grants_june_2025 = "fld6D3uHxMqmO9Bp7"  # Name: Weights Grants–June 2025
@@ -814,7 +824,6 @@ class AirtableIDs:
             weights_grants_sep_2024 = "fldHARrmhE7Q19lzu"  # Name: Weights Grants–Sep 2024
             weighted_grants_2024 = "fld2wxB7twgaNTPBZ"  # Name: Weighted Grants–2024
             current_ysws_programs = "fldrUpZPQmKClNouO"  # Name: Current YSWS Programs
-            weighted_grants_total = "fldllCyssGiFPi5mS"  # Name: Weighted Grants–Total
             attributed_grants = "fldM4SHI9hXry0pPC"  # Name: Attributed Grants
             weights_grants_mar_2025_copy = "fldkpZAqxuLJnu9do"  # Name: Weights Grants–Mar 2025 copy
             weighted_grants_excluding_shared = "fld4p6J1NvBlAK2J1"  # Name: Weighted Grants (excluding shared)
@@ -936,6 +945,8 @@ class AirtableIDs:
             how_can_we_improve_the_slack = "fldgIepjaWVgCYWQ2"  # Name: How can we improve the Slack?
             submitted_at = "fld7Ihoq41nQGPbsI"  # Name: Submitted At
             loops_slack_feedback_given_at = "fldMWzdfoCGgvEkBr"  # Name: Loops - slackFeedbackGivenAt
+            classification = "fld2MjDhVpp42u2pG"  # Name: Classification
+            nps_calc = "fldYiOuVMB7uXEgU1"  # Name: NPS Calc
 
 
     class campfire_flagship:
@@ -951,6 +962,7 @@ class AirtableIDs:
             loops_campfire_flagship_sign_up_at = "fldATIGfnwGuISoPr"  # Name: Loops - campfireFlagshipSignUpAt
             loops_list_campfire_flagship = "fld6Mg90vOxBFKP1z"  # Name: Loops List - Campfire Flagship
             cool_game_application_link = "fldbC7iANVTYt5PQc"  # Name: Cool Game Application Link
+            synced_to_bonfire = "fldoPw3roVo1wRR7P"  # Name: Synced to Bonfire
 
         class hour_estimation:
             """IDs for Table 'hour_estimation' (ID: tblJ8oDsRaXyTNlN6)"""
@@ -1004,24 +1016,31 @@ class AirtableIDs:
             rel_rm = "fldn36T6plpMhTwoP"  # Name: rel_rm
             rm_name = "fldX1efAAxbPcxfO8"  # Name: rm_name
             rm_email = "fldplH6K9dFRFOw30"  # Name: rm_email
-            status_hcb = "fldux4OZIbjhrWnXo"  # Name: status_hcb
             lat_lng = "fldrZmTQ633HjNIoB"  # Name: lat_lng
             geocode_cache = "fld5XSkKhsOZEqQHH"  # Name: geocode_cache
             invite_to_hcb = "fldnH5VhfCfyrg6a7"  # Name: invite_to_hcb?
             website_json = "fldCwNqlYGSix9iUZ"  # Name: website_json
             has_venue = "fldst4buh52WjFdnM"  # Name: has_venue?
-            venue_address_line_1 = "fldD5Do2tY439nicL"  # Name: venue__address_line_1
-            venue_address_line_2 = "fld65Z6gIqFUAemUX"  # Name: venue__address_line_2
-            venue_city = "flddDPXVYz6JXSJEz"  # Name: venue__city
-            venue_country = "fldllPA4vBkmQY9CT"  # Name: venue__country
-            venue_zip = "fld9kVsz3OuroKfv6"  # Name: venue__zip
-            venue_state = "fldlSyl2B6XOdacPw"  # Name: venue__state
-            venue_proof = "flduBifrGjKvZUcUT"  # Name: venue_proof
-            venue_contact_name = "fldJpbGTQzv3VcmBq"  # Name: venue__contact_name
-            venue_contact_email = "fldBcn6SXFUPIF4pO"  # Name: venue__contact_email
-            venue_max_participants = "fldzMU3cARPrFACdr"  # Name: venue__max_participants
-            venue_update_form = "fld7JydFuuRxWtB7C"  # Name: venue__update_form
-            venue_name = "flde6ElJ0WRDsPdrN"  # Name: venue_name
+            slug_override = "fld90y36OB46TXsto"  # Name: slug_override
+            website_active = "fldNqzJCLUcFGFCa9"  # Name: website_active
+            not_active = "fldUpSyorjuHAH1QT"  # Name: not_active?
+            check_in_1_venue_information = "fldcy3qtgrHCzOjVO"  # Name: check_in_1__venue_information
+            check_in_1_venue_status = "fld4Fy5XLnAunYFPz"  # Name: check_in_1__venue_status
+            check_in_1_sponsor_status = "fldbcwwGVJMgoeCjd"  # Name: check_in_1__sponsor_status
+            check_in_1_sponsor_information = "fldzunQOT94fYS8Cz"  # Name: check_in_1__sponsor_information
+            check_in_1_nps = "fldA3b8QCUvgzrcRp"  # Name: check_in_1__nps
+            check_in_1_feedback = "fldXXzXXIfoB3LEQx"  # Name: check_in_1__feedback
+            check_in_1_rm_nps = "fldegAuZCe4hecrzs"  # Name: check_in_1__rm_nps
+            check_in_1_rm_feedback = "fldBQnMY7aXelJ16J"  # Name: check_in_1__rm_feedback
+            venues = "fldpREUvKkqqVwOZD"  # Name: venues
+            participants = "fldhUHMx8mxoI11aX"  # Name: participants
+            status = "fldhAJmQpFRB0GalY"  # Name: Status
+            display_name = "flddERKGxHpnBZOUi"  # Name: display_name
+            hcb_org_id_from_hcb = "fldYlDIjFcavkIqbd"  # Name: hcb_org_id (from HCB)
+            num_participants = "fldr1Th3h9orWncf1"  # Name: num_participants
+            signup_url = "fldeRenDm3168XYDH"  # Name: signup_url
+            website_redirect = "fldyCW7u9lcoZxK8T"  # Name: website_redirect
+            percent_signup = "fld48VayTBXLuyIJl"  # Name: percent_signup
 
         class organizer:
             """IDs for Table 'organizer' (ID: tbldqdX0voIpuM56s)"""
@@ -1053,22 +1072,22 @@ class AirtableIDs:
             record_id = "fld4zfIh1MjsiHlbT"  # Name: record_id
             has_hackathon_xp = "fldiiK9YpL0n7xGhb"  # Name: has_hackathon_xp
             hackathon_xp = "fldVDStvmdEVCO5Iz"  # Name: hackathon_xp
+            event = "fld1YwZVrxxZk46n5"  # Name: Event
             is_location_different = "fldaZzUNytFoSFXHG"  # Name: is_location_different
             proposal_city = "fld6hktk3XGMFOzuc"  # Name: proposal_city
             proposal_country = "flduogmuQ16mtapKh"  # Name: proposal_country
+            hcb = "fldzYlDM6WLtGSEnQ"  # Name: HCB
             github_username = "fldgyfKLpA3XFC1nX"  # Name: github_username
             latitude = "fldvPvaovy1XEuKaa"  # Name: latitude
             longitude = "fldZMUXh5Snj0UjX2"  # Name: longitude
+            rollup_address = "fldwVKUTeSSYmOaGQ"  # Name: rollup_address
+            geocode_cache = "fldXWrXz8oOzULBrC"  # Name: geocode_cache
             loops_campfire_applied_to_organize_at = "fldrOB6liTtbJLDXM"  # Name: Loops - campfireAppliedToOrganizeAt
             loops_special_set_full_name = "fldVAyZnyCKaIHC8m"  # Name: Loops - Special - setFullName
             loops_phone_number = "fld1BBqUP41vRtcm7"  # Name: Loops - phoneNumber
             loops_birthday = "fldtcKveePqgiEmY1"  # Name: Loops - birthday
             loops_special_set_full_address = "fldDd41yhLxCtb0qk"  # Name: Loops - Special - setFullAddress
             is_idv_eligible = "fldcLjk2xmVW8L4Zs"  # Name: is_idv_eligible
-            event = "fld1YwZVrxxZk46n5"  # Name: Event
-            hcb = "fldzYlDM6WLtGSEnQ"  # Name: HCB
-            rollup_address = "fldwVKUTeSSYmOaGQ"  # Name: rollup_address
-            geocode_cache = "fldXWrXz8oOzULBrC"  # Name: geocode_cache
 
         class hcb:
             """IDs for Table 'hcb' (ID: tblGt0gBpeoZ6oei7)"""
@@ -1076,6 +1095,7 @@ class AirtableIDs:
 
             id = "fld2hpihcyH48AXtt"  # Name: id
             ref_event = "fldcPysFtNSkYAKgs"  # Name: ref_event
+            rm_email_from_ref_event = "fldLjcjD6jlobUUt4"  # Name: rm_email (from ref_event)
             rel_region = "fld3Pw8hT9jpJKer4"  # Name: rel_region
             rel_region_hcb = "fldmnQksoh0rO1FXt"  # Name: rel_region_hcb
             rel_region_hcb_id = "fld0kB2cNMecpuCUy"  # Name: rel_region_hcb_id
@@ -1093,6 +1113,8 @@ class AirtableIDs:
             hcb_org_id = "fld6OJg8hhZymaLZe"  # Name: hcb_org_id
             is_done = "fldNa58DtlicVRYqJ"  # Name: is_done
             lookup_slug_from_ref_event = "fldRuy6HBWWhgrN8r"  # Name: lookup_slug_from_ref_event
+            email_created = "fldpvk8cmawwj4vhc"  # Name: email_created
+            created_at_time = "fld8KnjKkAXkVYryw"  # Name: created_at_time
 
         class regions:
             """IDs for Table 'regions' (ID: tblVx5rx6PzH7x6EJ)"""
@@ -1102,7 +1124,9 @@ class AirtableIDs:
             region_area = "fldpE8Q2t2q8fL2WU"  # Name: region_area
             rm_name = "fldL4OnBYvFWAYtW2"  # Name: rm_name
             metrics_health = "fldhoPd8fWWEHYKP9"  # Name: metrics_health
+            total_approved_events_goal = "fldFnpDLo2DhX5T9E"  # Name: Total approved events goal
             count_of_events = "fldIZwTkrt0fFlBVM"  # Name: count_of_events
+            percentage_done = "fldKcfhWt4jHlGw58"  # Name: Percentage done
             rel_events = "fld52xi2nah41kfBP"  # Name: rel_events
             rel_rm = "fldcOdpWGZ4A30l7b"  # Name: rel_rm
             hcb_cf_id_from_rel_rm = "fld4734YRZPctmjyl"  # Name: hcb_cf_id (from rel_rm)
@@ -1121,6 +1145,8 @@ class AirtableIDs:
             preferred_name = "fldADsddzeXt9wXlj"  # Name: preferred_name
             address_city = "fldZN1bDx3nQEWq3t"  # Name: address_city
             address_country = "fld6yJT8EtnBFdpDN"  # Name: address_country
+            loops_campfire_rsvp_at = "fldV5LWY64LLCeFvf"  # Name: Loops - campfireRsvpAt
+            loops_list_campfire = "fldXWtAQtoRRjttsD"  # Name: Loops List - Campfire
 
         class regional_managers:
             """IDs for Table 'regional_managers' (ID: tblnCXwP5OVDczHsf)"""

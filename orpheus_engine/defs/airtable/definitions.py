@@ -177,6 +177,18 @@ airtable_config = AirtableServiceConfig(
                 ),
                 "daydream_events": AirtableTableConfig(
                     table_id="tblriNbP6J6W2tEob"
+                ),
+                "participants": AirtableTableConfig(
+                    table_id="tblfan2dxx0YOH7US"
+                ),
+                "venues": AirtableTableConfig(
+                    table_id="tblNBEkm5m75NfeBv"
+                ),
+                "jay": AirtableTableConfig(
+                    table_id="tbluALNKnREkLlLWM"
+                ),
+                "us_based_clubs": AirtableTableConfig(
+                    table_id="tblXLQDcVRkbyHqIN"
                 )
             }
         )
