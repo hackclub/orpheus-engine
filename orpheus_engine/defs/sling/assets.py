@@ -1,9 +1,69 @@
 from dagster import EnvVar, AssetExecutionContext, Nothing
 from dagster_sling import SlingResource, SlingConnectionResource
 from typing import Mapping, Any
+from urllib.parse import urlparse, parse_qs
 import dagster as dg
+import ipaddress
 import os
 import base64
+
+
+def _validate_sslmode_disable_is_tailscale(env_var_name: str) -> None:
+    """
+    Validates that if a connection URL uses sslmode=disable, the host must be a
+    Tailscale IP (100.64.0.0/10 CGNAT range). This prevents accidentally disabling
+    SSL for public-facing databases.
+    """
+    url = os.getenv(env_var_name, "")
+    if not url:
+        return
+
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query)
+
+    # Check if sslmode=disable is set
+    sslmode = query_params.get("sslmode", [None])[0]
+    if sslmode != "disable":
+        return
+
+    # Validate host is a Tailscale IP (100.64.0.0/10)
+    host = parsed.hostname
+    if not host:
+        return
+
+    try:
+        ip = ipaddress.ip_address(host)
+        tailscale_range = ipaddress.ip_network("100.64.0.0/10")
+        if ip not in tailscale_range:
+            raise ValueError(
+                f"{env_var_name}: sslmode=disable is only allowed for Tailscale IPs "
+                f"(100.64.0.0/10). Got host: {host}"
+            )
+    except ValueError as e:
+        if "does not appear to be an IPv4 or IPv6 address" in str(e):
+            # Host is a hostname, not an IP - sslmode=disable not allowed
+            raise ValueError(
+                f"{env_var_name}: sslmode=disable is only allowed for Tailscale IPs "
+                f"(100.64.0.0/10), not hostnames. Got host: {host}"
+            )
+        raise
+
+
+# Validate all sling connection URLs - sslmode=disable only allowed for Tailscale IPs
+_SLING_CONNECTION_URL_ENV_VARS = [
+    "HACKATIME_COOLIFY_URL",
+    "HCER_PUBLIC_GITHUB_DATA_COOLIFY_URL",
+    "SHIPWRECKED_THE_BAY_COOLIFY_URL",
+    "JOURNEY_COOLIFY_URL",
+    "SUMMER_OF_MAKING_2025_COOLIFY_URL",
+    "HACKATIME_LEGACY_COOLIFY_URL",
+    "FLAVORTOWN_COOLIFY_URL",
+    "FLAVORTOWN_AHOY_COOLIFY_URL",
+    "WAREHOUSE_COOLIFY_URL",
+]
+
+for _env_var in _SLING_CONNECTION_URL_ENV_VARS:
+    _validate_sslmode_disable_is_tailscale(_env_var)
 
 # --- Define Connections ---
 
@@ -313,6 +373,145 @@ flavortown_replication_config = {
 
     "streams": {
         "public.*": None,
+
+        # Rails internal tables - disable
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+
+        # Tables with id + updated_at - use incremental sync
+        "public.action_mailbox_inbound_emails": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.active_insights_jobs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.active_insights_requests": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.blazer_checks": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.blazer_dashboard_queries": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.blazer_dashboards": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.blazer_queries": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.flipper_features": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.flipper_gates": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.hcb_credentials": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.ledger_entries": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.post_devlogs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.post_ship_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.posts": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.project_ideas": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.project_memberships": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.projects": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.rsvps": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.shop_card_grants": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.shop_items": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.shop_orders": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.user_hackatime_projects": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.user_identities": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.user_role_assignments": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.users": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.votes": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        # Tables without updated_at stay full-refresh (default):
+        # - active_storage_attachments, active_storage_blobs, active_storage_variant_records
+        # - blazer_audits, versions
     }
 }
 
