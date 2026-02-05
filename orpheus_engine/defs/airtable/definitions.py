@@ -191,6 +191,14 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblXLQDcVRkbyHqIN"
                 )
             }
+        ),
+        "synced_data_warehouse_slack_users": AirtableBaseConfig(
+            base_id="app5iK28ZvD6sx7qW",
+            tables={
+                "slack_users": AirtableTableConfig(
+                    table_id="tblp8ALH23EuNikiZ"
+                )
+            }
         )
     }
 )

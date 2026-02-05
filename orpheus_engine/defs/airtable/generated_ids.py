@@ -694,6 +694,8 @@ class AirtableIDs:
             ysws_weighted_project_author_attribution = "fldpvTcMezPwzMyRO"  # Name: YSWS–Weighted Project Author Attribution
             approved_at = "fldB6hzaH7SIz9CQi"  # Name: Approved At
             created = "fldh8rUhEKOM0uFPt"  # Name: Created
+            temp_zach_project_metadata_json = "fldtrSGdH0xWbIdPa"  # Name: Temp - Zach - Project Metadata JSON
+            temp_zach_project_thumbnail = "fldS4GP822GHICFsQ"  # Name: Temp - Zach - Project Thumbnail
             ysws = "fldRWPZyaEPBDDz7x"  # Name: YSWS
             first_name = "fldVVfL6j9S5s2CSi"  # Name: First Name
             last_name = "fldUx3OeChK5PDBg3"  # Name: Last Name
@@ -1023,7 +1025,6 @@ class AirtableIDs:
             has_venue = "fldst4buh52WjFdnM"  # Name: has_venue?
             slug_override = "fld90y36OB46TXsto"  # Name: slug_override
             website_active = "fldNqzJCLUcFGFCa9"  # Name: website_active
-            not_active = "fldUpSyorjuHAH1QT"  # Name: not_active?
             check_in_1_venue_information = "fldcy3qtgrHCzOjVO"  # Name: check_in_1__venue_information
             check_in_1_venue_status = "fld4Fy5XLnAunYFPz"  # Name: check_in_1__venue_status
             check_in_1_sponsor_status = "fldbcwwGVJMgoeCjd"  # Name: check_in_1__sponsor_status
@@ -1041,6 +1042,26 @@ class AirtableIDs:
             signup_url = "fldeRenDm3168XYDH"  # Name: signup_url
             website_redirect = "fldyCW7u9lcoZxK8T"  # Name: website_redirect
             percent_signup = "fld48VayTBXLuyIJl"  # Name: percent_signup
+            audit_justification = "fld3GfsPP9ymM6w95"  # Name: audit_justification
+            check_in_3 = "fldfXTbwp2X4e2Wlq"  # Name: check_in_3
+            merch_distribution = "fldY9vib2OCRkFxLs"  # Name: merch_distribution
+            delivery_tax_id_from_check_in_3 = "fld2ldEfOxGw4dbcB"  # Name: delivery_tax_id (from check_in_3)
+            delivery_address_state_from_check_in_3 = "fldwDUNVMIWZlegXh"  # Name: delivery_address_state (from check_in_3)
+            delivery_address_country_from_check_in_3 = "fldnq1PofliX4SnJc"  # Name: delivery_address_country (from check_in_3)
+            delivery_address_zip_from_check_in_3 = "fldc6ly0XL4K40TUU"  # Name: delivery_address_zip (from check_in_3)
+            delivery_address_city_from_check_in_3 = "fldMRjvv2HI2KGqym"  # Name: delivery_address_city (from check_in_3)
+            delivery_phone_number_from_check_in_3 = "fldwz3WwGv9qM7Xwd"  # Name: delivery_phone_number (from check_in_3)
+            delivery_address_line_2_from_check_in_3 = "fld2StSEfOpQj5UUj"  # Name: delivery_address_line_2 (from check_in_3)
+            delivery_address_line_1_from_check_in_3 = "fldPlpzhB0DtACyMi"  # Name: delivery_address_line_1 (from check_in_3)
+            delivery_last_name_from_check_in_3 = "fldp0CrStwQ9hOSjd"  # Name: delivery_last_name (from check_in_3)
+            delivery_first_name_from_check_in_3 = "fldF1LdM22uOJbmhc"  # Name: delivery_first_name (from check_in_3)
+            hcb_details_from_check_in_3 = "fldmRjGinFub0aW3m"  # Name: hcb_details (from check_in_3)
+            hcb_complete_from_check_in_3 = "fldkd5Df7iPbNTwRB"  # Name: hcb_complete? (from check_in_3)
+            website_details_from_check_in_3 = "fldXNE3Q59hVEXAca"  # Name: website_details (from check_in_3)
+            website_complete_from_check_in_3 = "fldVqUaPBPRSGnkT0"  # Name: website_complete? (from check_in_3)
+            tmp_campfire_check_in_warning = "fld3vuzccnCyeAWEG"  # Name: tmp - Campfire Check-in Warning
+            training = "fldxzOK6Qtj757t4f"  # Name: training
+            venues_copy = "fldVXQsdsCTyyC5dK"  # Name: venues copy
 
         class organizer:
             """IDs for Table 'organizer' (ID: tbldqdX0voIpuM56s)"""
@@ -1095,6 +1116,7 @@ class AirtableIDs:
 
             id = "fld2hpihcyH48AXtt"  # Name: id
             ref_event = "fldcPysFtNSkYAKgs"  # Name: ref_event
+            hcb_url = "fldg0ITuOxg8ErsMU"  # Name: hcb_url
             rm_email_from_ref_event = "fldLjcjD6jlobUUt4"  # Name: rm_email (from ref_event)
             rel_region = "fld3Pw8hT9jpJKer4"  # Name: rel_region
             rel_region_hcb = "fldmnQksoh0rO1FXt"  # Name: rel_region_hcb
@@ -1115,6 +1137,9 @@ class AirtableIDs:
             lookup_slug_from_ref_event = "fldRuy6HBWWhgrN8r"  # Name: lookup_slug_from_ref_event
             email_created = "fldpvk8cmawwj4vhc"  # Name: email_created
             created_at_time = "fld8KnjKkAXkVYryw"  # Name: created_at_time
+            event_status = "fldUzVXRUHA0cK56z"  # Name: event_status
+            resend_contract = "fldKJ4I1LPvGDGeXp"  # Name: resend_contract
+            contract_resent = "fldBs6xOfFptDbO0q"  # Name: contract_resent
 
         class regions:
             """IDs for Table 'regions' (ID: tblVx5rx6PzH7x6EJ)"""
@@ -1225,6 +1250,146 @@ class AirtableIDs:
             nps_response_rate = "fld8IYmB3l7MNU6di"  # Name: nps_response_rate
             triage_status = "fldpXAMrzmToCovBs"  # Name: triage_status
             notes = "fld2DjbLp0QxQKt6n"  # Name: notes
+
+        class participants:
+            """IDs for Table 'participants' (ID: tblfan2dxx0YOH7US)"""
+            TABLE_ID = "tblfan2dxx0YOH7US"
+
+            id = "fldRHE8asQNWkJI7h"  # Name: id
+            events = "fld3HgnkPNLMvq637"  # Name: events
+            email = "fldtv2WoJa2uDVzz5"  # Name: email
+            loops_campfire_raffle_position = "fldVXuni50ZWli5ic"  # Name: Loops - campfireRafflePosition
+            display_name = "fldwHuOCXWNJ4PDWZ"  # Name: display_name
+            legal_first_name = "fldMUJCo4ybFBgMwD"  # Name: legal_first_name
+            legal_last_name = "fld89An4NarmUPXP8"  # Name: legal_last_name
+            date_of_birth = "fldpkiSdynVszcdhq"  # Name: date_of_birth
+            address_1 = "fldCAKybJweeKxT2k"  # Name: address_1
+            address_2 = "fldP4BVMfEd2iQ1yY"  # Name: address_2
+            city = "fld068DbqEbYtQOaA"  # Name: city
+            state = "fldOEjsjP5b9aY7mt"  # Name: state
+            country = "fld91Due1LrQD6QmW"  # Name: country
+            zip_code = "fldLuRCWjIEDudHgY"  # Name: zip_code
+            phone = "fldUYhbTWRB4RWORv"  # Name: phone
+            referral_context = "fldRn5ppMZC3GIp4y"  # Name: referral_context
+            ref = "fldcFy0nc3wtNd952"  # Name: ref
+            pronouns = "fldws5dwuMZd1QFKk"  # Name: pronouns
+            referral_target = "fldi8g8RK4lDpBkja"  # Name: referral_target
+            inbound_referrals = "fldj4dPm4iNXnlEpc"  # Name: inbound_referrals
+            loops_campfire_number_of_referrals = "fldoFmBB5CSg2xHpu"  # Name: Loops - campfireNumberOfReferrals
+            friend_name = "fldwQt3WY3G5HkMWJ"  # Name: friend_name
+            loops_list_campfire = "fldPSv2M1LQfkDvKI"  # Name: Loops List - Campfire
+            loops_special_set_full_name = "fld1M6kbg07elIWyQ"  # Name: Loops - Special - setFullName
+            loops_birthday = "fldXD4sPMqrV0k2Mn"  # Name: Loops - birthday
+            loops_gender_self_reported = "fldicxExbJhzh1fbM"  # Name: Loops - genderSelfReported
+            loops_phone_number = "fldZLAmiTbwZKLMvw"  # Name: Loops - phoneNumber
+            loops_special_set_full_address = "fldRWRy7Bo1uLUopI"  # Name: Loops - Special - setFullAddress
+            campfire_tutorial = "fldoCUSmtDELuzXP9"  # Name: campfire-tutorial
+            created_by = "fldhWA8dH6SxuT8Qq"  # Name: Created By
+            event_id = "fldqbO8sOfiwFc0Mt"  # Name: event_id
+            disabled = "fldIFjUGMMGZVRC6e"  # Name: disabled
+            rm_name_from_events = "fldQf9dKoeZ0bqT2J"  # Name: rm_name (from events)
+            campfire_tutorial_copy = "fld21uWXPVpPiIB4U"  # Name: campfire-tutorial copy
+            is_volunteer = "fld1CAMf7dcAld0Ws"  # Name: is_volunteer
+            bogota_national_id = "fldJxzsibQo5F0XP4"  # Name: bogota-national-id
+
+        class venues:
+            """IDs for Table 'venues' (ID: tblNBEkm5m75NfeBv)"""
+            TABLE_ID = "tblNBEkm5m75NfeBv"
+
+            id = "fldGq0YD0Czghf3Ic"  # Name: id
+            rel_event = "fldKfqOFnCoJW8y68"  # Name: rel_event
+            venue_name = "fldtpqLSrisA3b5eh"  # Name: venue_name
+            address_line_1 = "fldFjXd60IGpxcIGa"  # Name: address_line_1
+            address_line_2 = "fldNi9RpTFHIb2ftR"  # Name: address_line_2
+            address_city = "fldd09WmazeTX9xO9"  # Name: address_city
+            address_state = "fldynvGccJ3SnWNbE"  # Name: address_state
+            address_country = "fld6Voc89ZuWX9zsA"  # Name: address_country
+            address_zip = "fldzUCNC8X5leXmMk"  # Name: address_zip
+            proof = "fldY7c3I9SAWcWq6t"  # Name: proof
+            contact_name = "fld0a7t8AQh8gPeFW"  # Name: contact_name
+            contact_email = "fldozgoMi8mwGdX8U"  # Name: contact_email
+            max_participants = "fldAHtMszkSFvHJGZ"  # Name: max_participants
+
+        class jay:
+            """IDs for Table 'jay' (ID: tbluALNKnREkLlLWM)"""
+            TABLE_ID = "tbluALNKnREkLlLWM"
+
+            order = "fldKud2RpY56vNKRM"  # Name: order
+            first_name = "fldTi6TF3D0phCZB4"  # Name: first_name
+            last_name = "fld7k4lE0jrZVmrfj"  # Name: last_name
+            slack_id = "fldyFN2uPPCf8Lh5b"  # Name: slack_id
+            email = "fldDPOkHr90HBzGzW"  # Name: email
+            city = "fld0lIINE8HhqeiX9"  # Name: city
+            state = "fldJDY4M9ZnMAGWvS"  # Name: state
+            country = "fldkc7rkKrby4HRXZ"  # Name: country
+            has_shipped_projects_ever = "fldMUzYvuDuCk64HF"  # Name: has_shipped_projects_ever
+            has_shipped_projects_in_past_12_months = "fldqKz6JGBR6Rk2oo"  # Name: has_shipped_projects_in_past_12_months
+            dm = "fld9bYMs8UeBYvx9q"  # Name: DM?
+            email = "fldYiu16YFyzvDWBc"  # Name: Email?
+
+        class us_based_clubs:
+            """IDs for Table 'us_based_clubs' (ID: tblXLQDcVRkbyHqIN)"""
+            TABLE_ID = "tblXLQDcVRkbyHqIN"
+
+            id = "fldBDmaYTk1NZABNN"  # Name: id
+            club_name = "fldDJK8qKqVQh5s2p"  # Name: club_name
+            club_status = "fldDfpH5Xlg4w5S1a"  # Name: club_status
+            calc_contact = "fldr7a6uvxMhOX72H"  # Name: calc_contact
+            notes = "fld0m4XIlvWdm9uzQ"  # Name: notes
+            rel_leader = "fldehJ2kxPFm4Lgk7"  # Name: rel_leader
+            leader_first_name = "fld88v2C7ULobxV7C"  # Name: leader_first_name
+            leader_last_name = "fldkwgxBk0knlRBUD"  # Name: leader_last_name
+            leader_email = "fldF2HBEMLavETv6q"  # Name: leader_email
+            leader_phone = "fldFzk9ZEycoIRlwS"  # Name: leader_phone
+            leader_dob = "fldclJn2JRAx5529Z"  # Name: leader_dob
+            leader_slack_id = "fldcLDN2JzHIhEwb4"  # Name: leader_slack_id
+            rel_co_leaders = "fldLMqDdmcdG8GhJE"  # Name: rel_co_leaders
+            venue_type = "fldmn6VN1Bkukdkzd"  # Name: venue_type
+            venue_name = "fld6qnm16fv7w8xWV"  # Name: venue_name
+            venue_address_line_1 = "fldnn9J1odxLFL6rV"  # Name: venue_address_line_1
+            venue_address_line_2 = "fldYrK4OzjUpFWJOz"  # Name: venue_address_line_2
+            venue_address_city = "fldw0shQymoLOJeZm"  # Name: venue_address_city
+            venue_address_state = "fldFpmlyLZ5U5SyS4"  # Name: venue_address_state
+            venue_address_country = "fldGzQ4FMYzQsCBGO"  # Name: venue_address_country
+            venue_address_zip = "fld5cuzKZpXoV1EGH"  # Name: venue_address_zip
+            venue_lat = "fldigGDpzadoLiVSh"  # Name: venue_lat
+            venue_lng = "fldsYaQ51REichB7Q"  # Name: venue_lng
+            created = "fldbayNRmRkc9VQ8G"  # Name: Created
+            club_suspension_status = "fldPbo5jXxiOcdvtJ"  # Name: club_suspension_status
+            description = "fld8d06y5EJMoXYtt"  # Name: description
+            rel_club_ships = "fldnO4Pxgw3y57JRn"  # Name: rel_club_ships
+            last_form_checkin = "fldXN9aB5IBBH3aPn"  # Name: last_form_checkin
+            level = "fldp0iu0IN1AqoFpq"  # Name: level
+            updated_leader_info = "fldWfkUQw3vHCn9oT"  # Name: Updated Leader Info?
+            is_leader_ship_from_rel_club_ships = "fldIdseTPyqPZTbIB"  # Name: is_leader_ship (from rel_club_ships)
+            ships = "fldhlz1r3qtlSf3wO"  # Name: ships
+
+
+    class synced_data_warehouse_slack_users:
+        """IDs for Base 'synced_data_warehouse_slack_users' (ID: app5iK28ZvD6sx7qW)"""
+        BASE_ID = "app5iK28ZvD6sx7qW"
+
+        class slack_users:
+            """IDs for Table 'slack_users' (ID: tblp8ALH23EuNikiZ)"""
+            TABLE_ID = "tblp8ALH23EuNikiZ"
+
+            email = "fldtLkKcLbhMtT0rV"  # Name: Email
+            slack_id = "fldQWpeR0gO35pz65"  # Name: Slack ID
+            display_name = "fldlAm8eowuFcxsv6"  # Name: Display Name
+            profile_real_name = "fldFvWIk0OgPM8MnF"  # Name: Profile - Real Name
+            timezone = "fldVoiPfreCk5VPH9"  # Name: Timezone
+            avatar_url = "fldXtZqwWth7e8Ze9"  # Name: Avatar URL
+            user_type = "fldFWb8NI5a0Zvwcj"  # Name: User Type
+            is_bot = "fldsZxcFHxHlsoacG"  # Name: Is Bot
+            is_guest = "fldoTtqF6QGneyTwG"  # Name: Is Guest
+            is_admin = "fldccM4Mw7i5LMxT9"  # Name: Is Admin
+            is_owner = "fld3qYSdAoRmlMfWO"  # Name: Is Owner
+            has_signed_in = "fldnoieKv9tDiyumL"  # Name: Has Signed In
+            is_active = "fldLjijpqQFGW7Jbb"  # Name: Is Active
+            first_seen_at = "fldfkJaKAG5tkTV0N"  # Name: First Seen At
+            first_sign_in_at = "fldhGdCdfTl81r7Ut"  # Name: First Sign In At
+            last_synced_at = "fldkN00jWRBbDYyWy"  # Name: Last Synced At
+            sync_stats = "fldHcZ29r9MOUa7Ti"  # Name: Sync Stats
 
 
 # fmt: on
