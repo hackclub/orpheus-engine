@@ -52,6 +52,7 @@ DIFF_FIELDS = {
     SlackUsersTable.is_owner,
     SlackUsersTable.has_signed_in,
     SlackUsersTable.is_active,
+    SlackUsersTable.first_seen_at,
     SlackUsersTable.first_sign_in_at,
 }
 
@@ -79,6 +80,11 @@ def determine_user_type(pg_user: Dict[str, Any]) -> str:
     if pg_user.get("is_restricted"):
         return "Multi-Channel Guest"
     return "Member"
+
+
+def _to_iso(val: Any) -> str:
+    """Convert a datetime or date value to ISO 8601 string."""
+    return val.isoformat() if isinstance(val, datetime) else str(val)
 
 
 def transform_pg_user_to_airtable(pg_user: Dict[str, Any], sync_time: str) -> Dict[str, Any]:
@@ -139,13 +145,13 @@ def transform_pg_user_to_airtable(pg_user: Dict[str, Any], sync_time: str) -> Di
     if pg_user.get("is_active"):
         fields[SlackUsersTable.is_active] = True
 
+    # First Seen At - earliest date we have on file (across analytics, CSV, claimed date)
+    if pg_user.get("first_seen_at"):
+        fields[SlackUsersTable.first_seen_at] = _to_iso(pg_user["first_seen_at"])
+
     # First Sign In At - from date_claimed in member_analytics
     if pg_user.get("date_claimed"):
-        date_claimed = pg_user["date_claimed"]
-        if isinstance(date_claimed, datetime):
-            fields[SlackUsersTable.first_sign_in_at] = date_claimed.isoformat()
-        else:
-            fields[SlackUsersTable.first_sign_in_at] = str(date_claimed)
+        fields[SlackUsersTable.first_sign_in_at] = _to_iso(pg_user["date_claimed"])
 
     # Sync Stats (linked record)
     fields[SlackUsersTable.sync_stats] = [SYNC_STATS_RECORD_ID]
@@ -365,13 +371,31 @@ def sync_slack_users_to_airtable(
                        m.is_restricted, m.is_ultra_restricted,
                        m.is_bot, m.is_app_user,
                        a.date_claimed,
-                       a.is_active
+                       a.is_active,
+                       LEAST(
+                           a.date_claimed,
+                           a_min.min_analytics_date::timestamptz,
+                           to_timestamp(NULLIF(csv.account_created_text, ''), 'Mon DD, YYYY'),
+                           to_timestamp(NULLIF(csv.claimed_date_text, ''), 'Mon DD, YYYY')
+                       ) as first_seen_at
                 FROM slack.member_metadata m
                 LEFT JOIN (
                     SELECT DISTINCT ON (user_id) user_id, date_claimed, is_active
                     FROM slack.member_analytics
                     ORDER BY user_id, date DESC
                 ) a ON m.user_id = a.user_id
+                LEFT JOIN (
+                    SELECT user_id, MIN(date) as min_analytics_date
+                    FROM slack.member_analytics
+                    GROUP BY user_id
+                ) a_min ON m.user_id = a_min.user_id
+                LEFT JOIN (
+                    SELECT DISTINCT ON ("User ID") "User ID",
+                           "Account created (UTC)" as account_created_text,
+                           "Claimed Date (UTC)" as claimed_date_text
+                    FROM slack.member_analytics_csv
+                    ORDER BY "User ID"
+                ) csv ON m.user_id = csv."User ID"
                 WHERE m.deleted = false OR m.deleted IS NULL
             """)
             # Named cursors defer description until first fetch
