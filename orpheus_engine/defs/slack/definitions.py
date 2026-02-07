@@ -8,6 +8,7 @@ or backfills from today backwards on first run.
 
 import csv
 import io
+import json
 import os
 from datetime import date, timedelta
 from datetime import datetime, timezone
@@ -161,6 +162,37 @@ CHANNEL_ANALYTICS_COLUMNS = [
     "members_who_viewed_count", "members_who_posted_count", "reactions_added_count",
     "visibility", "channel_type", "is_shared_externally", "shared_with",
     "externally_shared_with_organizations"
+]
+
+AUDIT_LOGS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS slack.audit_logs (
+    id TEXT PRIMARY KEY,
+    date_create TIMESTAMP WITH TIME ZONE NOT NULL,
+    action TEXT NOT NULL,
+    ip_address TEXT,
+    actor JSONB,
+    entity JSONB,
+    context JSONB,
+    details JSONB,
+    app JSONB,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_date_create ON slack.audit_logs (date_create);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON slack.audit_logs (action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_ip_address ON slack.audit_logs (ip_address);
+"""
+
+_AUDIT_LOGS_SYNC_STATE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS slack._audit_logs_sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+"""
+
+AUDIT_LOGS_COLUMNS = [
+    "id", "date_create", "action", "ip_address", "actor", "entity", "context", "details", "app"
 ]
 
 
@@ -923,6 +955,186 @@ def slack_member_metadata_enrichment(
     )
 
 
+def _json_or_none(value) -> Optional[str]:
+    """Serialize a value to JSON string, or None if the value is None."""
+    return json.dumps(value) if value is not None else None
+
+
+def _transform_audit_log_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a raw Slack audit log entry to match our schema."""
+    date_create = entry.get("date_create")
+    if date_create is not None:
+        date_create = datetime.fromtimestamp(date_create, tz=timezone.utc).isoformat()
+
+    context = entry.get("context")
+
+    return {
+        "id": entry.get("id"),
+        "date_create": date_create,
+        "action": entry.get("action"),
+        "ip_address": context.get("ip_address") if context else None,
+        "actor": _json_or_none(entry.get("actor")),
+        "entity": _json_or_none(entry.get("entity")),
+        "context": _json_or_none(context),
+        "details": _json_or_none(entry.get("details")),
+        "app": _json_or_none(entry.get("app")),
+    }
+
+
+def _upsert_audit_logs_batch(conn, entries: List[Dict[str, Any]], log) -> int:
+    """Upsert a batch of audit log entries using a staging table. Returns rows inserted."""
+    if not entries:
+        return 0
+
+    transformed = [_transform_audit_log_entry(e) for e in entries]
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TEMP TABLE audit_logs_staging (
+                id TEXT,
+                date_create TIMESTAMP WITH TIME ZONE,
+                action TEXT,
+                ip_address TEXT,
+                actor JSONB,
+                entity JSONB,
+                context JSONB,
+                details JSONB,
+                app JSONB
+            ) ON COMMIT DROP
+        """)
+
+        csv_data = records_to_csv(transformed, AUDIT_LOGS_COLUMNS)
+        columns_str = ", ".join(AUDIT_LOGS_COLUMNS)
+        cur.copy_expert(
+            f"COPY audit_logs_staging ({columns_str}) FROM STDIN WITH (FORMAT csv)",
+            csv_data
+        )
+
+        cur.execute("""
+            INSERT INTO slack.audit_logs (id, date_create, action, ip_address, actor, entity, context, details, app, fetched_at)
+            SELECT id, date_create, action, ip_address, actor, entity, context, details, app, NOW()
+            FROM audit_logs_staging
+            ON CONFLICT (id) DO NOTHING
+        """)
+        inserted = cur.rowcount
+
+    conn.commit()
+    return inserted
+
+
+def _get_backfill_complete(conn) -> bool:
+    """Check if audit logs backfill has completed."""
+    with conn.cursor() as cur:
+        try:
+            cur.execute("SELECT value FROM slack._audit_logs_sync_state WHERE key = 'backfill_complete'")
+            row = cur.fetchone()
+            return row is not None and row[0] == "true"
+        except psycopg2.errors.UndefinedTable:
+            conn.rollback()
+            return False
+
+
+def _set_backfill_complete(conn, complete: bool):
+    """Set the backfill_complete flag in sync state."""
+    value = "true" if complete else "false"
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO slack._audit_logs_sync_state (key, value, updated_at)
+            VALUES ('backfill_complete', %s, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+        """, (value,))
+    conn.commit()
+
+
+def _get_high_water(conn) -> Optional[int]:
+    """Get the max date_create as a Unix timestamp, or None if table is empty."""
+    with conn.cursor() as cur:
+        try:
+            cur.execute("SELECT EXTRACT(EPOCH FROM MAX(date_create))::bigint FROM slack.audit_logs")
+            row = cur.fetchone()
+            return row[0] if row and row[0] else None
+        except psycopg2.errors.UndefinedTable:
+            conn.rollback()
+            return None
+
+
+@asset(
+    compute_kind="slack_api",
+    group_name="slack",
+    description="Fetches Slack Audit Logs (Enterprise Grid) and stores in slack.audit_logs with incremental sync"
+)
+def slack_audit_logs(
+    context: AssetExecutionContext,
+    slack_analytics: SlackAnalyticsResource,
+) -> Output[None]:
+    """
+    Incrementally fetches Slack Audit Logs and upserts to the database.
+
+    - Initial backfill: pages through all history (newest first), resumable on interruption
+    - Incremental: fetches only events newer than the high-water mark
+    - Uses ON CONFLICT DO NOTHING to avoid duplicates
+    """
+    log = context.log
+
+    conn = get_db_connection()
+    try:
+        ensure_schema_exists(conn)
+        with conn.cursor() as cur:
+            cur.execute(AUDIT_LOGS_SCHEMA)
+            cur.execute(_AUDIT_LOGS_SYNC_STATE_SCHEMA)
+        conn.commit()
+
+        backfill_complete = _get_backfill_complete(conn)
+        total_inserted = 0
+        total_fetched = 0
+        pages = 0
+
+        if backfill_complete:
+            high_water = _get_high_water(conn)
+            if high_water:
+                log.info(f"Incremental mode: fetching events after {datetime.fromtimestamp(high_water, tz=timezone.utc)}")
+            else:
+                log.info("Incremental mode but table is empty, fetching all events")
+        else:
+            high_water = None
+            log.info("Backfill mode: fetching all audit log history...")
+
+        cursor = None
+        while True:
+            entries, next_cursor = slack_analytics.get_audit_logs_page(
+                oldest=high_water,
+                cursor=cursor,
+            )
+            pages += 1
+            total_fetched += len(entries)
+
+            if entries:
+                inserted = _upsert_audit_logs_batch(conn, entries, log)
+                total_inserted += inserted
+                log.info(f"Page {pages}: fetched {len(entries)}, inserted {inserted} new. Total: {total_inserted}")
+
+            if not next_cursor:
+                if not backfill_complete:
+                    _set_backfill_complete(conn, True)
+                    log.info("Backfill complete!")
+                break
+            cursor = next_cursor
+
+        log.info(f"Done! Fetched {total_fetched} events across {pages} pages, inserted {total_inserted} new")
+
+        return Output(
+            value=None,
+            metadata={
+                "total_fetched": MetadataValue.int(total_fetched),
+                "total_inserted": MetadataValue.int(total_inserted),
+                "pages": MetadataValue.int(pages),
+                "table": MetadataValue.text("slack.audit_logs"),
+            }
+        )
+    finally:
+        conn.close()
+
+
 # Create the resource instance
 slack_analytics_resource = SlackAnalyticsResource()
 
@@ -933,6 +1145,7 @@ defs = Definitions(
         slack_public_channel_metadata,
         slack_member_metadata,
         slack_member_metadata_enrichment,
+        slack_audit_logs,
     ],
     resources={
         "slack_analytics": slack_analytics_resource,

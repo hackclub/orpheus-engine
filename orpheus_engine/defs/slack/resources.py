@@ -2,7 +2,7 @@ import gzip
 import json
 import time
 from datetime import date
-from typing import Any, Callable, ClassVar, Dict, Generator, List, Optional
+from typing import Any, Callable, ClassVar, Dict, Generator, List, Optional, Tuple
 
 import requests
 from dagster import ConfigurableResource, EnvVar, get_dagster_logger
@@ -31,6 +31,7 @@ class SlackAnalyticsResource(ConfigurableResource):
     user_token: str = EnvVar("SLACK_USER_TOKEN")
     
     SLACK_API_BASE_URL: ClassVar[str] = "https://slack.com/api"
+    SLACK_AUDIT_API_URL: ClassVar[str] = "https://api.slack.com/audit/v1/logs"
     
     def _check_rate_limit(self, response: requests.Response, context: str = "") -> None:
         """
@@ -527,10 +528,10 @@ class SlackAnalyticsResource(ConfigurableResource):
     def get_profile_field_definitions(self) -> Dict[str, str]:
         """
         Retrieves profile field definitions from team.profile.get.
-        
+
         Returns:
             A dict mapping field ID to field label.
-            
+
         Raises:
             SlackAnalyticsApiError: If the API request fails.
         """
@@ -539,10 +540,75 @@ class SlackAnalyticsResource(ConfigurableResource):
             endpoint='team.profile.get',
             context="for team.profile.get"
         )
-        
+
         field_id_to_label = {}
         for field in data.get("profile", {}).get("fields", []):
             field_id_to_label[field["id"]] = field.get("label", field["id"])
-        
+
         return field_id_to_label
+
+    def get_audit_logs_page(
+        self,
+        oldest: Optional[int] = None,
+        latest: Optional[int] = None,
+        limit: int = 9999,
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        """
+        Fetches a single page of Slack Audit Logs (Enterprise Grid).
+
+        Uses the Audit Logs API at https://api.slack.com/audit/v1/logs which
+        returns events in reverse chronological order with cursor-based pagination.
+
+        Args:
+            oldest: Unix timestamp — only return events after this time
+            latest: Unix timestamp — only return events before this time
+            limit: Max events per page (up to 9999)
+            cursor: Pagination cursor from a previous response
+
+        Returns:
+            A tuple of (entries, next_cursor) where entries is a list of audit
+            log event dicts and next_cursor is a string (empty when no more pages).
+
+        Raises:
+            SlackAnalyticsApiError: If the API request fails.
+        """
+        log = get_dagster_logger()
+        headers = {"Authorization": f"Bearer {self.user_token}"}
+        params: Dict[str, Any] = {"limit": limit}
+        if oldest is not None:
+            params["oldest"] = oldest
+        if latest is not None:
+            params["latest"] = latest
+        if cursor:
+            params["cursor"] = cursor
+
+        while True:
+            try:
+                response = requests.get(
+                    self.SLACK_AUDIT_API_URL,
+                    headers=headers,
+                    params=params,
+                    timeout=60,
+                )
+
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    log.warning(f"Audit logs rate limited, sleeping {retry_after}s...")
+                    time.sleep(retry_after)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                entries = data.get("entries", [])
+                next_cursor = data.get("response_metadata", {}).get("next_cursor", "")
+                return entries, next_cursor
+
+            except requests.exceptions.Timeout:
+                raise SlackAnalyticsApiError("Request to Slack Audit Logs API timed out")
+            except SlackAnalyticsApiError:
+                raise
+            except requests.exceptions.RequestException as e:
+                raise SlackAnalyticsApiError(f"Request to Slack Audit Logs API failed: {e}") from e
 
