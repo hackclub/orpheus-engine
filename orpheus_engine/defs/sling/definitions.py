@@ -7,6 +7,7 @@ from .assets import (
     summer_of_making_2025_warehouse_mirror,
     hackatime_legacy_warehouse_mirror,
     flavortown_warehouse_mirror,
+    hack_club_the_game_warehouse_mirror,
     hcb_warehouse_mirror,
     auth_warehouse_mirror,  # absolute minimum permissions for monthly active stats
     sling_replication_resource,
@@ -21,6 +22,7 @@ defs = Definitions(
         summer_of_making_2025_warehouse_mirror,
         hackatime_legacy_warehouse_mirror,
         flavortown_warehouse_mirror,
+        hack_club_the_game_warehouse_mirror,
         hcb_warehouse_mirror,
         auth_warehouse_mirror,
     ],

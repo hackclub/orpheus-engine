@@ -59,6 +59,7 @@ _SLING_CONNECTION_URL_ENV_VARS = [
     "HACKATIME_LEGACY_COOLIFY_URL",
     "FLAVORTOWN_COOLIFY_URL",
     "FLAVORTOWN_AHOY_COOLIFY_URL",
+    "HACK_CLUB_THE_GAME_COOLIFY_URL",
     "WAREHOUSE_COOLIFY_URL",
 ]
 
@@ -114,6 +115,12 @@ flavortown_ahoy_db_connection = SlingConnectionResource(
     name="FLAVORTOWN_AHOY_DB",
     type="postgres",
     connection_string=EnvVar("FLAVORTOWN_AHOY_COOLIFY_URL"),
+)
+
+hack_club_the_game_db_connection = SlingConnectionResource(
+    name="HACK_CLUB_THE_GAME_DB",
+    type="postgres",
+    connection_string=EnvVar("HACK_CLUB_THE_GAME_COOLIFY_URL"),
 )
 
 # Auth DB connection - absolute minimum permissions to generate events for monthly
@@ -175,6 +182,7 @@ sling_replication_resource = SlingResource(
         hackatime_legacy_db_connection,
         flavortown_db_connection,
         flavortown_ahoy_db_connection,
+        hack_club_the_game_db_connection,
         auth_db_connection,
         hcb_db_connection,
         warehouse_db_connection,
@@ -515,6 +523,43 @@ flavortown_replication_config = {
     }
 }
 
+# --- Hack Club: The Game Database Replication Configuration ---
+hack_club_the_game_replication_config = {
+    "source": "HACK_CLUB_THE_GAME_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "hack_club_the_game.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+        # Exclude sensitive/internal tables
+        "public.one_time_passwords": {"disabled": True},
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.blazer_audits": {"disabled": True},
+        "public.blazer_checks": {"disabled": True},
+        "public.blazer_dashboard_queries": {"disabled": True},
+        "public.blazer_dashboards": {"disabled": True},
+        "public.blazer_queries": {"disabled": True},
+        "public.versions": {"disabled": True},
+        # Users: exclude encrypted auth tokens
+        "public.users": {
+            "select": [
+                "id", "account_id", "avatar", "ban_type", "birthday",
+                "email", "hackatime_id", "internal_notes", "is_banned",
+                "last_active", "referrer_id", "slack_id", "username",
+                "ysws_verified", "role", "deleted_at", "created_at",
+                "updated_at", "referral_code", "verification_status",
+                "address_street", "address_locality", "address_region",
+                "address_postal", "address_country", "first_name", "last_name",
+            ],
+        },
+    },
+}
+
 # --- FlavorTown Ahoy Database Replication Configuration ---
 flavortown_ahoy_replication_config = {
     "source": "FLAVORTOWN_AHOY_DB",
@@ -792,6 +837,28 @@ def flavortown_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=flavortown_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="hack_club_the_game_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def hack_club_the_game_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Hack Club: The Game DB → warehouse in a single shot."""
+    context.log.info("Starting Hack Club: The Game → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=hack_club_the_game_replication_config,
     ):
         pass
 
