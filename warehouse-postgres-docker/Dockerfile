@@ -27,3 +27,9 @@ FROM ${BASE_IMAGE}
 ## Copy all extensions from the builder stage
 COPY --from=builder /usr/local/lib/postgresql/* /usr/local/lib/postgresql/
 COPY --from=builder /usr/local/share/postgresql/extension/* /usr/local/share/postgresql/extension/
+
+# Add pgbackrest client for WAL archiving
+RUN apk add --no-cache pgbackrest
+
+# Configure PostgreSQL for WAL archiving on first init
+COPY conf.sh /docker-entrypoint-initdb.d/conf.sh
