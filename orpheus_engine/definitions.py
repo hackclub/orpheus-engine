@@ -11,6 +11,7 @@ import orpheus_engine.defs.sling.definitions as sling_defs
 import orpheus_engine.defs.unified_ysws_db.definitions as ysws_defs
 import orpheus_engine.defs.agh_fulfillment_zenventory.definitions as zenventory_defs
 import orpheus_engine.defs.slack_users_sync.definitions as slack_users_sync_defs
+import orpheus_engine.defs.airtable_raw_all_bases.definitions as airtable_raw_all_bases_defs
 import orpheus_engine.schedules as schedules
 
 # Import analytics asset separately (it doesn't export defs)
@@ -40,6 +41,7 @@ def _build_definitions() -> dg.Definitions:
         sling_defs.defs,
         ysws_defs.defs,
         zenventory_defs.defs,
+        airtable_raw_all_bases_defs.defs,
         schedules.defs,
         dg.Definitions(assets=[analytics_hack_clubbers])
     )
