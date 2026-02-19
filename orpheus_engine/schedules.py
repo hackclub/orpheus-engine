@@ -97,7 +97,9 @@ materialize_frequent_job = dg.define_asset_job(
         dg.AssetSelection.assets("agh_fulfillment_zenventory_customer_orders") |
         dg.AssetSelection.assets("agh_fulfillment_zenventory_purchase_orders") |
         dg.AssetSelection.assets("agh_fulfillment_zenventory_shipments") |
-        dg.AssetSelection.assets("agh_fulfillment_labor_costs")
+        dg.AssetSelection.assets("agh_fulfillment_labor_costs") |
+        # Zenventory -> Airtable inventory sync
+        dg.AssetSelection.assets("zenventory_inventory_airtable_sync")
     ),
 )
 
