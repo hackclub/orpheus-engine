@@ -8,13 +8,13 @@ WITH loops_events AS (
     SELECT *
     FROM {{ source('loops', 'audience') }}
     WHERE user_group = 'Hack Clubber'
-      AND subscribed = true
 ),
 
 -- Extract datetime (prefer precise timestamp if present; otherwise midnight UTC)
 loops_unpivoted AS (
     SELECT
         le.email,
+        le.subscribed,
         e.key AS column_name,
         CASE
             -- ISO-like datetime (accepts space or 'T', optional seconds/ms, optional Z/offset)
@@ -47,7 +47,8 @@ loops_final AS (
         email,
         event,
         event_type,
-        'loops' AS source_system
+        'loops' AS source_system,
+        subscribed
     FROM loops_unpivoted
     WHERE event_date IS NOT NULL
       AND event_date::date >= DATE '2024-01-01'
@@ -232,18 +233,34 @@ auth_events AS (
     AND i.primary_email <> ''
     AND a.created_at::date >= DATE '2024-01-01'
     AND a.created_at::date <= (CURRENT_DATE + INTERVAL '1 day')
-)
+),
+
+/* -------------------- Subscription status lookup -------------------- */
+loops_subscription AS (
+    SELECT lower(email) AS email, bool_or(subscribed) AS subscribed
+    FROM {{ source('loops', 'audience') }}
+    WHERE email IS NOT NULL AND email <> ''
+    GROUP BY lower(email)
+),
 
 -- -------------------- Union all events --------------------
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM loops_final
-UNION ALL
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hackatime_events
-UNION ALL
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hackatime_legacy_events
-UNION ALL
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM hcb_seen_events
-UNION ALL
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM slack_events
-UNION ALL
-SELECT event_date, lower(email) AS email, event, event_type, source_system FROM auth_events
-ORDER BY email, event_date DESC, event
+all_events AS (
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, subscribed FROM loops_final
+    UNION ALL
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, NULL::boolean AS subscribed FROM hackatime_events
+    UNION ALL
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, NULL::boolean AS subscribed FROM hackatime_legacy_events
+    UNION ALL
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, NULL::boolean AS subscribed FROM hcb_seen_events
+    UNION ALL
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, NULL::boolean AS subscribed FROM slack_events
+    UNION ALL
+    SELECT event_date, lower(email) AS email, event, event_type, source_system, NULL::boolean AS subscribed FROM auth_events
+)
+
+SELECT
+    e.event_date, e.email, e.event, e.event_type, e.source_system,
+    COALESCE(e.subscribed, ls.subscribed, true) AS subscribed
+FROM all_events e
+LEFT JOIN loops_subscription ls ON ls.email = e.email AND e.subscribed IS NULL
+ORDER BY e.email, e.event_date DESC, e.event
