@@ -41,16 +41,35 @@ AIRTABLE_TABLE_ID = "tblvSJMqoXnQyN7co"
 ZENVENTORY_BASE_URL = "https://app.zenventory.com"
 
 INVENTORY_QUERY = """
+    WITH stock AS (
+        SELECT
+            i.id,
+            i.sku,
+            i.description,
+            i.unit_cost,
+            COALESCE(SUM(inv.in_stock), 0) AS in_stock
+        FROM agh_fulfillment_zenventory.items i
+        LEFT JOIN agh_fulfillment_zenventory.inventory inv ON i.id = inv.item_id
+        WHERE i.sku IS NOT NULL AND i.sku != ''
+        GROUP BY i.id, i.sku, i.description, i.unit_cost
+    ),
+    committed AS (
+        SELECT
+            item->>'sku' AS sku,
+            SUM((item->>'quantity')::int) AS committed_qty
+        FROM agh_fulfillment_zenventory.customer_orders co,
+             jsonb_array_elements(co.items) AS item
+        WHERE co.completed = false AND co.cancelled = false
+        GROUP BY item->>'sku'
+    )
     SELECT
-        i.id,
-        i.sku,
-        i.description,
-        i.unit_cost,
-        COALESCE(SUM(inv.in_stock), 0) AS in_stock
-    FROM agh_fulfillment_zenventory.items i
-    LEFT JOIN agh_fulfillment_zenventory.inventory inv ON i.id = inv.item_id
-    WHERE i.sku IS NOT NULL AND i.sku != ''
-    GROUP BY i.id, i.sku, i.description, i.unit_cost
+        s.id,
+        s.sku,
+        s.description,
+        s.unit_cost,
+        s.in_stock - COALESCE(c.committed_qty, 0) AS in_stock
+    FROM stock s
+    LEFT JOIN committed c ON s.sku = c.sku
 """
 
 INBOUND_QUERY = """
