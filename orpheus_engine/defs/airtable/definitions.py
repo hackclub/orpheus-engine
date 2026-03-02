@@ -189,6 +189,84 @@ airtable_config = AirtableServiceConfig(
                 ),
                 "us_based_clubs": AirtableTableConfig(
                     table_id="tblXLQDcVRkbyHqIN"
+                ),
+                "disbursements": AirtableTableConfig(
+                    table_id="tblOJxLyaukkBSz7O"
+                ),
+                "emergency_disbursements": AirtableTableConfig(
+                    table_id="tblSuLZH9hKJI18Mn"
+                ),
+                "funding_rates": AirtableTableConfig(
+                    table_id="tblvQaNcaGjjLxxuf"
+                ),
+                "check_in_3": AirtableTableConfig(
+                    table_id="tbluV0PRBSOPJGsT1"
+                ),
+                "check_in_4": AirtableTableConfig(
+                    table_id="tbltU6XCRbu3dP3Po"
+                ),
+                "check_in_5": AirtableTableConfig(
+                    table_id="tblcU0Nq4RSRKdlKx"
+                ),
+                "camie": AirtableTableConfig(
+                    table_id="tblxc7BoNEk8JcXq5"
+                ),
+                "captured_emails": AirtableTableConfig(
+                    table_id="tblO4Yqpq69foEFSQ"
+                ),
+                "nyc_data": AirtableTableConfig(
+                    table_id="tbl2J12xYbYHq5hrj"
+                ),
+                "amber_merch_distribution": AirtableTableConfig(
+                    table_id="tblJlC4cH1XlNd7pF"
+                ),
+                "training": AirtableTableConfig(
+                    table_id="tbl2UFJ0KM9e52AeT"
+                ),
+                "campfire_tutorial": AirtableTableConfig(
+                    table_id="tblov5FpouoahTWZ8"
+                ),
+                "us_bagles": AirtableTableConfig(
+                    table_id="tbljHQS4NEAdqlvPC"
+                ),
+                "us_west": AirtableTableConfig(
+                    table_id="tbl2C8Hi1ur71szHj"
+                ),
+                "hcb_issues": AirtableTableConfig(
+                    table_id="tblVRwata7ssfwMd4"
+                ),
+                "ysws_project_submission": AirtableTableConfig(
+                    table_id="tblBx38HcTJcTmEFa"
+                ),
+                "ysws_config": AirtableTableConfig(
+                    table_id="tblouedygemSRwqS8"
+                ),
+                "theme": AirtableTableConfig(
+                    table_id="tbl1W5BrXCaaCltlg"
+                ),
+                "campfire_workshops": AirtableTableConfig(
+                    table_id="tblzfFYJ2d4eTIHdZ"
+                ),
+                "campfire_busan": AirtableTableConfig(
+                    table_id="tbl6eB0ISoubuoeZ9"
+                ),
+                "cf_busan_scan_in": AirtableTableConfig(
+                    table_id="tblytRjCrmxkEFoWH"
+                ),
+                "nps": AirtableTableConfig(
+                    table_id="tbl7bHGHaH4sC8ExU"
+                ),
+                "t_shirt_shipping": AirtableTableConfig(
+                    table_id="tblz4Y2FNIUOELwxe"
+                ),
+                "t_shirts_delayed_packages": AirtableTableConfig(
+                    table_id="tbl1cqHoLNSyfopMD"
+                ),
+                "blr_submissions": AirtableTableConfig(
+                    table_id="tblf8OodCnz08gWQ3"
+                ),
+                "blr_voting": AirtableTableConfig(
+                    table_id="tblkq0O1mW5QBohAa"
                 )
             }
         ),

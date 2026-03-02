@@ -44,7 +44,9 @@ def sanitize_name(name: str) -> str:
     s = re.sub('([A-Z]+)', r'_\1', s).lower().strip('_')
     # Handle multiple underscores
     s = re.sub(r'_+', '_', s)
-    # Remove the final .upper() to keep it snake_case
+    # Ensure the name doesn't start with a digit (strip('_') may have removed the prefix)
+    if s and s[0].isdigit():
+        s = f"_{s}"
     return s
 
 # --- Main Generation Logic ---

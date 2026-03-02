@@ -570,7 +570,16 @@ slack_nps_assets = create_airtable_sync_assets(
 
 campfire_assets = create_airtable_sync_assets(
     base_name="campfire",
-    tables=["event", "organizer", "hcb", "regions", "rsvp", "regional_managers", "organizer_interest", "daydream_events"],
+    tables=[
+        "event", "organizer", "hcb", "regions", "rsvp", "regional_managers",
+        "organizer_interest", "daydream_events", "participants", "venues", "jay",
+        "us_based_clubs", "disbursements", "emergency_disbursements", "funding_rates",
+        "check_in_3", "check_in_4", "check_in_5", "camie", "captured_emails",
+        "nyc_data", "amber_merch_distribution", "training", "campfire_tutorial",
+        "us_bagles", "us_west", "hcb_issues", "ysws_project_submission", "ysws_config",
+        "theme", "campfire_workshops", "campfire_busan", "cf_busan_scan_in", "nps",
+        "t_shirt_shipping", "t_shirts_delayed_packages", "blr_submissions", "blr_voting"
+    ],
     description="Loads campfire data into the warehouse.airtable_campfire schema."
 )
 
