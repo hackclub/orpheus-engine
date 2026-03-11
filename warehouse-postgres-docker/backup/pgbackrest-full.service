@@ -1,0 +1,9 @@
+[Unit]
+Description=pgBackRest full backup for warehouse
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/pgbackrest
+ExecStart=/opt/scripts/pgbackrest-backup.sh full

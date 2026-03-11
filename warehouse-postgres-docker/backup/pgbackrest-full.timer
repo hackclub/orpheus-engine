@@ -1,0 +1,9 @@
+[Unit]
+Description=pgBackRest full backup timer (1st and 15th)
+
+[Timer]
+OnCalendar=*-*-01,15 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=pgBackRest diff backup timer (daily except 1st and 15th)
+
+[Timer]
+OnCalendar=*-*-02..14,16..31 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

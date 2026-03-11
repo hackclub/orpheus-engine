@@ -8,7 +8,7 @@ Two tables:
   - bases: One row per BASE with full schema as JSONB
     (base_id PK, base_name, schema JSONB, _synced_at)
   - records: One row per RECORD with fields as JSONB (field names as keys)
-    (base_id, table_id, record_id PK, fields JSONB, _synced_at)
+    (base_id + table_id + record_id composite PK, fields JSONB, _synced_at)
 
 Architecture:
   - 5 bases download concurrently via a ThreadPoolExecutor
@@ -222,7 +222,7 @@ class WriteQueue:
             conn.close()
 
 
-def process_base(base, api, queue: WriteQueue, log) -> Dict[str, int]:
+def process_base(base, queue: WriteQueue, log) -> Dict[str, int]:
     """Process a single Airtable base: fetch schema + records, push to queue."""
     base_id = base.id
     base_name = base.name
@@ -330,7 +330,7 @@ def airtable_raw_all_bases_sync(
 
     with ThreadPoolExecutor(max_workers=CONCURRENT_BASES) as executor:
         future_to_base = {
-            executor.submit(process_base, base, api, queue, log): base
+            executor.submit(process_base, base, queue, log): base
             for base in bases
         }
 
