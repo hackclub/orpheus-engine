@@ -35,3 +35,5 @@ models:
       +materialized: table
       +grants:
         select: ["metabase_unified_analytics_reader"]
+    finance_2026_analytics:
+      +materialized: table
