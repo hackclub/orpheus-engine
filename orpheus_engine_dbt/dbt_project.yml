@@ -37,3 +37,5 @@ models:
         select: ["metabase_unified_analytics_reader"]
     finance_2026_analytics:
       +materialized: table
+      +grants:
+        select: ["\"zrl_2026-leadership-dashboard_crobat\""]
