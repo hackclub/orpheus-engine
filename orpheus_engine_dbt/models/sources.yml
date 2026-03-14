@@ -123,6 +123,14 @@ sources:
         description: "Slack member analytics data."
         meta: { dagster: { deps: ['slack_member_analytics'] } }
 
+  - name: fivetran_log
+    schema: _fivetran_log
+    tables:
+      - name: log
+        description: "Fivetran sync log events."
+      - name: connection
+        description: "Fivetran connector connections."
+
   - name: finance_2026
     schema: finance_2026
     tables:

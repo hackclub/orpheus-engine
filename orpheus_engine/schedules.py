@@ -100,8 +100,10 @@ materialize_frequent_job = dg.define_asset_job(
         dg.AssetSelection.assets("agh_fulfillment_labor_costs") |
         # Zenventory -> Airtable inventory sync
         dg.AssetSelection.assets("zenventory_inventory_airtable_sync") |
-        # Finance 2026 analytics (dbt model)
-        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "monthly_summary"]))
+        # Finance 2026 analytics (dbt models)
+        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "monthly_summary"])) |
+        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "major_gifts"])) |
+        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "metadata"]))
     ),
 )
 
