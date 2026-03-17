@@ -742,6 +742,8 @@ class AirtableIDs:
             county_centralizing = "fldu7bexqqfq3KoZ0"  # Name: County - Centralizing
             email_trimmed_lowercased = "fld20if1DEDgTOpPH"  # Name: Email - Trimmed & Lowercased
             ysws_name_lookup = "fldLpxfl6aHEm5F40"  # Name: YSWS Name - Lookup
+            ysws_spotchecks = "fldgxZK0licbDqBoo"  # Name: YSWS - Spotchecks
+            ysws_spotchecks_2 = "fldj8gebhYJfGSVAi"  # Name: YSWS - Spotchecks 2
 
         class ysws_programs:
             """IDs for Table 'ysws_programs' (ID: tblrGi9RARJy1A0c5)"""
@@ -803,12 +805,14 @@ class AirtableIDs:
             nps_copy = "fldjIZTQUjeWinpeF"  # Name: NPS copy
             unweighted_projects_2026 = "fldyWAYrguKjzb9a3"  # Name: Unweighted Projects–2026
             imported_table = "fld85Cdxyi73kbtRq"  # Name: Imported table
+            weighted_referral_count = "fldkzELMtOTOn7kek"  # Name: Weighted Referral Count
 
         class ysws_authors:
             """IDs for Table 'ysws_authors' (ID: tblRf1BQs5H8298gW)"""
             TABLE_ID = "tblRf1BQs5H8298gW"
 
             name = "fldlE95RqYyq8DJW4"  # Name: Name
+            unified_trust_level = "fld9Glia8BOi3YAmQ"  # Name: Unified Trust Level
             slack_url = "fldb79ToRvdcXeqze"  # Name: Slack URL
             slack_id = "fldojyNhEYyuZSo35"  # Name: Slack ID
             weighted_grants_total = "fldllCyssGiFPi5mS"  # Name: Weighted Grants–Total
@@ -833,6 +837,7 @@ class AirtableIDs:
             temp_total_payouts = "fldA8WqGqXnUhZKGc"  # Name: temp - total payouts
             temp_wg_between_athena = "fldGX1ow1w2d68ihH"  # Name: temp- WG between athena
             temp_wg_between_parthenon = "fldKklFowOL8e1Zsd"  # Name: temp- WG between parthenon
+            temp_so_m_wg = "fld0Lxg3cOnLyntSt"  # Name: temp - SoM wg
 
         class nps:
             """IDs for Table 'nps' (ID: tblQpkS0I9V2ixBD0)"""
