@@ -45,7 +45,8 @@ materialize_unified_ysws_job = dg.define_asset_job(
         dg.AssetSelection.assets("unified_ysws_ysws_project_mentions_warehouse") |
         dg.AssetSelection.assets("unified_ysws_ysws_project_mention_searches_warehouse") |
         dg.AssetSelection.assets("unified_ysws_ysws_spot_checks_warehouse") |
-        dg.AssetSelection.assets("unified_ysws_ysws_spot_check_sessions_warehouse")
+        dg.AssetSelection.assets("unified_ysws_ysws_spot_check_sessions_warehouse") |
+        dg.AssetSelection.assets("unified_ysws_ysws_programs_weighted_referral_count")
     ),
 )
 
