@@ -7,7 +7,7 @@
 -- Unified Time Log across Hack Club Programs (v4 — hourly, UTC)
 --
 -- Columns: activity_hour (UTC), program_name, user_email, project_name, code_url,
---          logging_method, raw_hours, credited_hours, split_factor, overlap_type,
+--          logging_method, raw_hours_logged, credited_hours_logged, split_factor, overlap_type,
 --          overlapping_programs, hackatime_alias, source_detail, claim_started_at
 --
 -- Programs & sources:
@@ -44,7 +44,7 @@ hackatime_hourly AS (
             ELSE SPLIT_PART(LOWER(BTRIM(hpa.hackatime_first_email)), '+', 1)
         END AS user_email,
         LOWER(BTRIM(hpa.project_name)) AS hackatime_alias,
-        SUM(hpa.hackatime_hours) AS raw_hours
+        SUM(hpa.hackatime_hours) AS raw_hours_logged
     FROM {{ ref('hourly_project_activity') }} hpa
     WHERE hpa.hackatime_first_email IS NOT NULL
       AND hpa.project_name IS NOT NULL
@@ -68,7 +68,7 @@ stasis_custom_hourly AS (
         END AS user_email,
         proj.title AS project_name,
         NULLIF(BTRIM(proj."githubRepo"), '') AS code_url,
-        SUM(ws."hoursClaimed")::numeric AS raw_hours,
+        SUM(ws."hoursClaimed")::numeric AS raw_hours_logged,
         'custom'::text AS logging_method,
         ('stasis.work_session.hoursClaimed; sessions=' || COUNT(*)::text) AS source_detail
     FROM {{ source('stasis', 'work_session') }} ws
@@ -90,7 +90,7 @@ blueprint_custom_hourly AS (
         END AS user_email,
         proj.title AS project_name,
         NULLIF(BTRIM(proj.repo_link), '') AS code_url,
-        ROUND(SUM(je.duration_seconds)::numeric / 3600.0, 4) AS raw_hours,
+        ROUND(SUM(je.duration_seconds)::numeric / 3600.0, 4) AS raw_hours_logged,
         'custom'::text AS logging_method,
         ('blueprint.journal_entries; entries=' || COUNT(*)::text) AS source_detail
     FROM {{ source('blueprint', 'journal_entries') }} je
@@ -112,7 +112,7 @@ flavortown_custom_hourly AS (
         END AS user_email,
         proj.title AS project_name,
         NULLIF(BTRIM(proj.repo_url), '') AS code_url,
-        ROUND(SUM(pd.duration_seconds)::numeric / 3600.0, 4) AS raw_hours,
+        ROUND(SUM(pd.duration_seconds)::numeric / 3600.0, 4) AS raw_hours_logged,
         'custom'::text AS logging_method,
         ('flavortown.post_devlogs; posts=' || COUNT(*)::text) AS source_detail
     FROM {{ source('flavortown', 'post_devlogs') }} pd
@@ -294,7 +294,7 @@ hackatime_matches AS (
         ac.project_name,
         ac.code_url,
         hd.hackatime_alias,
-        hd.raw_hours,
+        hd.raw_hours_logged,
         ac.claim_start_ts AS claim_started_at
     FROM hackatime_hourly hd
     JOIN all_claims ac
@@ -319,8 +319,8 @@ hackatime_split_hourly AS (
         hm.project_name,
         hm.code_url,
         'hackatime'::text AS logging_method,
-        hm.raw_hours,
-        ROUND((hm.raw_hours / GREATEST(hcc.ht_claim_count, COALESCE(uo.num_programs, 1)))::numeric, 4) AS credited_hours,
+        hm.raw_hours_logged,
+        ROUND((hm.raw_hours_logged / GREATEST(hcc.ht_claim_count, COALESCE(uo.num_programs, 1)))::numeric, 4) AS credited_hours_logged,
         GREATEST(hcc.ht_claim_count, COALESCE(uo.num_programs, 1))::smallint AS split_factor,
         CASE
             WHEN hcc.ht_claim_count > 1 AND COALESCE(uo.num_programs, 1) > 1 THEN 'both'
@@ -362,8 +362,8 @@ custom_with_url_split AS (
         c.project_name,
         c.code_url,
         c.logging_method,
-        c.raw_hours,
-        ROUND((c.raw_hours / COALESCE(uo.num_programs, 1))::numeric, 4) AS credited_hours,
+        c.raw_hours_logged,
+        ROUND((c.raw_hours_logged / COALESCE(uo.num_programs, 1))::numeric, 4) AS credited_hours_logged,
         COALESCE(uo.num_programs, 1)::smallint AS split_factor,
         CASE WHEN COALESCE(uo.num_programs, 1) > 1 THEN 'code_url' ELSE 'none' END AS overlap_type,
         CASE WHEN COALESCE(uo.num_programs, 1) > 1
@@ -393,8 +393,8 @@ SELECT
     project_name,
     code_url,
     logging_method,
-    raw_hours,
-    credited_hours,
+    raw_hours_logged,
+    credited_hours_logged,
     split_factor,
     overlap_type,
     overlapping_programs,
@@ -402,7 +402,7 @@ SELECT
     source_detail,
     claim_started_at
 FROM hackatime_split_hourly
-WHERE credited_hours > 0
+WHERE credited_hours_logged > 0
 
 UNION ALL
 
@@ -413,8 +413,8 @@ SELECT
     project_name,
     code_url,
     logging_method,
-    raw_hours,
-    credited_hours,
+    raw_hours_logged,
+    credited_hours_logged,
     split_factor,
     overlap_type,
     overlapping_programs,
@@ -422,6 +422,6 @@ SELECT
     source_detail,
     claim_started_at
 FROM custom_with_url_split
-WHERE credited_hours > 0
+WHERE credited_hours_logged > 0
 
 ORDER BY activity_hour DESC, program_name, user_email, project_name

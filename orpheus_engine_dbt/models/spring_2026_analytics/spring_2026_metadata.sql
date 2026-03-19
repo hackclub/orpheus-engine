@@ -51,7 +51,7 @@ SELECT
   NOW() AS last_materialized_at,
   st.last_synced_at AS last_source_synced_at,
   'equal_split' AS dedup_method,
-  'When a session is claimed by multiple programs (via matching hackatime project alias or matching code URL), raw_hours are divided equally among them. credited_hours = raw_hours / split_factor.' AS dedup_description
+  'When a session is claimed by multiple programs (via matching hackatime project alias or matching code URL), raw_hours_logged are divided equally among them. credited_hours_logged = raw_hours_logged / split_factor.' AS dedup_description
 FROM program_info pi
 LEFT JOIN sync_times st ON st.program_name = pi.program_name
 ORDER BY pi.program_start_date
