@@ -61,6 +61,9 @@ _SLING_CONNECTION_URL_ENV_VARS = [
     "FLAVORTOWN_AHOY_COOLIFY_URL",
     "HACK_CLUB_THE_GAME_COOLIFY_URL",
     "BLUEPRINT_COOLIFY_URL",
+    "STASIS_COOLIFY_URL",
+    "FALLOUT_COOLIFY_URL",
+    "HORIZONS_K8S_URL",
     "WAREHOUSE_COOLIFY_URL",
 ]
 
@@ -130,6 +133,24 @@ blueprint_db_connection = SlingConnectionResource(
     connection_string=EnvVar("BLUEPRINT_COOLIFY_URL"),
 )
 
+stasis_db_connection = SlingConnectionResource(
+    name="STASIS_DB",
+    type="postgres",
+    connection_string=EnvVar("STASIS_COOLIFY_URL"),
+)
+
+fallout_db_connection = SlingConnectionResource(
+    name="FALLOUT_DB",
+    type="postgres",
+    connection_string=EnvVar("FALLOUT_COOLIFY_URL"),
+)
+
+horizons_db_connection = SlingConnectionResource(
+    name="HORIZONS_DB",
+    type="postgres",
+    connection_string=EnvVar("HORIZONS_K8S_URL"),
+)
+
 # Auth DB connection - absolute minimum permissions to generate events for monthly
 # active stats (e.g. "logged in at", "created oauth app"). No tokens or secrets.
 def _get_auth_ssh_private_key() -> str:
@@ -191,6 +212,9 @@ sling_replication_resource = SlingResource(
         flavortown_ahoy_db_connection,
         hack_club_the_game_db_connection,
         blueprint_db_connection,
+        stasis_db_connection,
+        fallout_db_connection,
+        horizons_db_connection,
         auth_db_connection,
         hcb_db_connection,
         warehouse_db_connection,
@@ -211,6 +235,9 @@ hackatime_replication_config = {
         "public.*": None,
         "public.pg_stat_statements": {"disabled": True},
         "public.pg_stat_statements_info": {"disabled": True},
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.solid_cache_entries": {"disabled": True},
         # Large tables configured for incremental sync
         "public.heartbeats": {
             "mode": "incremental",
@@ -252,6 +279,8 @@ hcer_public_github_data_replication_config = {
 
     "streams": {
         "public.*": None,
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
     }
 }
 
@@ -267,6 +296,16 @@ journey_replication_config = {
 
     "streams": {
         "public.*": None,
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.solid_queue_blocked_executions": {"disabled": True},
+        "public.solid_queue_claimed_executions": {"disabled": True},
+        "public.solid_queue_failed_executions": {"disabled": True},
+        "public.solid_queue_jobs": {"disabled": True},
+        "public.solid_queue_processes": {"disabled": True},
+        "public.solid_queue_ready_executions": {"disabled": True},
+        "public.solid_queue_recurring_executions": {"disabled": True},
+        "public.solid_queue_recurring_tasks": {"disabled": True},
     }
 }
 
@@ -282,6 +321,7 @@ shipwrecked_the_bay_replication_config = {
 
     "streams": {
         "public.*": None,
+        "public._prisma_migrations": {"disabled": True},
     }
 }
 
@@ -297,6 +337,21 @@ summer_of_making_2025_replication_config = {
 
     "streams": {
         "public.*": None,
+        # Disabled: Rails infrastructure tables
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.solid_cache_entries": {"disabled": True},
+        "public.solid_queue_blocked_executions": {"disabled": True},
+        "public.solid_queue_claimed_executions": {"disabled": True},
+        "public.solid_queue_failed_executions": {"disabled": True},
+        "public.solid_queue_jobs": {"disabled": True},
+        "public.solid_queue_pauses": {"disabled": True},
+        "public.solid_queue_processes": {"disabled": True},
+        "public.solid_queue_ready_executions": {"disabled": True},
+        "public.solid_queue_recurring_executions": {"disabled": True},
+        "public.solid_queue_recurring_tasks": {"disabled": True},
+        "public.solid_queue_scheduled_executions": {"disabled": True},
+        "public.solid_queue_semaphores": {"disabled": True},
         # Large tables configured for incremental sync
         "public.active_insights_requests": {
             "mode": "incremental",
@@ -368,6 +423,10 @@ hackatime_legacy_replication_config = {
 
     "streams": {
         "public.*": None,
+        "public._prisma_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.pg_stat_statements": {"disabled": True},
+        "public.pg_stat_statements_info": {"disabled": True},
         # Large tables configured for incremental sync
         "public.heartbeats": {
             "mode": "incremental",
@@ -828,6 +887,397 @@ blueprint_replication_config = {
     }
 }
 
+# --- Fallout Database Replication Configuration ---
+fallout_replication_config = {
+    "source": "FALLOUT_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "fallout.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+
+        # --- Incremental: id + updated_at ---
+        "public.airtable_syncs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.journal_entries": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.onboarding_responses": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.projects": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.recordings": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.users": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+            "select": [
+                "id", "avatar", "created_at", "discarded_at", "display_name",
+                "email", "hca_id", "is_adult", "is_banned", "onboarded",
+                "roles", "slack_id", "timezone", "type", "updated_at",
+                "verification_status",
+            ],  # Excludes device_token, hca_token, lapse_token
+        },
+
+        # --- Incremental: id + special timestamp ---
+        "public.ahoy_events": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "time",
+        },
+        "public.ahoy_visits": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "started_at",
+        },
+        "public.active_storage_attachments": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+        },
+        "public.active_storage_blobs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+        },
+        "public.versions": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+        },
+        "public.lapse_timelapses": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.you_tube_videos": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+
+        # --- Incremental: remaining data tables ---
+        "public.flipper_features": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.flipper_gates": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.mail_interactions": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.mail_messages": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.ships": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+
+        # --- Disabled: Rails infrastructure tables ---
+        "public.schema_migrations": {"disabled": True},
+        "public.ar_internal_metadata": {"disabled": True},
+        "public.solid_queue_blocked_executions": {"disabled": True},
+        "public.solid_queue_claimed_executions": {"disabled": True},
+        "public.solid_queue_failed_executions": {"disabled": True},
+        "public.solid_queue_jobs": {"disabled": True},
+        "public.solid_queue_pauses": {"disabled": True},
+        "public.solid_queue_processes": {"disabled": True},
+        "public.solid_queue_ready_executions": {"disabled": True},
+        "public.solid_queue_recurring_executions": {"disabled": True},
+        "public.solid_queue_recurring_tasks": {"disabled": True},
+        "public.solid_queue_scheduled_executions": {"disabled": True},
+        "public.solid_queue_semaphores": {"disabled": True},
+
+        # --- Full-refresh: no suitable update key ---
+        # active_storage_variant_records (no timestamp)
+    }
+}
+
+# --- Stasis Database Replication Configuration ---
+stasis_replication_config = {
+    "source": "STASIS_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "stasis.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+
+        # --- Incremental: id + updatedAt ---
+        "public.account": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+            "select": [
+                "id", "accountId", "providerId", "userId",
+                "accessTokenExpiresAt", "refreshTokenExpiresAt",
+                "scope", "createdAt", "updatedAt",
+            ],  # Excludes accessToken, refreshToken, idToken, password
+        },
+        "public.event": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.project": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.reviewer_note": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.session": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+            "select": [
+                "id", "expiresAt", "createdAt", "updatedAt",
+                "ipAddress", "userAgent", "userId",
+            ],  # Excludes token
+        },
+        "public.shop_item": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.temp_rsvp": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+            "select": [
+                "id", "email", "utmSource", "referredBy", "firstName",
+                "lastName", "finishedAccount", "syncedToAirtable",
+                "createdAt", "updatedAt",
+            ],  # Excludes ip
+        },
+        "public.user": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.verification": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+
+        # --- Incremental: id + createdAt (append-only) ---
+        "public.audit_log": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.bom_item": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.currency_transaction": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.hackatime_project": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.kudos": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.project_review_action": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.project_submission": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.review_claim": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.session_media": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.session_timelapse": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.submission_review": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+        "public.work_session": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "createdAt",
+        },
+
+        # --- Disabled: infrastructure / no timestamps ---
+        "public.pg_stat_statements": {"disabled": True},
+        "public.pg_stat_statements_info": {"disabled": True},
+        "public._prisma_migrations": {"disabled": True},
+
+        # --- Full-refresh: no suitable update key ---
+        # project_badge (no timestamp, 2.5K rows)
+        # sidekick_assignment (no timestamp, 2.6K rows)
+        # user_role (no timestamp, 54 rows)
+    }
+}
+
+# --- Horizons Database Replication Configuration ---
+horizons_replication_config = {
+    "source": "HORIZONS_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "horizons.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+
+        # --- Incremental: updated_at / updatedAt ---
+        "public.email_jobs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+        },
+        "public.gift_codes": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.global_settings": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+        "public.projects": {
+            "mode": "incremental",
+            "primary_key": ["project_id"],
+            "update_key": "updated_at",
+        },
+        "public.shop_item_variants": {
+            "mode": "incremental",
+            "primary_key": ["variant_id"],
+            "update_key": "updated_at",
+        },
+        "public.shop_items": {
+            "mode": "incremental",
+            "primary_key": ["item_id"],
+            "update_key": "updated_at",
+        },
+        "public.sticker_tokens": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updatedAt",
+            "select": [
+                "id", "email", "rsvpNumber", "isUsed",
+                "usedAt", "createdAt", "updatedAt",
+            ],  # Excludes token
+        },
+        "public.submissions": {
+            "mode": "incremental",
+            "primary_key": ["submission_id"],
+            "update_key": "updated_at",
+        },
+        "public.users": {
+            "mode": "incremental",
+            "primary_key": ["user_id"],
+            "update_key": "updated_at",
+            "select": [
+                "user_id", "email", "first_name", "last_name", "birthday",
+                "role", "onboard_complete", "onboarded_at", "address_line_1",
+                "address_line_2", "city", "state", "country", "zip_code",
+                "airtable_rec_id", "hackatime_account", "created_at",
+                "updated_at", "referral_code", "raffle_pos", "is_fraud",
+                "is_sus", "slack_user_id", "hca_id", "verification_status",
+            ],  # Excludes hackatime_access_token
+        },
+
+        # --- Incremental: append-only (created_at) ---
+        "public.hackatime_link_otps": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+            "select": [
+                "id", "user_id", "email", "expires_at",
+                "is_used", "used_at", "created_at",
+            ],  # Excludes otp_code
+        },
+        "public.submission_audit_logs": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+        },
+        "public.transactions": {
+            "mode": "incremental",
+            "primary_key": ["transaction_id"],
+            "update_key": "created_at",
+        },
+        "public.user_sessions": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "created_at",
+        },
+
+        # --- Disabled: infrastructure ---
+        "public._prisma_migrations": {"disabled": True},
+        "public.pg_stat_statements": {"disabled": True},
+        "public.pg_stat_statements_info": {"disabled": True},
+
+        # --- Full-refresh: no suitable update key ---
+        # users_airtable (no id, no timestamps)
+    }
+}
+
 # --- HCB Database Replication Configuration ---
 # For calculating monthly actives and transaction ledger
 hcb_replication_config = {
@@ -1125,6 +1575,72 @@ def blueprint_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=blueprint_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="stasis_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def stasis_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Stasis DB → warehouse in a single shot."""
+    context.log.info("Starting Stasis → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=stasis_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="fallout_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def fallout_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Fallout DB → warehouse in a single shot."""
+    context.log.info("Starting Fallout → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=fallout_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+@dg.asset(
+    name="horizons_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def horizons_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Horizons DB → warehouse in a single shot."""
+    context.log.info("Starting Horizons → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=horizons_replication_config,
     ):
         pass
 
