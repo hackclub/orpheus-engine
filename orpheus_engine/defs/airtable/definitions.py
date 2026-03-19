@@ -277,6 +277,50 @@ airtable_config = AirtableServiceConfig(
                     table_id="tblp8ALH23EuNikiZ"
                 )
             }
+        ),
+        "sleepover": AirtableBaseConfig(
+            base_id="appooabEncFeFqZnu",
+            tables={
+                "registered_users": AirtableTableConfig(
+                    table_id="tbl0HZByqgBktjSw3"
+                ),
+                "shop": AirtableTableConfig(
+                    table_id="tbl0SRzlm4OiqUlfy"
+                ),
+                "user_shop_info": AirtableTableConfig(
+                    table_id="tbl3XzvpIwtuSOh84"
+                ),
+                "ysws_project_submission": AirtableTableConfig(
+                    table_id="tblPUWwyJWrB36uNM"
+                ),
+                "projects": AirtableTableConfig(
+                    table_id="tblhezu11byorMXPB"
+                ),
+                "fulfillment": AirtableTableConfig(
+                    table_id="tblWsADwTSnrGaael"
+                ),
+                "ysws_config": AirtableTableConfig(
+                    table_id="tbl5HPeWrC4YCdClJ"
+                ),
+                "pyramid": AirtableTableConfig(
+                    table_id="tblyAsu2EPhZGY6Pn"
+                ),
+                "hackdash": AirtableTableConfig(
+                    table_id="tbledxwdnFavBq4pT"
+                ),
+                "prize_suggestion": AirtableTableConfig(
+                    table_id="tblvG03VXxQJsi3LB"
+                ),
+                "calendar_events": AirtableTableConfig(
+                    table_id="tbl8af7yJZkB9phhr"
+                ),
+                "show_and_tells": AirtableTableConfig(
+                    table_id="tblRHRaV7AzwPcYr2"
+                ),
+                "travel_grant_applications": AirtableTableConfig(
+                    table_id="tblzUI6m69SWWYi2k"
+                )
+            }
         )
     }
 )

@@ -589,6 +589,17 @@ campfire_flagship_assets = create_airtable_sync_assets(
     description="Loads campfire_flagship data into the warehouse.airtable_campfire_flagship schema."
 )
 
+sleepover_assets = create_airtable_sync_assets(
+    base_name="sleepover",
+    tables=[
+        "registered_users", "shop", "user_shop_info", "ysws_project_submission",
+        "projects", "fulfillment", "ysws_config", "pyramid", "hackdash",
+        "prize_suggestion", "calendar_events", "show_and_tells",
+        "travel_grant_applications"
+    ],
+    description="Loads sleepover data into the warehouse.airtable_sleepover schema."
+)
+
 # --- DLT Asset: Loads Data into Warehouse using DLT ---
 @asset(
     compute_kind="dlt", # Tagging the compute type for UI clarity

@@ -103,7 +103,10 @@ materialize_frequent_job = dg.define_asset_job(
         # Finance 2026 analytics (dbt models)
         dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "monthly_summary"])) |
         dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "major_gifts"])) |
-        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "metadata"]))
+        dg.AssetSelection.assets(dg.AssetKey(["finance_2026_analytics", "metadata"])) |
+        # Sleepover (source + warehouse mirrors)
+        dg.AssetSelection.groups("airtable_sleepover") |
+        dg.AssetSelection.groups("dlt_airtable_sleepover")
     ),
 )
 
