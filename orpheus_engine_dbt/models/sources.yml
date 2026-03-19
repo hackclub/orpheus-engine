@@ -141,6 +141,89 @@ sources:
       - name: hcb_expense_reporting
         description: "HCB expense reporting with interest and grant revenue."
 
+  - name: stasis
+    schema: stasis
+    tables:
+      - name: user
+        description: "Stasis users with hackatimeUserId linkage."
+        meta: { dagster: { deps: ['stasis_warehouse_mirror'] } }
+      - name: project
+        description: "Stasis projects with githubRepo URLs."
+        meta: { dagster: { deps: ['stasis_warehouse_mirror'] } }
+      - name: hackatime_project
+        description: "Stasis hackatime project name claims per project."
+        meta: { dagster: { deps: ['stasis_warehouse_mirror'] } }
+      - name: work_session
+        description: "Stasis manual work sessions with hoursClaimed."
+        meta: { dagster: { deps: ['stasis_warehouse_mirror'] } }
+
+  - name: flavortown
+    schema: flavortown
+    tables:
+      - name: users
+        description: "Flavortown users."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: projects
+        description: "Flavortown projects with repo_url."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: user_hackatime_projects
+        description: "Flavortown user-to-hackatime-project mappings."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: user_identities
+        description: "Flavortown user identity providers (hackatime uid linkage)."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: project_memberships
+        description: "Flavortown project membership (user-to-project)."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: post_devlogs
+        description: "Flavortown devlog entries with duration_seconds."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+      - name: posts
+        description: "Flavortown posts linking devlogs to projects and users."
+        meta: { dagster: { deps: ['flavortown_warehouse_mirror'] } }
+
+  - name: horizons
+    schema: horizons
+    tables:
+      - name: users
+        description: "Horizons users with hackatime_account linkage."
+        meta: { dagster: { deps: ['horizons_warehouse_mirror'] } }
+      - name: projects
+        description: "Horizons projects with now_hackatime_projects array and repo_url."
+        meta: { dagster: { deps: ['horizons_warehouse_mirror'] } }
+
+  - name: blueprint
+    schema: blueprint
+    tables:
+      - name: users
+        description: "Blueprint users."
+        meta: { dagster: { deps: ['blueprint_warehouse_mirror'] } }
+      - name: projects
+        description: "Blueprint projects with repo_link."
+        meta: { dagster: { deps: ['blueprint_warehouse_mirror'] } }
+      - name: journal_entries
+        description: "Blueprint journal entries with duration_seconds."
+        meta: { dagster: { deps: ['blueprint_warehouse_mirror'] } }
+
+  - name: airtable_sleepover
+    schema: airtable_sleepover
+    tables:
+      - name: projects
+        description: "Sleepover projects with hackatime_name (JSON array or plain text)."
+        meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
+      - name: registered_users
+        description: "Sleepover registered users with email."
+        meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
+      - name: projects__registered_users
+        description: "Sleepover project-to-registered-user junction table (DLT nested)."
+        meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
+      - name: ysws_project_submission
+        description: "Sleepover YSWS project submissions with code_url."
+        meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
+      - name: _dlt_loads
+        description: "DLT load metadata for tracking sleepover sync times."
+        meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
+
   # Absolute minimum permissions - only columns needed to generate events for monthly active stats
   - name: auth
     schema: auth
