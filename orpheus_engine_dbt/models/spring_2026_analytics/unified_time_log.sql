@@ -11,9 +11,9 @@
 --          overlapping_programs, hackatime_alias, source_detail, claim_started_at
 --
 -- Programs & sources:
---   Hackatime-based: stasis, flavortown, horizons, sleepover
+--   Hackatime-based: stasis, flavortown, horizons, sleepover, hack_club_the_game
 --   Custom logging:  stasis (work_sessions), blueprint (journal_entries),
---                    flavortown (post_devlogs)
+--                    flavortown (post_devlogs), hack_club_the_game (project_reviews)
 --
 -- Key features:
 --   1. Email normalization — strips plus-addressing (user+tag@x.com -> user@x.com)
@@ -25,7 +25,18 @@
 --   7. URL-based splitting applied to custom sources too
 -- ============================================================================
 
-WITH bad_aliases AS (
+WITH program_start_dates AS (
+    SELECT * FROM (VALUES
+        ('blueprint',  TIMESTAMP WITH TIME ZONE '2025-10-17 00:00:00+00'),
+        ('flavortown', TIMESTAMP WITH TIME ZONE '2025-12-24 00:00:00+00'),
+        ('sleepover',  TIMESTAMP WITH TIME ZONE '2026-01-20 00:00:00+00'),
+        ('horizons',   TIMESTAMP WITH TIME ZONE '2026-02-20 00:00:00+00'),
+        ('stasis',     TIMESTAMP WITH TIME ZONE '2026-03-04 00:00:00+00'),
+        ('hack_club_the_game', TIMESTAMP WITH TIME ZONE '2026-01-22 00:00:00+00')
+    ) AS t(program_name, program_start_date)
+),
+
+bad_aliases AS (
     SELECT alias FROM (VALUES
         (''), ('other'), ('<<last_project>>'), ('projects'), ('.wakatime'), ('.vscode')
     ) AS t(alias)
@@ -124,6 +135,30 @@ flavortown_custom_hourly AS (
     GROUP BY 1, 2, 3, 4, 5
 ),
 
+hack_club_the_game_custom_hourly AS (
+    SELECT
+        DATE_TRUNC('hour', pr.created_at AT TIME ZONE 'UTC') AS activity_hour,
+        'hack_club_the_game'::text AS program_name,
+        CASE
+            WHEN POSITION('@' IN LOWER(BTRIM(u.email))) > 0
+            THEN SPLIT_PART(SPLIT_PART(LOWER(BTRIM(u.email)), '@', 1), '+', 1)
+                 || '@' || SPLIT_PART(LOWER(BTRIM(u.email)), '@', 2)
+            ELSE SPLIT_PART(LOWER(BTRIM(u.email)), '+', 1)
+        END AS user_email,
+        proj.title AS project_name,
+        NULLIF(BTRIM(proj.repo_link), '') AS code_url,
+        ROUND(SUM(pr.approved_seconds)::numeric / 3600.0, 4) AS raw_hours_logged,
+        'custom'::text AS logging_method,
+        ('hack_club_the_game.project_reviews.approved_seconds; reviews=' || COUNT(*)::text) AS source_detail
+    FROM {{ source('hack_club_the_game', 'project_reviews') }} pr
+    JOIN {{ source('hack_club_the_game', 'projects') }} proj ON proj.id = pr.project_id
+    JOIN {{ source('hack_club_the_game', 'users') }} u ON u.id = proj.user_id
+    WHERE pr.review_type = 'approval'
+      AND pr.approved_seconds > 0
+      AND pr.deleted_at IS NULL
+    GROUP BY 1, 2, 3, 4, 5
+),
+
 -- ============================================================
 -- 3. HACKATIME CLAIMS: per-program alias -> project mappings
 -- ============================================================
@@ -179,6 +214,23 @@ horizons_ht_claims AS (
       AND proj.now_hackatime_projects != '{}'
 ),
 
+hack_club_the_game_ht_claims AS (
+    SELECT 'hack_club_the_game'::text AS program_name,
+        CASE WHEN POSITION('@' IN LOWER(BTRIM(u.email))) > 0
+             THEN SPLIT_PART(SPLIT_PART(LOWER(BTRIM(u.email)), '@', 1), '+', 1)
+                  || '@' || SPLIT_PART(LOWER(BTRIM(u.email)), '@', 2)
+             ELSE SPLIT_PART(LOWER(BTRIM(u.email)), '+', 1)
+        END AS user_email,
+        LOWER(BTRIM(hp.name)) AS hackatime_alias,
+        proj.title AS project_name,
+        NULLIF(BTRIM(proj.repo_link), '') AS code_url,
+        hp.created_at AT TIME ZONE 'UTC' AS claim_start_ts
+    FROM {{ source('hack_club_the_game', 'hackatime_projects') }} hp
+    JOIN {{ source('hack_club_the_game', 'projects') }} proj ON proj.id = hp.project_id
+    JOIN {{ source('hack_club_the_game', 'users') }} u ON u.id = hp.user_id
+    WHERE hp.name IS NOT NULL AND hp.name != '' AND hp.project_id IS NOT NULL
+),
+
 sleepover_code_urls AS (
     SELECT y.userid,
            LOWER(BTRIM(y.project)) AS project_name_key,
@@ -229,6 +281,7 @@ all_claims_raw AS (
     UNION ALL SELECT * FROM flavortown_ht_claims
     UNION ALL SELECT * FROM horizons_ht_claims
     UNION ALL SELECT * FROM sleepover_ht_claims
+    UNION ALL SELECT * FROM hack_club_the_game_ht_claims
 ),
 
 all_claims AS (
@@ -270,6 +323,8 @@ all_project_urls AS (
         SELECT user_email, code_url, program_name FROM blueprint_custom_hourly WHERE code_url IS NOT NULL
         UNION ALL
         SELECT user_email, code_url, program_name FROM flavortown_custom_hourly WHERE code_url IS NOT NULL
+        UNION ALL
+        SELECT user_email, code_url, program_name FROM hack_club_the_game_custom_hourly WHERE code_url IS NOT NULL
     ) cust
 ),
 
@@ -376,6 +431,7 @@ custom_with_url_split AS (
         SELECT * FROM stasis_custom_hourly
         UNION ALL SELECT * FROM blueprint_custom_hourly
         UNION ALL SELECT * FROM flavortown_custom_hourly
+        UNION ALL SELECT * FROM hack_club_the_game_custom_hourly
     ) c
     LEFT JOIN url_overlap uo
         ON c.code_url IS NOT NULL AND c.code_url != ''
@@ -387,41 +443,45 @@ custom_with_url_split AS (
 -- 7. FINAL UNION
 -- ============================================================
 SELECT
-    activity_hour,
-    program_name,
-    user_email,
-    project_name,
-    code_url,
-    logging_method,
-    raw_hours_logged,
-    credited_hours_logged,
-    split_factor,
-    overlap_type,
-    overlapping_programs,
-    hackatime_alias,
-    source_detail,
-    claim_started_at
-FROM hackatime_split_hourly
-WHERE credited_hours_logged > 0
+    h.activity_hour,
+    h.program_name,
+    h.user_email,
+    h.project_name,
+    h.code_url,
+    h.logging_method,
+    h.raw_hours_logged,
+    h.credited_hours_logged,
+    h.split_factor,
+    h.overlap_type,
+    h.overlapping_programs,
+    h.hackatime_alias,
+    h.source_detail,
+    h.claim_started_at
+FROM hackatime_split_hourly h
+JOIN program_start_dates psd ON psd.program_name = h.program_name
+WHERE h.credited_hours_logged > 0
+  AND h.activity_hour >= psd.program_start_date
 
 UNION ALL
 
 SELECT
-    activity_hour,
-    program_name,
-    user_email,
-    project_name,
-    code_url,
-    logging_method,
-    raw_hours_logged,
-    credited_hours_logged,
-    split_factor,
-    overlap_type,
-    overlapping_programs,
-    hackatime_alias,
-    source_detail,
-    claim_started_at
-FROM custom_with_url_split
-WHERE credited_hours_logged > 0
+    c.activity_hour,
+    c.program_name,
+    c.user_email,
+    c.project_name,
+    c.code_url,
+    c.logging_method,
+    c.raw_hours_logged,
+    c.credited_hours_logged,
+    c.split_factor,
+    c.overlap_type,
+    c.overlapping_programs,
+    c.hackatime_alias,
+    c.source_detail,
+    c.claim_started_at
+FROM custom_with_url_split c
+JOIN program_start_dates psd ON psd.program_name = c.program_name
+WHERE c.credited_hours_logged > 0
+  AND c.activity_hour >= psd.program_start_date
 
 ORDER BY activity_hour DESC, program_name, user_email, project_name

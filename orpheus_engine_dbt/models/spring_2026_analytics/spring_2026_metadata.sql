@@ -12,7 +12,8 @@ WITH program_info AS (
     ('flavortown', DATE '2025-12-24'),
     ('sleepover',  DATE '2026-01-20'),
     ('horizons',   DATE '2026-02-20'),
-    ('stasis',     DATE '2026-03-04')
+    ('stasis',     DATE '2026-03-04'),
+    ('hack_club_the_game', DATE '2026-01-22')
   ) AS t(program_name, program_start_date)
 ),
 
@@ -32,6 +33,9 @@ blueprint_sync AS (
 sleepover_sync AS (
   SELECT MAX(inserted_at) AS last_synced_at FROM {{ source('airtable_sleepover', '_dlt_loads') }}
 ),
+hack_club_the_game_sync AS (
+  SELECT MAX(updated_at AT TIME ZONE 'UTC') AS last_synced_at FROM {{ source('hack_club_the_game', 'users') }}
+),
 
 sync_times AS (
   SELECT 'stasis' AS program_name, last_synced_at FROM stasis_sync
@@ -43,6 +47,8 @@ sync_times AS (
   SELECT 'blueprint', last_synced_at FROM blueprint_sync
   UNION ALL
   SELECT 'sleepover', last_synced_at FROM sleepover_sync
+  UNION ALL
+  SELECT 'hack_club_the_game', last_synced_at FROM hack_club_the_game_sync
 )
 
 SELECT
