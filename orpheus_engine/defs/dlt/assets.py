@@ -589,6 +589,12 @@ campfire_flagship_assets = create_airtable_sync_assets(
     description="Loads campfire_flagship data into the warehouse.airtable_campfire_flagship schema."
 )
 
+flavortown_assets = create_airtable_sync_assets(
+    base_name="flavortown",
+    tables=["users", "rsvps", "projects", "ship_events", "devlogs"],
+    description="Loads Flavortown data into the warehouse.airtable_flavortown schema."
+)
+
 sleepover_assets = create_airtable_sync_assets(
     base_name="sleepover",
     tables=[

@@ -1993,6 +1993,128 @@ class AirtableIDs:
             loops_list_slack = "fldbceOppgyQwTjna"  # Name: Loops List - Slack
 
 
+    class flavortown:
+        """IDs for Base 'flavortown' (ID: appeQS7itMURezTwu)"""
+        BASE_ID = "appeQS7itMURezTwu"
+
+        class users:
+            """IDs for Table 'users' (ID: tblfwkRk972u6GHrW)"""
+            TABLE_ID = "tblfwkRk972u6GHrW"
+
+            slack_id = "fld4t3NzCYvFyB4P3"  # Name: slack_id
+            first_name = "fldQi0uGdGhVoyOSB"  # Name: first_name
+            last_name = "fldkMJPx81p30EYWA"  # Name: last_name
+            email = "fldX1KotdRbrSxwkD"  # Name: email
+            avatar_url = "fldpuNG9oEeeTn4dU"  # Name: avatar_url
+            has_commented = "fldieq5Nb9fQ1ypKj"  # Name: has_commented
+            has_some_role_of_access = "fldekf0QqF74RP3D0"  # Name: has_some_role_of_access
+            hours = "fldj63g9O6H8HwKxo"  # Name: hours
+            created_at = "fldnveuQCtLnvWESw"  # Name: created_at
+            verification_status = "fld9pwexbtcCJCWaL"  # Name: verification_status
+            is_banned = "fld7O91E6bYYtzR4O"  # Name: is_banned
+            synced_at = "fldeymINnxILm9dQQ"  # Name: synced_at
+            flavor_id = "fldYTCRkYQASi10C9"  # Name: flavor_id
+            loops_flavortown_sign_up_at = "fldNTbrtJVRdF5MZJ"  # Name: Loops - flavortownSignUpAt
+            loops_special_set_full_name = "fldEYQfLbDXQAU3eB"  # Name: Loops - Special - setFullName
+            loops_list_flavortown = "fldkWK1sPrxX4rB9C"  # Name: Loops List - Flavortown
+            link_to_rsvp = "fldlI3aMkrSx15oT3"  # Name: link_to_rsvp
+            ref_from_link_to_rsvp = "fldknPu6BnjtUlGj5"  # Name: ref (from link_to_rsvp)
+            ref = "fldZH5xHf7nkFUw2N"  # Name: ref
+            projects = "fldtVhvF9gsjtfPXa"  # Name: _projects
+            last_funnel_event = "fld7f0AflK1iAqctT"  # Name: last_funnel_event
+            last_funnel_event_at = "fldIQe46eN99RX5bT"  # Name: last_funnel_event_at
+            funnel_events = "fldV3vNMlDPhRY9MV"  # Name: funnel_events
+            ysws_project_submission = "fld76IBvvnDrmR3AB"  # Name: YSWS Project Submission
+            address_line_1 = "fldOZOqKJK8RJ04aI"  # Name: address_line_1
+            address_line_2 = "fldV3bc811KafLLR0"  # Name: address_line_2
+            address_city = "fld1WRqqKAryYybC3"  # Name: address_city
+            address_state = "fldJ5S391horN2Z0I"  # Name: address_state
+            address_postal_code = "fldIinEYw7DPEejSP"  # Name: address_postal_code
+            address_country = "fldf4UmZ3lC1l5p8D"  # Name: address_country
+            balance = "fldNDdiUJzy5AETDh"  # Name: balance
+            admin_url = "fldCnOrCH0T9J6ofT"  # Name: admin url
+            club = "fld7uwq1w6av35gvo"  # Name: club
+            club_name_from_club = "fldJcYgazE2UvrjPj"  # Name: club_name (from club)
+            club_link = "fldDBh12nEVg4SvLc"  # Name: club_link
+            loops_special_set_full_address = "flds47pghZCMXb5q0"  # Name: Loops - Special - setFullAddress
+
+        class rsvps:
+            """IDs for Table 'rsvps' (ID: tblDr4mjBFaxzsmIg)"""
+            TABLE_ID = "tblDr4mjBFaxzsmIg"
+
+            email = "fldNM2IVpveK1aWhK"  # Name: email
+            ip = "fldZh8F63cTkkRKIb"  # Name: ip
+            user_agent = "fldeHMWekpC9l4WeG"  # Name: user_agent
+            ref = "fldw1MJRtKmTOXQNN"  # Name: ref
+            created_at = "fldZTav5WeApvW03E"  # Name: created_at
+            synced_at = "fldYqXBUEC6vDDKz0"  # Name: synced_at
+            loops_flavortown_rsvp_at = "fldfj5P2quqQrkb1G"  # Name: Loops - flavortownRsvpAt
+            loops_flavortown_start_url = "fld5pdfMiD0Sirw1f"  # Name: Loops - flavortownStartUrl
+            loops_flavortown_ref = "fldqpx5Py0PIXP118"  # Name: Loops - flavortownRef
+            loops_list_flavortown = "fldkucN2aQy9t6QAc"  # Name: Loops List - Flavortown
+            flavor_id = "fldvcgQolMaKrPEOw"  # Name: flavor_id
+            users = "fldvZ7ECeMEfr324g"  # Name: _users
+
+        class projects:
+            """IDs for Table 'projects' (ID: tbl4y6cnNwqJf5IHb)"""
+            TABLE_ID = "tbl4y6cnNwqJf5IHb"
+
+            slug = "fldNsvfX7vVRVj4b7"  # Name: slug
+            flavor_id = "fldNxafNHhYNovNUC"  # Name: flavor_id
+            title = "fldk9xfK9ZblJ29RG"  # Name: title
+            description = "fldue8sg6ZvArf7Bg"  # Name: description
+            repo_url = "fldonvCAuCi56gRFs"  # Name: repo_url
+            demo_url = "fldcX967wPmugRkTk"  # Name: demo_url
+            readme_url = "fldHjBu3JHEGIP9aD"  # Name: readme_url
+            ship_status = "flddig4DxGiluaW9J"  # Name: ship_status
+            shipped_at = "fldrOpHE3BIdGPLD8"  # Name: shipped_at
+            is_fire = "fldIT25QfN5v26c5v"  # Name: is_fire
+            marked_fire_at = "fldggToCQwnLHlzLR"  # Name: marked_fire_at
+            created_at = "fldfbo6T2jqB8U2Kq"  # Name: created_at
+            synced_at = "fldK4yHlCcSpgwIxw"  # Name: synced_at
+            deleted_at = "fldXFKuWkMdTGSpuC"  # Name: deleted_at
+            creator_id = "fld8gK9O7JlExMYWk"  # Name: creator_id
+            creator = "fldshMyavrA0ifmfc"  # Name: creator
+            email = "fldvyo9z0ylMOD32C"  # Name: email
+            hackatime_id = "fldpMWxia89yPR0Lz"  # Name: hackatime_id
+            hackatime_project_names = "fldeY9UIn7bMr5Ubx"  # Name: hackatime_project_names
+            project_url = "fldbDjo7ILRoVwlmx"  # Name: project_url
+            club_from_creator = "fld4vataIeOGwq1Nb"  # Name: club (from creator)
+
+        class ship_events:
+            """IDs for Table 'ship_events' (ID: tblcc7IKNzO246on0)"""
+            TABLE_ID = "tblcc7IKNzO246on0"
+
+            body = "fldLogTMLtopegsaK"  # Name: body
+            certification_status = "fldvTF7dc5aYZCws9"  # Name: certification_status
+            hours = "fldRHp8oOMjfRT7PN"  # Name: hours
+            multiplier = "fldu3kp6HoAi1v5H4"  # Name: multiplier
+            payout = "fld5kqMCHNx2IYUd5"  # Name: payout
+            votes_count = "fldSgzUE3eiDSSf9z"  # Name: votes_count
+            project_id = "fld4f4j0w84Ct6GQe"  # Name: project_id
+            user_id = "fld0yMidzGIAmtSpZ"  # Name: user_id
+            created_at = "fldDidklWeb4hhJ5E"  # Name: created_at
+            synced_at = "fldvUptTPrN0MsCmA"  # Name: synced_at
+            flavor_id = "flda411s3hG7S1LNl"  # Name: flavor_id
+            on_flavortown = "fldklZWZzsxor5BVS"  # Name: on flavortown
+            admin_btn = "fldPtlDjToWKq8xZa"  # Name: admin btn
+
+        class devlogs:
+            """IDs for Table 'devlogs' (ID: tbl8XnQhLdfkYzC1P)"""
+            TABLE_ID = "tbl8XnQhLdfkYzC1P"
+
+            body = "fldDbZPhYZUtFPMBe"  # Name: body
+            duration_seconds = "fldtPJj2avu6NKCeR"  # Name: duration_seconds
+            likes_count = "fldmqHEN8Cg93zoSv"  # Name: likes_count
+            comments_count = "fld4jiGycBG6EL9vQ"  # Name: comments_count
+            scrapbook_url = "fldGoO6AVEBNHimg9"  # Name: scrapbook_url
+            project_id = "fldK2BmvAhnOKUPCE"  # Name: project_id
+            user_id = "fldIDNMML5XdqNro1"  # Name: user_id
+            created_at = "fldY3W3aIMDEXr1KB"  # Name: created_at
+            synced_at = "fldexHHS7jSX4WSck"  # Name: synced_at
+            flavor_id = "fldXSedGDu6PcKHbE"  # Name: flavor_id
+
+
     class sleepover:
         """IDs for Base 'sleepover' (ID: appooabEncFeFqZnu)"""
         BASE_ID = "appooabEncFeFqZnu"

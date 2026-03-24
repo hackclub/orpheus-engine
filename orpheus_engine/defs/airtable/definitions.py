@@ -278,6 +278,26 @@ airtable_config = AirtableServiceConfig(
                 )
             }
         ),
+        "flavortown": AirtableBaseConfig(
+            base_id="appeQS7itMURezTwu",
+            tables={
+                "users": AirtableTableConfig(
+                    table_id="tblfwkRk972u6GHrW"
+                ),
+                "rsvps": AirtableTableConfig(
+                    table_id="tblDr4mjBFaxzsmIg"
+                ),
+                "projects": AirtableTableConfig(
+                    table_id="tbl4y6cnNwqJf5IHb"
+                ),
+                "ship_events": AirtableTableConfig(
+                    table_id="tblcc7IKNzO246on0"
+                ),
+                "devlogs": AirtableTableConfig(
+                    table_id="tbl8XnQhLdfkYzC1P"
+                ),
+            }
+        ),
         "sleepover": AirtableBaseConfig(
             base_id="appooabEncFeFqZnu",
             tables={
