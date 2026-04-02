@@ -64,6 +64,7 @@ _SLING_CONNECTION_URL_ENV_VARS = [
     "STASIS_COOLIFY_URL",
     "FALLOUT_COOLIFY_URL",
     "HORIZONS_K8S_URL",
+    "REVIEW_COOLIFY_URL",
     "WAREHOUSE_COOLIFY_URL",
 ]
 
@@ -151,6 +152,12 @@ horizons_db_connection = SlingConnectionResource(
     connection_string=EnvVar("HORIZONS_K8S_URL"),
 )
 
+review_db_connection = SlingConnectionResource(
+    name="REVIEW_DB",
+    type="postgres",
+    connection_string=EnvVar("REVIEW_COOLIFY_URL"),
+)
+
 # Auth DB connection - absolute minimum permissions to generate events for monthly
 # active stats (e.g. "logged in at", "created oauth app"). No tokens or secrets.
 def _get_auth_ssh_private_key() -> str:
@@ -215,6 +222,7 @@ sling_replication_resource = SlingResource(
         stasis_db_connection,
         fallout_db_connection,
         horizons_db_connection,
+        review_db_connection,
         auth_db_connection,
         hcb_db_connection,
         warehouse_db_connection,
@@ -1685,6 +1693,49 @@ def hcb_warehouse_mirror(
     for _ in sling.replicate(
         context=context,
         replication_config=hcb_replication_config,
+    ):
+        pass
+
+    context.log.info("Replication finished")
+    context.add_output_metadata({"replicated": True})
+    return None
+
+# --- Review Database Replication Configuration ---
+review_replication_config = {
+    "source": "REVIEW_DB",
+    "target": "WAREHOUSE_DB",
+
+    "defaults": {
+        "mode": "full-refresh",
+        "object": "review.{stream_table}",
+    },
+
+    "streams": {
+        "public.*": None,
+        # ysws_reviews has id + updated_at - use incremental sync
+        "public.ysws_reviews": {
+            "mode": "incremental",
+            "primary_key": ["id"],
+            "update_key": "updated_at",
+        },
+    }
+}
+
+@dg.asset(
+    name="review_warehouse_mirror",
+    group_name="sling",
+    compute_kind="sling",
+)
+def review_warehouse_mirror(
+    context: dg.AssetExecutionContext,
+    sling: SlingResource,
+) -> Nothing:
+    """Replicates the entire Review DB → warehouse in a single shot."""
+    context.log.info("Starting Review → warehouse Sling replication")
+
+    for _ in sling.replicate(
+        context=context,
+        replication_config=review_replication_config,
     ):
         pass
 
