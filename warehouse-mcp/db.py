@@ -7,8 +7,8 @@ import re
 import unicodedata
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from typing import List, Dict, Any, Optional
-import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 
 # SQL statements that are never allowed, even with read-only connection
@@ -82,14 +82,14 @@ class SQLValidationError(Exception):
 def _normalize_unicode(text: str) -> str:
     """
     Normalize Unicode text to ASCII to prevent homoglyph attacks.
-    
+
     Converts full-width characters, look-alike Unicode chars, etc. to their
     ASCII equivalents.
     """
     # NFKC normalization converts full-width chars to ASCII equivalents
     # e.g., ＤＲＯＰ -> DROP
     normalized = unicodedata.normalize('NFKC', text)
-    
+
     # Comprehensive homoglyph mappings for attack prevention
     # Covers Cyrillic, Greek, mathematical symbols, and other lookalikes
     homoglyphs = {
@@ -130,10 +130,10 @@ def _normalize_unicode(text: str) -> str:
         # Armenian
         'Տ': 'S', 'Ո': 'U', 'Ρ': 'P',
     }
-    
+
     for homoglyph, ascii_char in homoglyphs.items():
         normalized = normalized.replace(homoglyph, ascii_char)
-    
+
     # As a final safeguard, strip any remaining non-ASCII characters
     # that could be homoglyphs we missed, keeping only safe chars
     # But we keep common punctuation and operators needed for SQL
@@ -144,14 +144,14 @@ def _normalize_unicode(text: str) -> str:
         else:
             # Replace unknown non-ASCII with space to break up potential attacks
             safe_result.append(' ')
-    
+
     return ''.join(safe_result)
 
 
 def _remove_string_literals_and_identifiers(sql: str) -> str:
     """
     Remove string literals and quoted identifiers from SQL for safe pattern matching.
-    
+
     Handles:
     - Standard strings: 'hello'
     - Escaped quotes: 'it''s' or 'it\'s'
@@ -162,7 +162,7 @@ def _remove_string_literals_and_identifiers(sql: str) -> str:
     result = []
     i = 0
     n = len(sql)
-    
+
     while i < n:
         # Check for dollar-quoted strings: $$...$$ or $tag$...$tag$
         if sql[i] == '$':
@@ -177,11 +177,11 @@ def _remove_string_literals_and_identifiers(sql: str) -> str:
                     result.append("''")  # Replace with empty string literal
                     i = end_pos + len(tag)
                     continue
-        
+
         # Check for E'...' escape strings
         if sql[i] in ('E', 'e') and i + 1 < n and sql[i + 1] == "'":
             i += 1  # Skip the E, process the quote below
-        
+
         # Check for standard string literals (single quotes)
         if sql[i] == "'":
             j = i + 1
@@ -199,7 +199,7 @@ def _remove_string_literals_and_identifiers(sql: str) -> str:
             result.append("''")  # Replace entire string with empty
             i = j + 1
             continue
-        
+
         # Check for double-quoted identifiers (PostgreSQL identifier quoting)
         # "DELETE" as a column name is valid and should not trigger validation
         if sql[i] == '"':
@@ -215,10 +215,10 @@ def _remove_string_literals_and_identifiers(sql: str) -> str:
             result.append('_ident_')  # Replace with safe placeholder
             i = j + 1
             continue
-        
+
         result.append(sql[i])
         i += 1
-    
+
     return ''.join(result)
 
 
@@ -229,18 +229,18 @@ def validate_sql(sql: str) -> None:
     """
     # Normalize Unicode to prevent homoglyph attacks (e.g., ＤＲＯＰ -> DROP)
     cleaned = _normalize_unicode(sql)
-    
+
     # Remove comments
     cleaned = re.sub(r'--.*$', '', cleaned, flags=re.MULTILINE)  # Line comments
     cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)  # Block comments
-    
+
     # Remove string literals and quoted identifiers
     # This prevents false positives like SELECT "DELETE" FROM table (valid column name)
     cleaned = _remove_string_literals_and_identifiers(cleaned)
-    
+
     # Convert to uppercase for case-insensitive matching
     cleaned = cleaned.upper()
-    
+
     for pattern in DANGEROUS_PATTERNS:
         if re.search(pattern, cleaned, re.IGNORECASE):
             raise SQLValidationError(
@@ -259,47 +259,54 @@ def get_connection_url() -> str:
 def make_readonly_url(url: str) -> str:
     """Add read-only transaction option to PostgreSQL URL."""
     parsed = urlparse(url)
-    
+
     # Check if read-only option already present
     if 'default_transaction_read_only' in url:
         return url
-    
+
     # Add options parameter with read-only setting
     # Use %20 for space and %3D for = to avoid URL encoding issues
     readonly_option = "options=-c%20default_transaction_read_only%3Don"
-    
+
     if parsed.query:
         new_query = f"{parsed.query}&{readonly_option}"
     else:
         new_query = readonly_option
-    
+
     new_parsed = parsed._replace(query=new_query)
     return urlunparse(new_parsed)
 
 
 class Database:
-    """PostgreSQL database connection with read-only enforcement."""
-    
+    """PostgreSQL database connection pool with read-only enforcement."""
+
     def __init__(self):
-        self._conn: Optional[psycopg2.extensions.connection] = None
-    
-    def connect(self) -> None:
-        """Establish connection to the database."""
-        if self._conn is not None and not self._conn.closed:
-            return
-        
+        self._pool: Optional[AsyncConnectionPool] = None
+
+    async def open(self) -> None:
+        """Open the connection pool."""
         url = get_connection_url()
         readonly_url = make_readonly_url(url)
-        self._conn = psycopg2.connect(readonly_url)
-        self._conn.set_session(readonly=True, autocommit=True)
-    
-    def close(self) -> None:
-        """Close the database connection."""
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-    
-    def execute_query(
+        self._pool = AsyncConnectionPool(
+            conninfo=readonly_url,
+            min_size=1,
+            max_size=5,
+            open=False,
+            kwargs={
+                "autocommit": True,
+                "row_factory": dict_row,
+                "connect_timeout": 10,
+            },
+        )
+        await self._pool.open()
+
+    async def close(self) -> None:
+        """Close the connection pool."""
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
+
+    async def execute_query(
         self,
         sql: str,
         max_rows: int = 10000,
@@ -327,73 +334,61 @@ class Database:
             firstname, lastname = user_info
             sql = f"-- warehouse-mcp {firstname} {lastname}\n{sql}"
 
-        self.connect()
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql)
 
-        with self._conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql)
+                if cur.description is None:
+                    return [], []
 
-            # Fetch results
-            if cursor.description is None:
-                return [], []
+                columns = [desc[0] for desc in cur.description]
+                rows = await cur.fetchmany(max_rows)
+                return [dict(row) for row in rows], columns
 
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchmany(max_rows)
-
-            # Convert to regular dicts
-            rows = [dict(row) for row in rows]
-
-            return rows, columns
-    
-    def execute_query_with_params(
-        self, 
-        sql: str, 
-        params: tuple, 
+    async def execute_query_with_params(
+        self,
+        sql: str,
+        params: tuple,
         max_rows: int = 10000
     ) -> tuple[List[Dict[str, Any]], List[str]]:
         """
         Execute a parameterized read-only SQL query and return results.
-        
+
         Args:
             sql: The SQL query with %s placeholders
             params: Tuple of parameters to substitute
             max_rows: Maximum number of rows to return (default 10000)
-        
+
         Returns:
             Tuple of (rows as list of dicts, column names)
         """
-        self.connect()
-        
-        with self._conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, params)
-            
-            # Fetch results
-            if cursor.description is None:
-                return [], []
-            
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchmany(max_rows)
-            
-            # Convert to regular dicts
-            rows = [dict(row) for row in rows]
-            
-            return rows, columns
-    
-    def list_schemas(self) -> List[str]:
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql, params)
+
+                if cur.description is None:
+                    return [], []
+
+                columns = [desc[0] for desc in cur.description]
+                rows = await cur.fetchmany(max_rows)
+                return [dict(row) for row in rows], columns
+
+    async def list_schemas(self) -> List[str]:
         """List all non-system schemas in the database."""
         sql = """
-            SELECT schema_name 
-            FROM information_schema.schemata 
+            SELECT schema_name
+            FROM information_schema.schemata
             WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
               AND schema_name NOT LIKE 'pg_temp_%'
               AND schema_name NOT LIKE 'pg_toast_temp_%'
             ORDER BY schema_name;
         """
-        rows, _ = self.execute_query(sql)
+        rows, _ = await self.execute_query(sql)
         return [row['schema_name'] for row in rows]
-    
-    def describe_schema(
-        self, 
-        schema_name: str, 
+
+    async def describe_schema(
+        self,
+        schema_name: str,
         max_columns: int = 1000,
         max_value_length: int = 80,
         max_output_bytes: int = 50000,
@@ -401,44 +396,44 @@ class Database:
     ) -> str:
         """
         Get schema description with tables, columns, and sample data.
-        
+
         Generates output directly in Python with truncation at SQL level
         to avoid transferring large amounts of data from the database.
-        
+
         Args:
             schema_name: Name of the schema to describe
             max_columns: Maximum columns to show per table (default 30)
             max_value_length: Maximum length for sample values (default 80)
             max_output_bytes: Stop adding tables when output exceeds this (default 50KB)
             sample_rows: Number of sample rows per table (default 3)
-            
+
         Returns:
             Markdown description of the schema with tables, columns, and sample data
         """
         # Validate schema name format
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema_name):
             raise ValueError(f"Invalid schema name: {schema_name}")
-        
+
         # Get all tables in schema
         tables_sql = """
-            SELECT table_name 
-            FROM information_schema.tables 
+            SELECT table_name
+            FROM information_schema.tables
             WHERE table_schema = %s AND table_type = 'BASE TABLE'
             ORDER BY table_name
         """
-        tables, _ = self.execute_query_with_params(tables_sql, (schema_name,))
-        
+        tables, _ = await self.execute_query_with_params(tables_sql, (schema_name,))
+
         if not tables:
             return f"Schema '{schema_name}' not found or has no tables."
-        
+
         output_parts = [f"# Schema: {schema_name}\n"]
         current_size = len(output_parts[0])
         budget_exceeded = False
-        
+
         for table_row in tables:
             table_name = table_row['table_name']
             is_internal = table_name.startswith('_dlt_')
-            
+
             # Get columns for this table
             columns_sql = """
                 SELECT column_name, data_type
@@ -446,27 +441,27 @@ class Database:
                 WHERE table_schema = %s AND table_name = %s
                 ORDER BY ordinal_position
             """
-            all_columns, _ = self.execute_query_with_params(
+            all_columns, _ = await self.execute_query_with_params(
                 columns_sql, (schema_name, table_name)
             )
-            
+
             total_columns = len(all_columns)
             columns = all_columns[:max_columns]
-            
+
             # Build table header
             table_block = f"\n## {schema_name}.{table_name}\n"
             table_block += f"Columns ({total_columns} total)"
             if total_columns > max_columns:
                 table_block += f" - showing first {max_columns}"
             table_block += ":\n"
-            
+
             # Column list
             col_names = [c['column_name'] for c in columns]
             table_block += ", ".join(col_names)
             if total_columns > max_columns:
                 table_block += f", ... (+{total_columns - max_columns} more)"
             table_block += "\n"
-            
+
             # Sample data (skip for internal _dlt_* tables or if budget exceeded)
             if budget_exceeded:
                 table_block += "(output budget exceeded, samples omitted)\n"
@@ -481,13 +476,13 @@ class Database:
                     select_parts.append(
                         f"LEFT({self._quote_ident(col_name)}::text, {max_value_length}) AS {self._quote_ident(col_name)}"
                     )
-                
+
                 select_clause = ", ".join(select_parts)
                 # Table name needs quoting too
                 sample_sql = f"SELECT {select_clause} FROM {self._quote_ident(schema_name)}.{self._quote_ident(table_name)} LIMIT {sample_rows}"
-                
+
                 try:
-                    sample_rows_data, _ = self.execute_query(sample_sql)
+                    sample_rows_data, _ = await self.execute_query(sample_sql)
                     if sample_rows_data:
                         table_block += f"\nSample data ({len(sample_rows_data)} rows):\n"
                         for row in sample_rows_data:
@@ -501,7 +496,7 @@ class Database:
                         table_block += "(no rows)\n"
                 except Exception as e:
                     table_block += f"(error reading samples: {str(e)[:50]})\n"
-            
+
             # Check if adding this table would exceed budget
             block_size = len(table_block.encode('utf-8'))
             if current_size + block_size > max_output_bytes:
@@ -509,33 +504,33 @@ class Database:
                 output_parts.append(f"\n... and {remaining_tables} more tables (output limit reached)\n")
                 budget_exceeded = True
                 break
-            
+
             output_parts.append(table_block)
             current_size += block_size
-        
+
         return "".join(output_parts)
-    
+
     def _quote_ident(self, identifier: str) -> str:
         """Quote a PostgreSQL identifier (table/column name)."""
         # Double any existing double quotes and wrap in double quotes
         return '"' + identifier.replace('"', '""') + '"'
-    
-    def list_columns(
-        self, 
-        schema_name: str, 
+
+    async def list_columns(
+        self,
+        schema_name: str,
         table_name: str,
         offset: int = 0,
         limit: int = 100
     ) -> tuple[list[dict], int]:
         """
         List all columns for a specific table with pagination.
-        
+
         Args:
             schema_name: Name of the schema
             table_name: Name of the table
             offset: Starting column index
             limit: Maximum columns to return
-            
+
         Returns:
             Tuple of (columns list, total column count)
         """
@@ -544,19 +539,19 @@ class Database:
             raise ValueError(f"Invalid schema name: {schema_name}")
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
             raise ValueError(f"Invalid table name: {table_name}")
-        
+
         # Get total count
         count_sql = """
             SELECT COUNT(*) as total
             FROM information_schema.columns
             WHERE table_schema = %s AND table_name = %s
         """
-        count_rows, _ = self.execute_query_with_params(count_sql, (schema_name, table_name))
+        count_rows, _ = await self.execute_query_with_params(count_sql, (schema_name, table_name))
         total = count_rows[0]['total'] if count_rows else 0
-        
+
         # Get columns with pagination
         columns_sql = """
-            SELECT 
+            SELECT
                 column_name,
                 data_type,
                 is_nullable,
@@ -567,11 +562,11 @@ class Database:
             ORDER BY ordinal_position
             LIMIT %s OFFSET %s
         """
-        columns, _ = self.execute_query_with_params(
-            columns_sql, 
+        columns, _ = await self.execute_query_with_params(
+            columns_sql,
             (schema_name, table_name, limit, offset)
         )
-        
+
         return columns, total
 
 
@@ -579,10 +574,24 @@ class Database:
 _db: Optional[Database] = None
 
 
-def get_database() -> Database:
-    """Get or create the global database instance."""
+async def init_database() -> Database:
+    """Initialize the global database instance and open the pool."""
     global _db
-    if _db is None:
-        _db = Database()
+    _db = Database()
+    await _db.open()
     return _db
 
+
+async def close_database() -> None:
+    """Close the global database instance."""
+    global _db
+    if _db is not None:
+        await _db.close()
+        _db = None
+
+
+def get_database() -> Database:
+    """Get the global database instance. Must call init_database() first."""
+    if _db is None:
+        raise RuntimeError("Database not initialized - call init_database() first")
+    return _db

@@ -26,8 +26,8 @@ from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import Tool, TextContent
 
-import psycopg2
-from db import get_database, SQLValidationError
+import psycopg
+from db import get_database, init_database, close_database, SQLValidationError
 from cache import get_cache
 
 # Load environment variables
@@ -396,7 +396,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             preview_rows = arguments.get("preview_rows", 50)
 
             # Execute query with user attribution
-            rows, columns = db.execute_query(sql, user_info=user_info)
+            rows, columns = await db.execute_query(sql, user_info=user_info)
             
             # Cache results
             entry = cache.store(sql, rows, columns)
@@ -470,7 +470,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return [TextContent(type="text", text=response)]
         
         elif name == "list_schemas":
-            schemas = db.list_schemas()
+            schemas = await db.list_schemas()
             
             response = "Available schemas:\n"
             for schema in schemas:
@@ -481,7 +481,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         
         elif name == "describe_schema":
             schema_name = arguments["schema_name"]
-            description = db.describe_schema(schema_name)
+            description = await db.describe_schema(schema_name)
             return [TextContent(type="text", text=description)]
         
         elif name == "list_columns":
@@ -490,7 +490,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             offset = arguments.get("offset", 0)
             limit = arguments.get("limit", 100)
             
-            columns, total = db.list_columns(schema_name, table_name, offset, limit)
+            columns, total = await db.list_columns(schema_name, table_name, offset, limit)
             
             if not columns:
                 return [TextContent(
@@ -530,10 +530,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     except ValueError as e:
         # Safe to expose - argument validation errors
         return [TextContent(type="text", text=f"Invalid argument: {e}")]
-    except psycopg2.Error as e:
+    except psycopg.Error as e:
         # Safe to expose - PostgreSQL errors help users fix their queries
-        # e.pgerror contains the full error message from PostgreSQL
-        error_msg = e.pgerror if e.pgerror else str(e)
+        error_msg = e.diag.message_primary if e.diag and e.diag.message_primary else str(e)
         return [TextContent(type="text", text=f"Database error: {error_msg}")]
     except Exception as e:
         # Log full exception for debugging, but don't expose details to client
@@ -1089,10 +1088,13 @@ async def app(scope, receive, send):
 
 @contextlib.asynccontextmanager
 async def lifespan(app):
-    """Manage the session manager lifecycle."""
+    """Manage the session manager and database pool lifecycle."""
+    await init_database()
+    logger.info("Database connection pool opened")
     async with session_manager.run():
         logger.info("StreamableHTTP session manager started")
         yield
+    await close_database()
     logger.info("StreamableHTTP session manager stopped")
 
 
