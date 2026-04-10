@@ -296,6 +296,9 @@ airtable_config = AirtableServiceConfig(
                 "devlogs": AirtableTableConfig(
                     table_id="tbl8XnQhLdfkYzC1P"
                 ),
+                "ysws_project_submissions": AirtableTableConfig(
+                    table_id="tblXX8kOQfNXl91EV"
+                ),
             }
         ),
         "sleepover": AirtableBaseConfig(
