@@ -834,144 +834,87 @@ def ysws_programs_hcb_stats(
     log = context.log
     input_df = ysws_programs_hcb_candidates
     
+    total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
+
     if input_df.height == 0:
         log.info("No HCB candidates to process.")
-        total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-        hcb_field_id = UnifiedYSWS.ysws_programs.hcb
         return Output(
             pl.DataFrame(schema={
                 "id": pl.Utf8,
                 total_spent_field_id: pl.Float64,
-                hcb_field_id: pl.Utf8
             }),
             metadata={"num_processed": 0, "num_successful": 0, "num_failed": 0}
         )
-    
+
     log.info(f"Processing HCB data for {input_df.height} programs")
-    
-    all_records = []  # Changed from successful_records to include both success and error records
-    failed_count = 0
-    
+
+    successful_records = []
+    failures = []
+
     for row in input_df.iter_rows(named=True):
         program_id = row.get("id")
         hcb_id = row.get("hcb_id")
         hcb_url = row.get("hcb")
-        
+
         if not hcb_id:
-            log.warning(f"No HCB ID for program {program_id}")
-            # Create error record
-            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-            all_records.append({
-                "id": program_id,
-                total_spent_field_id: None,
-                hcb_field_id: f'ERROR: "No HCB ID extracted" | {hcb_url or "Unknown URL"}'
-            })
-            failed_count += 1
+            log.warning(f"No HCB ID for program {program_id} (url={hcb_url!r})")
+            failures.append({"id": program_id, "hcb_url": hcb_url, "reason": "No HCB ID extracted"})
             continue
-            
+
         try:
-            # Make API request to HCB
             api_url = f"https://hcb.hackclub.com/api/v3/organizations/{hcb_id}"
             log.debug(f"Fetching HCB data for {hcb_id}: {api_url}")
-            
+
             response = requests.get(
                 api_url,
                 headers={"Accept": "application/json"},
                 timeout=30
             )
-            
+
             if response.status_code != 200:
-                # Try to extract message from JSON response
                 try:
                     error_data = response.json()
                     error_message = error_data.get("message", f"HTTP {response.status_code}")
-                except:
+                except Exception:
                     error_message = f"HTTP {response.status_code}"
-                
+
                 log.warning(f"HCB API returned {response.status_code} for {hcb_id}: {response.text}")
-                # Create error record
-                total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-                hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-                all_records.append({
-                    "id": program_id,
-                    total_spent_field_id: None,
-                    hcb_field_id: f'ERROR: "{error_message}" | {hcb_url}'
-                })
-                failed_count += 1
+                failures.append({"id": program_id, "hcb_url": hcb_url, "reason": error_message})
                 continue
-                
+
             data = response.json()
-            
-            # Extract balance information
             balances = data.get("balances", {})
             total_raised = balances.get("total_raised", 0)
             balance_cents = balances.get("balance_cents", 0)
-            
-            # Calculate total spent: total_raised - balance_cents (convert from cents to dollars)
             total_spent_dollars = (total_raised - balance_cents) / 100.0
-            
-            # Get Airtable field IDs
-            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-            
-            # Add successful record
-            all_records.append({
+
+            successful_records.append({
                 "id": program_id,
                 total_spent_field_id: total_spent_dollars,
-                hcb_field_id: None  # No error, so empty
             })
-            
+
             log.info(f"Successfully processed {hcb_id}: total_raised={total_raised}, balance_cents={balance_cents}, total_spent=${total_spent_dollars:.2f}")
-            
+
         except requests.exceptions.RequestException as e:
             log.error(f"Request failed for HCB ID {hcb_id}: {e}")
-            # Create error record
-            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-            all_records.append({
-                "id": program_id,
-                total_spent_field_id: None,
-                hcb_field_id: f'ERROR: "Request failed: {str(e)}" | {hcb_url}'
-            })
-            failed_count += 1
+            failures.append({"id": program_id, "hcb_url": hcb_url, "reason": f"Request failed: {e}"})
         except (KeyError, ValueError, TypeError) as e:
             log.error(f"Error parsing HCB data for {hcb_id}: {e}")
-            # Create error record
-            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-            all_records.append({
-                "id": program_id,
-                total_spent_field_id: None,
-                hcb_field_id: f'ERROR: "Data parsing error: {str(e)}" | {hcb_url}'
-            })
-            failed_count += 1
+            failures.append({"id": program_id, "hcb_url": hcb_url, "reason": f"Data parsing error: {e}"})
         except Exception as e:
             log.error(f"Unexpected error processing HCB ID {hcb_id}: {e}")
-            # Create error record
-            total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-            hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-            all_records.append({
-                "id": program_id,
-                total_spent_field_id: None,
-                hcb_field_id: f'ERROR: "Unexpected error: {str(e)}" | {hcb_url}'
-            })
-            failed_count += 1
-    
-    # Create output DataFrame
-    total_spent_field_id = UnifiedYSWS.ysws_programs.total_spent_from_hcb_fund
-    hcb_field_id = UnifiedYSWS.ysws_programs.hcb
-    
-    if all_records:
-        output_df = pl.DataFrame(all_records)
+            failures.append({"id": program_id, "hcb_url": hcb_url, "reason": f"Unexpected error: {e}"})
+
+    if successful_records:
+        output_df = pl.DataFrame(successful_records)
     else:
         output_df = pl.DataFrame(schema={
             "id": pl.Utf8,
             total_spent_field_id: pl.Float64,
-            hcb_field_id: pl.Utf8
         })
-    
-    successful_count = len([r for r in all_records if r[total_spent_field_id] is not None])
+
+    successful_count = len(successful_records)
+    failed_count = len(failures)
     log.info(f"HCB processing completed. Successful: {successful_count}, Failed: {failed_count}")
     
     # Generate preview metadata
@@ -983,16 +926,22 @@ def ysws_programs_hcb_stats(
     else:
         preview_metadata = MetadataValue.text("No HCB data processed successfully")
     
-    return Output(
-        output_df,
-        metadata={
-            "num_processed": input_df.height,
-            "num_successful": successful_count,
-            "num_failed": failed_count,
-            "success_rate": round((successful_count / max(input_df.height, 1)) * 100, 2),
-            "preview": preview_metadata
-        }
-    )
+    metadata = {
+        "num_processed": input_df.height,
+        "num_successful": successful_count,
+        "num_failed": failed_count,
+        "success_rate": round((successful_count / max(input_df.height, 1)) * 100, 2),
+        "preview": preview_metadata,
+    }
+    if failures:
+        try:
+            metadata["failures"] = MetadataValue.md(
+                pl.DataFrame(failures).to_pandas().to_markdown(index=False)
+            )
+        except Exception:
+            metadata["failures"] = MetadataValue.text(str(failures))
+
+    return Output(output_df, metadata=metadata)
 
 
 def _get_signup_analysis_data(search_terms: List[str]) -> pl.DataFrame:
