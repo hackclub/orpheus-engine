@@ -9,6 +9,10 @@ from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from typing import List, Dict, Any, Optional
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from warehouse_docs import (
+    UNIFIED_ANALYTICS_EVENTS_GUIDANCE,
+    UNIFIED_ANALYTICS_EVENTS_SQL_EXAMPLES,
+)
 
 
 # SQL statements that are never allowed, even with read-only connection
@@ -427,7 +431,13 @@ class Database:
             return f"Schema '{schema_name}' not found or has no tables."
 
         output_parts = [f"# Schema: {schema_name}\n"]
-        current_size = len(output_parts[0])
+        if schema_name == "public_unified_analytics":
+            output_parts.append(
+                "\n## Signup Analytics Guidance\n"
+                f"{UNIFIED_ANALYTICS_EVENTS_GUIDANCE}\n\n"
+                f"{UNIFIED_ANALYTICS_EVENTS_SQL_EXAMPLES}\n"
+            )
+        current_size = sum(len(part.encode('utf-8')) for part in output_parts)
         budget_exceeded = False
 
         for table_row in tables:

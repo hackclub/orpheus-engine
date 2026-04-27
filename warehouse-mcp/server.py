@@ -29,6 +29,7 @@ from mcp.types import Tool, TextContent
 import psycopg
 from db import get_database, init_database, close_database, SQLValidationError
 from cache import get_cache
+from warehouse_docs import UNIFIED_ANALYTICS_EVENTS_GUIDANCE
 
 # Load environment variables
 load_dotenv()
@@ -244,7 +245,8 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Execute a read-only SQL query against the data warehouse. "
                 "Returns a query_id for fetching more rows, plus a preview of results. "
-                "Use LIMIT in your SQL for large tables. Max 10,000 rows cached per query."
+                "Use LIMIT in your SQL for large tables. Max 10,000 rows cached per query.\n\n"
+                f"Analytics guidance: {UNIFIED_ANALYTICS_EVENTS_GUIDANCE}"
             ),
             inputSchema={
                 "type": "object",
@@ -321,8 +323,11 @@ async def list_tools() -> list[Tool]:
                 "List all available schemas in the data warehouse.\n\n"
                 "Key schemas:\n"
                 "- airtable_unified_ysws_projects_db: Shipped projects and NPS on programs\n"
-                "- public_unified_analytics: User histories and events on users\n"
-                "- loops.audience: User profile fields (geocoded country, etc.)\n"
+                "- public_unified_analytics: User histories and events on users. "
+                "Use public_unified_analytics.events for signups and signup sources; "
+                "the first event per normalized email is the signup.\n"
+                "- loops.audience: User profile fields (geocoded country, etc.); "
+                "do not use loops.audience.source for signup/source attribution\n"
                 "- public_hackatime_analytics: Coding activity (preferred over hackatime schema)"
             ),
             inputSchema={
@@ -336,7 +341,10 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Get detailed documentation for a schema including tables, columns, "
                 "and sample data. Limited to 1000 columns per table. "
-                "Use list_columns for tables with more columns."
+                "Use list_columns for tables with more columns. "
+                "For signup counts and signup sources, describe public_unified_analytics "
+                "and query public_unified_analytics.events; the first event per normalized "
+                "email is the signup."
             ),
             inputSchema={
                 "type": "object",
