@@ -1,4 +1,5 @@
 import os
+import secrets
 import yaml
 import tempfile
 import logging
@@ -16,6 +17,8 @@ DBT_ROOT_DIR = Path(__file__).joinpath("..", "..", "..", "..").resolve()
 DBT_PROJECT_DIR = DBT_ROOT_DIR / "orpheus_engine_dbt"
 DBT_PROFILE_NAME = "orpheus_engine_dbt" # Should match profile name in generated profiles.yml
 DBT_TARGET_NAME = "prod"                # The target name within the profile
+ENV_FILE_PATH = DBT_ROOT_DIR / ".env"
+HACK_CLUBBERS_LOCATION_SALT_ENV_VAR = "HACK_CLUBBERS_LOCATION_SALT"
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +66,75 @@ def create_dbt_profiles_yaml(target_name: str, profile_name: str, db_config: dic
         }
     }
     return yaml.dump(profiles_content, default_flow_style=False)
+
+def _read_dotenv_value(env_var_name: str) -> Optional[str]:
+    """Read a simple KEY=value entry from the repo .env file without logging secrets."""
+    if not ENV_FILE_PATH.exists():
+        return None
+
+    for raw_line in ENV_FILE_PATH.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        if key.strip() != env_var_name:
+            continue
+
+        value = value.strip()
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in {"'", '"'}
+        ):
+            value = value[1:-1]
+
+        return value or None
+
+    return None
+
+def _append_dotenv_value(env_var_name: str, value: str) -> None:
+    """Append a generated secret to the repo .env file without printing it."""
+    existing_content = ENV_FILE_PATH.read_text() if ENV_FILE_PATH.exists() else ""
+    separator = "" if not existing_content or existing_content.endswith("\n") else "\n"
+    ENV_FILE_PATH.write_text(
+        f"{existing_content}{separator}{env_var_name}={value}\n"
+    )
+
+def ensure_hack_clubbers_location_salt() -> None:
+    """
+    Ensure dbt has a stable salt for deterministic public location fuzzing.
+
+    If the salt is missing from the process environment, read it from .env. If it
+    is not in .env either, generate one and persist it locally so subsequent dbt
+    runs keep the same offsets.
+    """
+    existing_salt = os.environ.get(HACK_CLUBBERS_LOCATION_SALT_ENV_VAR)
+    if existing_salt:
+        return
+
+    dotenv_salt = _read_dotenv_value(HACK_CLUBBERS_LOCATION_SALT_ENV_VAR)
+    if dotenv_salt:
+        os.environ[HACK_CLUBBERS_LOCATION_SALT_ENV_VAR] = dotenv_salt
+        return
+
+    generated_salt = secrets.token_hex(32)
+    os.environ[HACK_CLUBBERS_LOCATION_SALT_ENV_VAR] = generated_salt
+
+    try:
+        _append_dotenv_value(HACK_CLUBBERS_LOCATION_SALT_ENV_VAR, generated_salt)
+        logger.info(
+            "Generated %s and saved it to .env.",
+            HACK_CLUBBERS_LOCATION_SALT_ENV_VAR,
+        )
+    except OSError:
+        logger.warning(
+            "Generated %s for this process, but could not save it to .env. "
+            "Set it explicitly in the deployment environment to keep public "
+            "location fuzzing stable across restarts.",
+            HACK_CLUBBERS_LOCATION_SALT_ENV_VAR,
+            exc_info=True,
+        )
 
 # Global variable to store the temporary directory path, generated once
 # We use a function scoped variable trick to ensure it runs only once.
@@ -140,6 +212,8 @@ def get_or_create_temporary_profiles_dir() -> Optional[str]:
 
 
 # --- Create Resources and Assets ---
+
+ensure_hack_clubbers_location_salt()
 
 # Attempt to get/create the profiles directory path
 # This will only run the creation logic once per process load.
@@ -250,4 +324,4 @@ defs = Definitions(
 #         resources=dagster_resources,
 #         schedules=[dbt_daily_schedule],
 #         jobs=[dbt_basic_job]
-#     ) 
+#     )

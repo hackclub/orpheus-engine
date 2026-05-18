@@ -8,6 +8,8 @@
     ]
 ) }}
 
+{% set location_fuzz_salt = env_var('HACK_CLUBBERS_LOCATION_SALT') %}
+
 WITH events_normalized AS (
     SELECT
         e.event_date,
@@ -294,6 +296,66 @@ users_enriched AS (
       ON f.email = u.email
     LEFT JOIN project_metrics AS pm
       ON pm.email_join_key = u.email_join_key
+),
+
+location_fuzz_inputs AS (
+    SELECT
+        *,
+        (
+            raw_latitude BETWEEN -90 AND 90
+            AND raw_longitude BETWEEN -180 AND 180
+        ) AS has_valid_coordinates,
+        radians(raw_latitude) AS raw_latitude_radians,
+        radians(raw_longitude) AS raw_longitude_radians,
+        (
+            (
+                ('x' || substr(md5('{{ location_fuzz_salt }}' || ':' || email || ':bearing'), 1, 8))::bit(32)::bigint::double precision
+                / 4294967295.0
+            ) * 2 * pi()
+        ) AS fuzz_bearing_radians,
+        (
+            sqrt(
+                ('x' || substr(md5('{{ location_fuzz_salt }}' || ':' || email || ':distance'), 1, 8))::bit(32)::bigint::double precision
+                / 4294967295.0
+            )
+            * (1.0 / 3958.7613)
+        ) AS fuzz_distance_radians
+    FROM users_enriched
+),
+
+location_fuzzed_latitude AS (
+    SELECT
+        *,
+        CASE
+            WHEN has_valid_coordinates THEN
+                asin(
+                    sin(raw_latitude_radians) * cos(fuzz_distance_radians)
+                    + cos(raw_latitude_radians) * sin(fuzz_distance_radians) * cos(fuzz_bearing_radians)
+                )
+        END AS fuzzed_latitude_radians
+    FROM location_fuzz_inputs
+),
+
+location_fuzzed AS (
+    SELECT
+        *,
+        degrees(fuzzed_latitude_radians) AS fuzzed_latitude,
+        CASE
+            WHEN fuzzed_latitude_radians IS NOT NULL THEN
+                mod(
+                    (
+                        degrees(
+                            raw_longitude_radians
+                            + atan2(
+                                sin(fuzz_bearing_radians) * sin(fuzz_distance_radians) * cos(raw_latitude_radians),
+                                cos(fuzz_distance_radians) - sin(raw_latitude_radians) * sin(fuzzed_latitude_radians)
+                            )
+                        ) + 540
+                    )::numeric,
+                    360
+                )::double precision - 180
+        END AS fuzzed_longitude
+    FROM location_fuzzed_latitude
 )
 
 SELECT
@@ -307,38 +369,8 @@ SELECT
     lp.first_meaningful_event_justification,
     lp.country,
     lp.country_code,
-    CASE
-        WHEN lp.raw_latitude IS NOT NULL AND lp.raw_longitude IS NOT NULL THEN
-            greatest(
-                -90::double precision,
-                least(
-                    90::double precision,
-                    lp.raw_latitude
-                    + (
-                        (
-                            ('x' || substr(md5(lp.email || ':latitude'), 1, 8))::bit(32)::bigint::double precision
-                            / 4294967295.0
-                        ) - 0.5
-                    ) * 0.05
-                )
-            )
-    END AS anonymized_latitude,
-    CASE
-        WHEN lp.raw_latitude IS NOT NULL AND lp.raw_longitude IS NOT NULL THEN
-            greatest(
-                -180::double precision,
-                least(
-                    180::double precision,
-                    lp.raw_longitude
-                    + (
-                        (
-                            ('x' || substr(md5(lp.email || ':longitude'), 1, 8))::bit(32)::bigint::double precision
-                            / 4294967295.0
-                        ) - 0.5
-                    ) * 0.05
-                )
-            )
-    END AS anonymized_longitude,
+    lp.fuzzed_latitude,
+    lp.fuzzed_longitude,
     lp.weighted_projects_count
-FROM users_enriched AS lp
+FROM location_fuzzed AS lp
 ORDER BY lp.email
