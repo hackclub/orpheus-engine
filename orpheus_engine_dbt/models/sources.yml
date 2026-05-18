@@ -20,7 +20,7 @@ sources:
     tables:
       - name: audience
         description: "Loops audience data loaded into warehouse via DLT"
-        meta: { dagster: { deps: ['loops_audience'] } }
+        meta: { dagster: { asset_key: ['loops_audience'] } }
 
   - name: hcb
     schema: hcb
@@ -245,7 +245,7 @@ sources:
     tables:
       - name: approved_projects
         description: "Unified YSWS approved projects with email and weighted project contribution fields."
-        meta: { dagster: { deps: ['unified_ysws_approved_projects_warehouse'] } }
+        meta: { dagster: { asset_key: ['unified_ysws_approved_projects_warehouse'] } }
 
   # Absolute minimum permissions - only columns needed to generate events for monthly active stats
   - name: auth
