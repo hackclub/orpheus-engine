@@ -40,6 +40,11 @@ loops_profiles_raw AS (
         NULLIF(btrim(a.last_name), '') AS last_name,
         a.subscribed AS loops_subscribed,
         NULLIF(btrim(a.calculated_gender_best_known), '') AS gender_best_known,
+        COALESCE(
+            NULLIF(btrim(a.calculated_geocoded_country_name), ''),
+            NULLIF(btrim(a.address_country), '')
+        ) AS country,
+        NULLIF(btrim(a.calculated_geocoded_country_code), '') AS country_code,
         a.calculated_geocoded_latitude AS latitude,
         a.calculated_geocoded_longitude AS longitude,
         a.user_group,
@@ -86,13 +91,15 @@ loops_profiles AS (
         first_name,
         last_name,
         gender_best_known,
+        country,
+        country_code,
         latitude,
         longitude
     FROM loops_profiles_ranked
     WHERE rn = 1
 ),
 
-project_metrics AS (
+approved_projects_normalized AS (
     SELECT
         CASE
             WHEN POSITION('@' IN lower(btrim(ap.email_trimmed_lowercased))) > 0 THEN
@@ -101,16 +108,65 @@ project_metrics AS (
                 split_part(lower(btrim(ap.email_trimmed_lowercased)), '@', 2)
             ELSE split_part(lower(btrim(ap.email_trimmed_lowercased)), '+', 1)
         END AS email_join_key,
+        ap.approved_at,
+        ap.ysws_weighted_project_contribution_per_author,
+        ap.ysws_weighted_project_contribution,
+        COALESCE(
+            NULLIF(btrim(ap.geocoded_country), ''),
+            NULLIF(btrim(ap.country), '')
+        ) AS country,
+        COALESCE(
+            NULLIF(btrim(ap.geocoded_country_code), ''),
+            CASE
+                WHEN NULLIF(btrim(ap.country), '') ~ '^[A-Za-z]{2}$'
+                    THEN upper(NULLIF(btrim(ap.country), ''))
+            END
+        ) AS country_code,
+        ap.geocoded_latitude AS latitude,
+        ap.geocoded_longitude AS longitude
+    FROM {{ source('unified_ysws', 'approved_projects') }} AS ap
+    WHERE NULLIF(btrim(ap.email_trimmed_lowercased), '') IS NOT NULL
+),
+
+approved_project_profiles_ranked AS (
+    SELECT
+        *,
+        row_number() OVER (
+            PARTITION BY email_join_key
+            ORDER BY
+                (
+                    country IS NOT NULL
+                    OR country_code IS NOT NULL
+                    OR (latitude IS NOT NULL AND longitude IS NOT NULL)
+                ) DESC,
+                approved_at DESC NULLS LAST
+        ) AS rn
+    FROM approved_projects_normalized
+),
+
+approved_project_profiles AS (
+    SELECT
+        email_join_key,
+        country,
+        country_code,
+        latitude,
+        longitude
+    FROM approved_project_profiles_ranked
+    WHERE rn = 1
+),
+
+project_metrics AS (
+    SELECT
+        email_join_key,
         SUM(
             COALESCE(
-                ap.ysws_weighted_project_contribution_per_author,
-                ap.ysws_weighted_project_contribution,
+                ysws_weighted_project_contribution_per_author,
+                ysws_weighted_project_contribution,
                 0
             )
         )::double precision AS weighted_projects_count
-    FROM {{ source('unified_ysws', 'approved_projects') }} AS ap
-    WHERE NULLIF(btrim(ap.email_trimmed_lowercased), '') IS NOT NULL
-      AND ap.approved_at IS NOT NULL
+    FROM approved_projects_normalized
+    WHERE approved_at IS NOT NULL
     GROUP BY 1
 ),
 
@@ -210,27 +266,79 @@ first_meaningful_with_justification AS (
             ELSE f.priority_justification || '_' || f.attribution_window_label
         END AS first_meaningful_event_justification
     FROM first_meaningful_events AS f
+),
+
+users_enriched AS (
+    SELECT
+        lp.first_name,
+        lp.last_name,
+        u.email,
+        ls.loops_subscribed,
+        lp.gender_best_known,
+        f.first_meaningful_event,
+        f.first_meaningful_event_at,
+        COALESCE(f.first_meaningful_event_justification, 'no_observed_event') AS first_meaningful_event_justification,
+        COALESCE(lp.country, app.country) AS country,
+        COALESCE(lp.country_code, app.country_code) AS country_code,
+        COALESCE(lp.latitude, app.latitude) AS raw_latitude,
+        COALESCE(lp.longitude, app.longitude) AS raw_longitude,
+        COALESCE(pm.weighted_projects_count, 0::double precision) AS weighted_projects_count
+    FROM base_users AS u
+    LEFT JOIN loops_profiles AS lp
+      ON lp.email_join_key = u.email_join_key
+    LEFT JOIN approved_project_profiles AS app
+      ON app.email_join_key = u.email_join_key
+    LEFT JOIN loops_subscription AS ls
+      ON ls.email_join_key = u.email_join_key
+    LEFT JOIN first_meaningful_with_justification AS f
+      ON f.email = u.email
+    LEFT JOIN project_metrics AS pm
+      ON pm.email_join_key = u.email_join_key
 )
 
 SELECT
     lp.first_name,
     lp.last_name,
-    u.email,
-    ls.loops_subscribed,
+    lp.email,
+    lp.loops_subscribed,
     lp.gender_best_known,
-    f.first_meaningful_event,
-    f.first_meaningful_event_at,
-    COALESCE(f.first_meaningful_event_justification, 'no_observed_event') AS first_meaningful_event_justification,
-    lp.latitude,
-    lp.longitude,
-    COALESCE(pm.weighted_projects_count, 0::double precision) AS weighted_projects_count
-FROM base_users AS u
-LEFT JOIN loops_profiles AS lp
-  ON lp.email_join_key = u.email_join_key
-LEFT JOIN loops_subscription AS ls
-  ON ls.email_join_key = u.email_join_key
-LEFT JOIN first_meaningful_with_justification AS f
-  ON f.email = u.email
-LEFT JOIN project_metrics AS pm
-  ON pm.email_join_key = u.email_join_key
-ORDER BY u.email
+    lp.first_meaningful_event,
+    lp.first_meaningful_event_at,
+    lp.first_meaningful_event_justification,
+    lp.country,
+    lp.country_code,
+    CASE
+        WHEN lp.raw_latitude IS NOT NULL AND lp.raw_longitude IS NOT NULL THEN
+            greatest(
+                -90::double precision,
+                least(
+                    90::double precision,
+                    lp.raw_latitude
+                    + (
+                        (
+                            ('x' || substr(md5(lp.email || ':latitude'), 1, 8))::bit(32)::bigint::double precision
+                            / 4294967295.0
+                        ) - 0.5
+                    ) * 0.05
+                )
+            )
+    END AS anonymized_latitude,
+    CASE
+        WHEN lp.raw_latitude IS NOT NULL AND lp.raw_longitude IS NOT NULL THEN
+            greatest(
+                -180::double precision,
+                least(
+                    180::double precision,
+                    lp.raw_longitude
+                    + (
+                        (
+                            ('x' || substr(md5(lp.email || ':longitude'), 1, 8))::bit(32)::bigint::double precision
+                            / 4294967295.0
+                        ) - 0.5
+                    ) * 0.05
+                )
+            )
+    END AS anonymized_longitude,
+    lp.weighted_projects_count
+FROM users_enriched AS lp
+ORDER BY lp.email
