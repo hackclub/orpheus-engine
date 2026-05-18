@@ -10,9 +10,13 @@
 # 2. Explore a schema: SELECT util_schema_markdown('schema_name');
 #
 # Quick Reference:
-# • Key schemas: loops (user truth), public_unified_analytics (events), 
+# • Key schemas: loops (user truth), public_unified_analytics (events + hack_clubbers),
 #   airtable_unified_ysws_projects_db (projects/programs), hackatime (coding activity)
 # • Use public_unified_analytics.events for fast queries (~0.3s vs ~8s unpivoting loops)
+# • Use public_unified_analytics.hack_clubbers for one row per email and first_meaningful_event
+#   attribution (24h conflict window; 30d when raw first source is Auth)
+# • Use public_unified_analytics.event_priorities to inspect attribution priority
+#   (event=NULL rows are source defaults; event rows override those defaults)
 # • Airtable joins use _dlt_parent_id → _dlt_id pattern; always join on
 #   LOWER(email) when using emails as primary keys
 # • events table includes all users; filter with WHERE subscribed for subscribed-only
@@ -44,5 +48,3 @@ else
 fi
 
 psql "$URL" -c "$1"
-
-

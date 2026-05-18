@@ -240,6 +240,13 @@ sources:
         description: "DLT load metadata for tracking sleepover sync times."
         meta: { dagster: { deps: ['dlt_airtable_sleepover'] } }
 
+  - name: unified_ysws
+    schema: airtable_unified_ysws_projects_db
+    tables:
+      - name: approved_projects
+        description: "Unified YSWS approved projects with email and weighted project contribution fields."
+        meta: { dagster: { deps: ['unified_ysws_approved_projects_warehouse'] } }
+
   # Absolute minimum permissions - only columns needed to generate events for monthly active stats
   - name: auth
     schema: auth
